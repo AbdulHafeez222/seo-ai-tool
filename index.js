@@ -7,7 +7,7 @@ app.get("/", (req, res) => {
   res.sendFile(__dirname + "/public/index.html");
 });
 
-apconst express = require("express");
+const express = require("express");
 const axios = require("axios");
 const cheerio = require("cheerio");
 const path = require("path");

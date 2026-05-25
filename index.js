@@ -23,45 +23,74 @@ app.get("/scan", async (req, res) => {
     const response = await axios.get(url);
     const $ = cheerio.load(response.data);
 
-    const title = $("title").text() || "N/A";
-    const h1 = $("h1").first().text() || "N/A";
+    const title = $("title").text() || "";
+    const h1 = $("h1").first().text() || "";
     const metaDescription =
-      $('meta[name="description"]').attr("content") || "N/A";
+      $('meta[name="description"]').attr("content") || "";
 
-    const text = $("body").text() || "";
+    const text = $("body").text().toLowerCase();
     const wordCount = text.trim().split(/\s+/).length;
 
+    const images = $("img").length;
+    let imagesWithAlt = 0;
+
+    $("img").each((i, el) => {
+      if ($(el).attr("alt")) imagesWithAlt++;
+    });
+
+    // SEO SCORE (SMART VERSION)
     let seoScore = 0;
+    let issues = [];
     let suggestions = [];
 
-    if (title !== "N/A") seoScore += 25;
-    else suggestions.push("Add title tag");
+    // Title check
+    if (title.length > 10) seoScore += 20;
+    else issues.push("Weak or missing title");
 
-    if (h1 !== "N/A") seoScore += 25;
-    else suggestions.push("Add H1 tag");
+    // H1 check
+    if (h1) seoScore += 20;
+    else issues.push("Missing H1 tag");
 
-    if (metaDescription !== "N/A") seoScore += 25;
-    else suggestions.push("Add meta description");
+    // Meta description
+    if (metaDescription.length > 50) seoScore += 20;
+    else issues.push("Missing or short meta description");
 
-    if (wordCount > 300) seoScore += 25;
+    // Content length
+    if (wordCount > 500) seoScore += 20;
     else suggestions.push("Increase content length");
+
+    // Images alt check
+    if (images > 0 && imagesWithAlt === images) {
+      seoScore += 20;
+    } else {
+      suggestions.push("Add alt text to images");
+    }
+
+    // AI style summary
+    let aiReport = "";
+
+    if (seoScore >= 80) {
+      aiReport = "Excellent SEO structure with minor improvements needed.";
+    } else if (seoScore >= 50) {
+      aiReport = "Average SEO. Needs optimization.";
+    } else {
+      aiReport = "Poor SEO. Major improvements required.";
+    }
 
     res.json({
       title,
       h1,
       metaDescription,
       wordCount,
+      images,
+      imagesWithAlt,
       seoScore,
+      aiReport,
+      issues,
       suggestions
     });
 
   } catch (error) {
     res.json({ error: "Scan failed" });
   }
-});
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log("Server running on http://localhost:" + PORT);
 });

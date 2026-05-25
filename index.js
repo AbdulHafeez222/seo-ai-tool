@@ -23,74 +23,36 @@ app.get("/scan", async (req, res) => {
     const response = await axios.get(url);
     const $ = cheerio.load(response.data);
 
-    const title = $("title").text() || "";
-    const h1 = $("h1").first().text() || "";
+    const title = $("title").text();
+    const h1 = $("h1").first().text();
     const metaDescription =
       $('meta[name="description"]').attr("content") || "";
 
-    const text = $("body").text().toLowerCase();
-    const wordCount = text.trim().split(/\s+/).length;
+    const text = $("body").text();
+    const wordCount = text.split(/\s+/).length;
 
-    const images = $("img").length;
-    let imagesWithAlt = 0;
-
-    $("img").each((i, el) => {
-      if ($(el).attr("alt")) imagesWithAlt++;
-    });
-
-    // SEO SCORE (SMART VERSION)
     let seoScore = 0;
-    let issues = [];
-    let suggestions = [];
 
-    // Title check
-    if (title.length > 10) seoScore += 20;
-    else issues.push("Weak or missing title");
-
-    // H1 check
-    if (h1) seoScore += 20;
-    else issues.push("Missing H1 tag");
-
-    // Meta description
-    if (metaDescription.length > 50) seoScore += 20;
-    else issues.push("Missing or short meta description");
-
-    // Content length
-    if (wordCount > 500) seoScore += 20;
-    else suggestions.push("Increase content length");
-
-    // Images alt check
-    if (images > 0 && imagesWithAlt === images) {
-      seoScore += 20;
-    } else {
-      suggestions.push("Add alt text to images");
-    }
-
-    // AI style summary
-    let aiReport = "";
-
-    if (seoScore >= 80) {
-      aiReport = "Excellent SEO structure with minor improvements needed.";
-    } else if (seoScore >= 50) {
-      aiReport = "Average SEO. Needs optimization.";
-    } else {
-      aiReport = "Poor SEO. Major improvements required.";
-    }
+    if (title) seoScore += 25;
+    if (h1) seoScore += 25;
+    if (metaDescription) seoScore += 25;
+    if (wordCount > 300) seoScore += 25;
 
     res.json({
       title,
       h1,
       metaDescription,
       wordCount,
-      images,
-      imagesWithAlt,
-      seoScore,
-      aiReport,
-      issues,
-      suggestions
+      seoScore
     });
 
-  } catch (error) {
+  } catch (err) {
     res.json({ error: "Scan failed" });
   }
+});
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log("Server running on port " + PORT);
 });

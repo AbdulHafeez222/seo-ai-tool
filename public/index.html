@@ -7,29 +7,104 @@
   <style>
     body {
       font-family: Arial;
+      background: #f5f7fb;
       padding: 40px;
-      background: #f5f5f5;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: auto;
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
     }
 
     input {
-      padding: 10px;
-      width: 300px;
+      width: 70%;
+      padding: 12px;
     }
 
     button {
-      padding: 10px;
+      padding: 12px 20px;
+      background: black;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    #result {
+      margin-top: 20px;
+      white-space: pre-wrap;
     }
   </style>
 </head>
 
 <body>
 
-  <h1>SEO AI Tool 🚀</h1>
+  <div class="container">
 
-  <input type="text" placeholder="Enter Website URL">
+    <h1>SEO AI Tool 🚀</h1>
 
-  <button>Scan SEO</button>
+    <input
+      type="text"
+      id="url"
+      placeholder="Enter website URL"
+    >
+
+    <button onclick="scanSEO()">
+      Scan SEO
+    </button>
+
+    <div id="result"></div>
+
+  </div>
+
+  <script>
+
+    async function scanSEO() {
+
+      const url =
+        document.getElementById("url").value;
+
+      const resultDiv =
+        document.getElementById("result");
+
+      resultDiv.innerHTML = "Scanning...";
+
+      try {
+
+        const response =
+          await fetch(`/scan?url=${url}`);
+
+        const data =
+          await response.json();
+
+        resultDiv.innerHTML =
+          `
+Title: ${data.title}
+
+H1: ${data.h1}
+
+Meta Description:
+${data.metaDescription}
+
+Word Count:
+${data.wordCount}
+
+SEO Score:
+${data.seoScore}/100
+`;
+
+      } catch (error) {
+
+        resultDiv.innerHTML =
+          "Error occurred ❌";
+
+      }
+
+    }
+
+  </script>
 
 </body>
-
 </html>

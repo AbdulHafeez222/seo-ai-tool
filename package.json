@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {
   "name": "seo-ai-tool",
   "version": "1.0.0",
@@ -10,4 +11,18 @@
     "axios": "^1.6.0",
     "cheerio": "^1.0.0-rc.12"
   }
+=======
+{
+  "name": "seo-ai-tool",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12"
+  }
+>>>>>>> 1c95b069691e91a3ba9f62fc6cc3a50c7d9f56da
 }

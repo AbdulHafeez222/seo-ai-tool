@@ -5,20 +5,16 @@ const path = require("path");
 
 const app = express();
 
-// static folder
 app.use(express.static("public"));
 
-// home route
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// test route
 app.get("/test", (req, res) => {
   res.send("Test working ✔️");
 });
 
-// SEO scan route
 app.get("/scan", async (req, res) => {
   try {
     const url = req.query.url;
@@ -35,39 +31,20 @@ app.get("/scan", async (req, res) => {
     const text = $("body").text() || "";
     const wordCount = text.trim().split(/\s+/).length;
 
-    // SEO SCORE (smarter)
     let seoScore = 0;
     let suggestions = [];
 
-    if (title !== "N/A") {
-      seoScore += 25;
-    } else {
-      suggestions.push("Add a title tag");
-    }
+    if (title !== "N/A") seoScore += 25;
+    else suggestions.push("Add title tag");
 
-    if (h1 !== "N/A") {
-      seoScore += 25;
-    } else {
-      suggestions.push("Add H1 heading");
-    }
+    if (h1 !== "N/A") seoScore += 25;
+    else suggestions.push("Add H1 tag");
 
-    if (metaDescription !== "N/A") {
-      seoScore += 25;
-    } else {
-      suggestions.push("Add meta description");
-    }
+    if (metaDescription !== "N/A") seoScore += 25;
+    else suggestions.push("Add meta description");
 
-    if (wordCount > 300) {
-      seoScore += 25;
-    } else {
-      suggestions.push("Increase content length");
-    }
-
-    // AI-style summary
-    let aiSummary =
-      seoScore >= 75
-        ? "Good SEO structure but can be improved."
-        : "Weak SEO, needs optimization.";
+    if (wordCount > 300) seoScore += 25;
+    else suggestions.push("Increase content length");
 
     res.json({
       title,
@@ -75,11 +52,16 @@ app.get("/scan", async (req, res) => {
       metaDescription,
       wordCount,
       seoScore,
-      aiSummary,
       suggestions
     });
 
   } catch (error) {
     res.json({ error: "Scan failed" });
   }
+});
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log("Server running on http://localhost:" + PORT);
 });

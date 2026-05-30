@@ -14,8 +14,6 @@ import Report from "./models/Report.js";
 
 // ---------------- APP ----------------
 const app = express();
-
-// PORT FIX
 const PORT = process.env.PORT || 4000;
 
 // __dirname fix
@@ -45,7 +43,7 @@ mongoose.connect(process.env.MONGO_URL)
     console.log("MongoDB Error:", err);
   });
 
-// ---------------- ROUTE ----------------
+// ---------------- SEO ROUTE ----------------
 app.get("/", async (req, res) => {
 
   let url = req.query.url;
@@ -77,6 +75,7 @@ app.get("/", async (req, res) => {
     const text = $("body").text();
     const wordCount = text.trim().split(/\s+/).length;
 
+    // ---------------- SCORE ----------------
     let score = 0;
 
     if (title.length > 5) score += 20;
@@ -98,6 +97,24 @@ app.get("/", async (req, res) => {
     if (!h1) tips.push("Add H1");
     if (!metaDescription) tips.push("Add meta description");
 
+    // ---------------- AI REPORT (FIXED) ----------------
+    let aiReport = "";
+
+    try {
+      if (getAIReport) {
+        aiReport = await getAIReport({
+          url,
+          title,
+          metaDescription,
+          wordCount,
+          score
+        });
+      }
+    } catch (e) {
+      aiReport = "AI report not available";
+    }
+
+    // ---------------- SAVE ----------------
     await Report.create({
       url,
       title,
@@ -106,9 +123,11 @@ app.get("/", async (req, res) => {
       wordCount,
       score,
       status,
-      tips
+      tips,
+      aiReport
     });
 
+    // ---------------- RESPONSE ----------------
     res.json({
       url,
       title,
@@ -117,11 +136,21 @@ app.get("/", async (req, res) => {
       wordCount,
       score,
       status,
-      tips
+      tips,
+      aiReport
     });
 
   } catch (error) {
     res.json({ error: error.message });
   }
+});
 
+// ---------------- HISTORY ROUTE ----------------
+app.get("/history", async (req, res) => {
+  try {
+    const data = await Report.find().sort({ createdAt: -1 });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "History fetch failed" });
+  }
 });

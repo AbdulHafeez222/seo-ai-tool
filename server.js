@@ -9,8 +9,8 @@ import mongoose from "mongoose";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { getAIReport } from "./aiService.js";
-import Report from "./models/Report.js";
+import { getAIreport } from "./aiService.js";
+import report from "./models/report.js";
 
 // ---------------- APP ----------------
 const app = express();

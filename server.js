@@ -33,9 +33,21 @@ app.use(express.json());
 console.log("API KEY:", process.env.GEMINI_API_KEY);
 
 // ---------------- DB CONNECT ----------------
+mongoose.set("strictQuery", false);
+
 mongoose.connect(process.env.MONGO_URL)
-  .then(() => console.log("MongoDB Connected ✅"))
-  .catch(err => console.log("MongoDB Error:", err));
+  .then(() => {
+
+    console.log("MongoDB Connected ✅");
+
+    app.listen(PORT, () => {
+      console.log("Server running on port", PORT);
+    });
+
+  })
+  .catch(err => {
+    console.log("MongoDB Error:", err);
+  });
 
 // ---------------- MAIN SEO ROUTE ----------------
 app.get("/", async (req, res) => {

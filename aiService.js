@@ -1,32 +1,29 @@
-import { GoogleGenerativeAI }
-from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI =
-new GoogleGenerativeAI(
-  process.env.GEMINI_API_KEY
-);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export async function getAIReport(data) {
-
-  const model =
-  genAI.getGenerativeModel({
+  const model = genAI.getGenerativeModel({
     model: "gemini-1.5-flash"
   });
 
   const prompt = `
 Analyze this website SEO:
 
+URL: ${data.url}
 Title: ${data.title}
-H1: ${data.h1}
 Meta Description: ${data.metaDescription}
 Word Count: ${data.wordCount}
-Score: ${data.score}
+SEO Score: ${data.score}
 
-Give SEO improvements and problems.
+Give:
+1. Strengths
+2. Weaknesses
+3. SEO Improvements
+4. Final Recommendation
 `;
 
-  const result =
-  await model.generateContent(prompt);
+  const result = await model.generateContent(prompt);
 
   return result.response.text();
 }

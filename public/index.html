@@ -81,6 +81,51 @@ canvas {
   display: none;
   margin-top: 10px;
 }
+
+/
+#centerScore {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 42px;
+  font-weight: 700;
+  color: #1a8917;
+  text-align: center;
+  line-height: 1;
+  pointer-events: none;
+}
+
+#centerScore span {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  margin-top: 2px;
+}
+
+
+.dark .card {
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+}
+
+.dark .ai-box {
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+}
+
+.dark input {
+  background: #1e293b;
+  color: white;
+  border: 1px solid #334155;
+}
+
+.dark #centerScore span {
+  color: #94a3b8;
+}
  
 </style>
 </head>
@@ -105,6 +150,7 @@ canvas {
 
   <div class="chartBox">
     <canvas id="scoreChart"></canvas>
+    <div id="centerScore"></div> 
   </div>
   
   <h3 id="scoreText"></h3>
@@ -169,7 +215,10 @@ async function scan() {
         },
         options: {
           cutout: "75%",
-          plugins: { legend: { display: false } }
+          plugins: { 
+            legend: { display: false },
+            tooltip: { enabled: false } 
+          }
         }
       }
     );
@@ -189,6 +238,12 @@ document.getElementById("scoreText").innerHTML =
     color:white;
     margin-left:10px;
   ">${grade}</span>`;
+
+// 
+document.getElementById("centerScore").innerHTML = `
+  ${data.score}
+  <span>${data.status}</span>
+`;
 
     document.getElementById("result").innerHTML = `
       <div class="card" id="report">
@@ -244,7 +299,6 @@ async function loadHistory() {
       </div>
     `).join("");
 }
-
 
 // ================= PDF =================
 function downloadPDF() {

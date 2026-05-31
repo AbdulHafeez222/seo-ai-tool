@@ -132,21 +132,22 @@ app.get("/analyze", async (req, res) => {
     if (!metaDescription) tips.push("Add meta description");
 
     // ---------------- AI REPORT ----------------
-    let aiReport = "";
+  let aiReport = "";
 
-    try {
-      if (typeof getAIReport === "function") {
-        aiReport = await getAIReport({
-          url,
-          title,
-          metaDescription,
-          wordCount,
-          score
-        });
-      }
-    } catch (e) {
-      aiReport = "AI report not available";
-    }
+try {
+  if (typeof getAIReport === "function") {
+    aiReport = await getAIReport({
+      url,
+      title,
+      metaDescription,
+      wordCount,
+      score
+    });
+  }
+} catch (e) {
+  console.error("AI ERROR:", e);
+  aiReport = "AI report not available";
+}
 
     // ---------------- SAVE ----------------
     await Report.create({

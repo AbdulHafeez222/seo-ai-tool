@@ -2,13 +2,8 @@
 <html>
 <head>
   <title>SEO AI Tool</title>
-
-  <!-- PDF Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-
-  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <style>
 body {
   font-family: Arial;
@@ -16,12 +11,10 @@ body {
   padding: 20px;
   text-align: center;
 }
-
 .dark {
   background: #0f172a;
   color: white;
 }
-
 .box {
   background: white;
   padding: 25px;
@@ -30,17 +23,14 @@ body {
   margin: auto;
   box-shadow: 0 0 15px rgba(0,0,0,0.1);
 }
-
 .dark .box {
   background: #1e293b;
 }
-
 input {
   width: 80%;
   padding: 12px;
   margin: 10px;
 }
-
 button {
   padding: 12px 20px;
   border: none;
@@ -49,7 +39,6 @@ button {
   cursor: pointer;
   border-radius: 8px;
 }
-
 .card {
   text-align: left;
   margin-top: 20px;
@@ -57,13 +46,11 @@ button {
   padding: 18px;
   border-radius: 10px;
 }
-
 .ai-box {
   background: #eef4ff;
   padding: 15px;
   border-radius: 10px;
 }
-
 .chartBox {
   position: relative;
   width: 220px;
@@ -81,8 +68,6 @@ canvas {
   display: none;
   margin-top: 10px;
 }
-
-/
 #centerScore {
   position: absolute;
   top: 50%;
@@ -94,8 +79,8 @@ canvas {
   text-align: center;
   line-height: 1;
   pointer-events: none;
+  z-index: 10;
 }
-
 #centerScore span {
   display: block;
   font-size: 13px;
@@ -103,103 +88,69 @@ canvas {
   color: #666;
   margin-top: 2px;
 }
-
-
 .dark .card {
   background: #1e293b;
   color: #e2e8f0;
   border: 1px solid #334155;
 }
-
 .dark .ai-box {
   background: #0f172a;
   color: #e2e8f0;
   border: 1px solid #334155;
 }
-
 .dark input {
   background: #1e293b;
   color: white;
   border: 1px solid #334155;
 }
-
 .dark #centerScore span {
   color: #94a3b8;
 }
- 
 </style>
 </head>
-
 <body>
-
 <div class="box">
-
   <h2>SEO AI Analyzer</h2>
-
   <button onclick="toggleDarkMode()">Dark Mode</button>
-
   <input id="url" placeholder="Enter website URL">
-
   <br>
-
   <button onclick="scan()">Scan</button>
   <button onclick="downloadPDF()">Download PDF</button>
   <button onclick="loadHistory()">History</button>
-
   <div class="loading" id="loading">Scanning...</div>
-
   <div class="chartBox">
     <canvas id="scoreChart"></canvas>
-    <div id="centerScore"></div> 
+    <div id="centerScore"></div>
   </div>
-  
   <h3 id="scoreText"></h3>
-
   <div id="result"></div>
-
 </div>
-
 <script>
-
 const API_BASE = "https://seo-ai-tool-s47q.onrender.com";
-
 let scoreChart;
-
-// ================= SCAN =================
 async function scan() {
-
   let url = document.getElementById("url").value;
-
   if (!url) return alert("Enter URL");
-
   if (!url.startsWith("http")) {
     url = "https://" + url;
   }
-
   document.getElementById("loading").style.display = "block";
   document.getElementById("result").innerHTML = "";
-
   try {
-
    const res = await fetch(
   `${API_BASE}/analyze?url=${encodeURIComponent(url)}`
 );
     const data = await res.json();
-
     document.getElementById("loading").style.display = "none";
-
     if (data.error) {
       document.getElementById("result").innerHTML =
         `<div class="card">${data.error}</div>`;
       return;
     }
-
     let color = "red";
     if (data.score >= 80) color = "green";
     else if (data.score >= 50) color = "orange";
-
     if (scoreChart) scoreChart.destroy();
-
     scoreChart = new Chart(
       document.getElementById("scoreChart"),
       {
@@ -210,41 +161,34 @@ async function scan() {
   data.score || 0,
   100 - (data.score || 0)
 ],
-            backgroundColor: [color, "#e5e7eb"]
+            backgroundColor: [color, "#e5e7eb"],
+            borderWidth: 0
           }]
         },
         options: {
           cutout: "75%",
           plugins: { 
             legend: { display: false },
-            tooltip: { enabled: false } 
+            tooltip: { enabled: false }
           }
         }
       }
     );
-
     let grade =
   data.score >= 90 ? "A+" :
   data.score >= 80 ? "A" :
   data.score >= 60 ? "B" :
   data.score >= 40 ? "C" : "D";
-
-document.getElementById("scoreText").innerHTML =
-  `${data.score} - ${data.status}
-  <span style="
-    padding:5px 10px;
-    border-radius:8px;
-    background:${data.score >= 80 ? '#22c55e' : data.score >= 50 ? '#f59e0b' : '#ef4444'};
-    color:white;
-    margin-left:10px;
-  ">${grade}</span>`;
-
-// 
-document.getElementById("centerScore").innerHTML = `
-  ${data.score}
-  <span>${data.status}</span>
-`;
-
+    
+    // Neeche wala text khali kar diya
+    document.getElementById("scoreText").innerHTML = "";
+    
+    // Center mein score set karo
+    document.getElementById("centerScore").innerHTML = `
+      ${data.score}
+      <span>${data.status}</span>
+    `;
+    
     document.getElementById("result").innerHTML = `
       <div class="card" id="report">
         <p><b>Website:</b> ${data.url}</p>
@@ -253,17 +197,14 @@ document.getElementById("centerScore").innerHTML = `
         <p><b>Meta:</b> ${data.metaDescription}</p>
         <p><b>Word Count:</b> ${data.wordCount}</p>
         <p><b>Status:</b> ${data.status}</p>
-
         <p><b>SEO Tips:</b></p>
         <ul>
           ${(data.tips || []).map(t => `<li>${t}</li>`).join("")}
         </ul>
-
        <p><b>AI Report:</b></p>
 <div class="ai-box">
   ${data.aiReport || "No AI Report"}
 </div>
-
 <p><b>SEO Issues:</b></p>
 <div class="ai-box">
   ${(data.issues || []).length
@@ -271,27 +212,21 @@ document.getElementById("centerScore").innerHTML = `
     : "No issues found"}
 </div>
     `;
-
   } catch (err) {
     document.getElementById("loading").style.display = "none";
     document.getElementById("result").innerHTML =
       `<div class="card">Server Error</div>`;
   }
 }
-
-// ================= HISTORY =================
 async function loadHistory() {
-
   const res = await fetch(`${API_BASE}/history`);
   const data = await res.json();
-
   document.getElementById("result").innerHTML =
     data.map(item => `
       <div class="card">
         <p><b>URL:</b> ${item.url}</p>
         <p><b>Score:</b> ${item.score}</p>
         <p><b>Status:</b> ${item.status}</p>
-
         <p><b>Issues:</b></p>
         <ul>
           ${(item.issues || []).map(i => `<li>${i}</li>`).join("")}
@@ -299,20 +234,14 @@ async function loadHistory() {
       </div>
     `).join("");
 }
-
-// ================= PDF =================
 function downloadPDF() {
   const el = document.getElementById("report");
   if (!el) return alert("Scan first!");
   html2pdf().from(el).save("seo-report.pdf");
 }
-
-// ================= DARK MODE =================
 function toggleDarkMode() {
   document.body.classList.toggle("dark");
 }
-
 </script>
-
 </body>
 </html>

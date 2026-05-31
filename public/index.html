@@ -127,7 +127,9 @@ async function scan() {
 
   try {
 
-    const res = await fetch(`${API_BASE}/?url=${encodeURIComponent(url)}`);
+   const res = await fetch(
+  `${API_BASE}/analyze?url=${encodeURIComponent(url)}`
+);
     const data = await res.json();
 
     document.getElementById("loading").style.display = "none";

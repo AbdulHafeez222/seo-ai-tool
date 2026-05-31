@@ -26,7 +26,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // ---------------- ENV CHECK ----------------
-console.log("API KEY LOADED");
+console.log("Gemini API Loaded");
 
 // ---------------- DB CONNECT ----------------
 mongoose.set("strictQuery", false);

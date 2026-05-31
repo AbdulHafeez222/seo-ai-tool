@@ -74,6 +74,12 @@ button {
   display: none;
   margin-top: 10px;
 }
+  .chartBox {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  margin: auto;
+}
 </style>
 </head>
 
@@ -163,8 +169,21 @@ async function scan() {
       }
     );
 
-    document.getElementById("scoreText").innerText =
-      `${data.score} - ${data.status}`;
+    let grade =
+  data.score >= 90 ? "A+" :
+  data.score >= 80 ? "A" :
+  data.score >= 60 ? "B" :
+  data.score >= 40 ? "C" : "D";
+
+document.getElementById("scoreText").innerHTML =
+  `${data.score} - ${data.status}
+  <span style="
+    padding:5px 10px;
+    border-radius:8px;
+    background:${data.score >= 80 ? '#22c55e' : data.score >= 50 ? '#f59e0b' : '#ef4444'};
+    color:white;
+    margin-left:10px;
+  ">${grade}</span>`;
 
     document.getElementById("result").innerHTML = `
       <div class="card" id="report">

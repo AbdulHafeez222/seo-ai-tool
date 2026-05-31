@@ -10,7 +10,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { getAIReport } from "./aiService.js";
-import report from "./models/report.js";
+import Report from "./models/report.js";
 
 // ---------------- APP ----------------
 const app = express();
@@ -23,7 +23,7 @@ const __dirname = path.dirname(__filename);
 // ---------------- MIDDLEWARE ----------------
 app.use(cors({ origin: "*" }));
 app.use(express.json());
-
+app.use(express.static(path.join(__dirname, "public")));
 // ---------------- ENV CHECK ----------------
 console.log("API KEY:", process.env.GEMINI_API_KEY);
 
@@ -42,9 +42,11 @@ mongoose.connect(process.env.MONGO_URL)
   .catch(err => {
     console.log("MongoDB Error:", err);
   });
-
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 // ---------------- SEO ROUTE ----------------
-app.get("/", async (req, res) => {
+app.get("/analyze", async (req, res) => {
 
   let url = req.query.url;
 
@@ -68,9 +70,10 @@ app.get("/", async (req, res) => {
 
     const $ = cheerio.load(response.data);
 
-    const title = $("title").text();
-    const h1 = $("h1").first().text();
-    const metaDescription = $('meta[name="description"]').attr("content") || "";
+const title = $("title").text().trim();
+const h1 = $("h1").first().text().trim();
+const metaDescription =
+  $('meta[name="description"]').attr("content") || "";
 
     const text = $("body").text();
     const wordCount = text.trim().split(/\s+/).length;

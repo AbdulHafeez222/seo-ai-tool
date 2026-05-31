@@ -68,9 +68,15 @@ button {
   position: relative;
   width: 220px;
   height: 220px;
-  margin: auto;
+  margin: 20px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-
+canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
 .loading {
   display: none;
   margin-top: 10px;
@@ -105,7 +111,8 @@ button {
   <div class="chartBox">
     <canvas id="scoreChart"></canvas>
   </div>
-
+  
+}
   <h3 id="scoreText"></h3>
 
   <div id="result"></div>
@@ -159,7 +166,10 @@ async function scan() {
         type: "doughnut",
         data: {
           datasets: [{
-            data: [data.score, 100 - data.score],
+            data: [
+  data.score || 0,
+  100 - (data.score || 0)
+],
             backgroundColor: [color, "#e5e7eb"]
           }]
         },

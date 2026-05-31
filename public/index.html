@@ -173,18 +173,24 @@ async function scan() {
         <p><b>H1:</b> ${data.h1}</p>
         <p><b>Meta:</b> ${data.metaDescription}</p>
         <p><b>Word Count:</b> ${data.wordCount}</p>
-        <p><b>Grade:</b> ${data.grade}</p>
+        <p><b>Status:</b> ${data.status}</p>
 
         <p><b>SEO Tips:</b></p>
         <ul>
           ${(data.tips || []).map(t => `<li>${t}</li>`).join("")}
         </ul>
 
-        <p><b>AI Report:</b></p>
-        <div class="ai-box">
-          ${data.aiReport || "No AI Report"}
-        </div>
-      </div>
+       <p><b>AI Report:</b></p>
+<div class="ai-box">
+  ${data.aiReport || "No AI Report"}
+</div>
+
+<p><b>SEO Issues:</b></p>
+<div class="ai-box">
+  ${(data.issues || []).length
+    ? `<ul>${data.issues.map(i => `<li>${i}</li>`).join("")}</ul>`
+    : "No issues found"}
+</div>
     `;
 
   } catch (err) {
@@ -203,12 +209,18 @@ async function loadHistory() {
   document.getElementById("result").innerHTML =
     data.map(item => `
       <div class="card">
-        <p>${item.url}</p>
-        <p>${item.score}</p>
-        <p>${item.status}</p>
+        <p><b>URL:</b> ${item.url}</p>
+        <p><b>Score:</b> ${item.score}</p>
+        <p><b>Status:</b> ${item.status}</p>
+
+        <p><b>Issues:</b></p>
+        <ul>
+          ${(item.issues || []).map(i => `<li>${i}</li>`).join("")}
+        </ul>
       </div>
     `).join("");
 }
+
 
 // ================= PDF =================
 function downloadPDF() {

@@ -1,9 +1,13 @@
 import axios from "axios";
 
+const MODELS = [
+  "openai/gpt-oss-120b",
+  "mistralai/mistral-7b-instruct",
+];
+
 export async function getAIReport(data) {
-  try {
-    const prompt = `
-Analyze this website SEO:
+  const prompt = `
+SEO Analysis Report:
 
 URL: ${data.url}
 Title: ${data.title}
@@ -12,32 +16,33 @@ Word Count: ${data.wordCount}
 Score: ${data.score}
 
 Give:
-1. Strengths
-2. Weaknesses
-3. Improvements
-4. Final recommendation
+- Strengths
+- Weaknesses
+- Improvements
+- Final SEO Recommendation
 `;
 
-    const response = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: "mistralai/mistral-7b-instruct:free",
-        messages: [
-          { role: "user", content: prompt }
-        ]
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json"
+  for (const model of MODELS) {
+    try {
+      const res = await axios.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          model,
+          messages: [{ role: "user", content: prompt }],
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+          },
         }
-      }
-    );
+      );
 
-    return response.data.choices[0].message.content;
-
-  } catch (e) {
-    console.error("AI ERROR:", e.response?.data || e.message);
-    return "AI report not available";
+      return res.data.choices[0].message.content;
+    } catch (err) {
+      console.log("Model failed:", model);
+    }
   }
+
+  return "AI report not available (all models failed)";
 }

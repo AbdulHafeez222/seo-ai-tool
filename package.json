@@ -1,15 +1,11 @@
 {
   "name": "seo-ai-tool",
   "version": "1.0.0",
-  "type": "module",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
-  "engines": {
-    "node": ">=18"
-  },
-{
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "axios": "^1.6.8",

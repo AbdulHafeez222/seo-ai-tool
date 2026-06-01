@@ -1,12 +1,11 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const client = new OpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: "https://openrouter.ai/api/v1",
+});
 
 export async function getAIReport(data) {
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash"
-  });
-
   const prompt = `
 Analyze this website SEO:
 
@@ -23,7 +22,16 @@ Give:
 4. Final Recommendation
 `;
 
-  const result = await model.generateContent(prompt);
+  const completion = await client.chat.completions.create({
+    model: "openai/gpt-oss-120b",
+    messages: [
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    temperature: 0.7,
+  });
 
-  return result.response.text();
+  return completion.choices[0].message.content;
 }

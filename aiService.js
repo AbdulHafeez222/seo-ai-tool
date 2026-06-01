@@ -2,24 +2,28 @@ import axios from "axios";
 
 export async function getAIReport(data) {
   try {
-    const response = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: "meta-llama/llama-3.1-8b-instruct:free",
-        messages: [
-          {
-            role: "user",
-            content: `
-SEO Analysis:
+    const prompt = `
+Analyze this website SEO:
+
 URL: ${data.url}
 Title: ${data.title}
 Meta: ${data.metaDescription}
-WordCount: ${data.wordCount}
+Word Count: ${data.wordCount}
 Score: ${data.score}
 
-Give simple SEO report.
-`
-          }
+Give:
+1. Strengths
+2. Weaknesses
+3. Improvements
+4. Final recommendation
+`;
+
+    const response = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: "mistralai/mistral-7b-instruct:free",
+        messages: [
+          { role: "user", content: prompt }
         ]
       },
       {
@@ -32,8 +36,8 @@ Give simple SEO report.
 
     return response.data.choices[0].message.content;
 
-  } catch (error) {
-    console.log("AI ERROR:", error.response?.data || error.message);
+  } catch (e) {
+    console.error("AI ERROR:", e.response?.data || e.message);
     return "AI report not available";
   }
 }

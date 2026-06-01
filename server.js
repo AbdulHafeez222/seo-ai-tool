@@ -26,7 +26,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // ---------------- ENV CHECK ----------------
-console.log("Gemini API Loaded");
+console.log("OpenRouter Loaded");
 
 // ---------------- DB CONNECT ----------------
 mongoose.set("strictQuery", false);
@@ -132,7 +132,7 @@ app.get("/analyze", async (req, res) => {
     if (!metaDescription) tips.push("Add meta description");
 
     // ---------------- AI REPORT ----------------
-  let aiReport = "";
+let aiReport = "";
 
 try {
   if (typeof getAIReport === "function") {
@@ -146,7 +146,7 @@ try {
   }
 } catch (e) {
   console.error("AI ERROR:", e);
-  aiReport = "AI report not available";
+  aiReport = "AI report not available due to AI error";
 }
 
     // ---------------- SAVE ----------------

@@ -1,14 +1,8 @@
 import axios from "axios";
 
-const MODELS = [
-  "openai/gpt-oss-120b",
-  "mistralai/mistral-7b-instruct",
-];
-
 export async function getAIReport(data) {
   const prompt = `
-SEO Analysis Report:
-
+SEO Report:
 URL: ${data.url}
 Title: ${data.title}
 Meta: ${data.metaDescription}
@@ -19,30 +13,33 @@ Give:
 - Strengths
 - Weaknesses
 - Improvements
-- Final SEO Recommendation
+- Final suggestion
 `;
 
-  for (const model of MODELS) {
+  for (const model of [
+    "openai/gpt-oss-120b",
+    "mistralai/mistral-7b-instruct"
+  ]) {
     try {
       const res = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
         {
           model,
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content: prompt }]
         },
         {
           headers: {
             Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            "Content-Type": "application/json",
-          },
+            "Content-Type": "application/json"
+          }
         }
       );
 
       return res.data.choices[0].message.content;
-    } catch (err) {
+    } catch (e) {
       console.log("Model failed:", model);
     }
   }
 
-  return "AI report not available (all models failed)";
+  return "AI report not available";
 }

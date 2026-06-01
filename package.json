@@ -1,8 +1,8 @@
 {
-  "name": "seo-ai-tool",
+  "name": "seo-tool",
   "version": "1.0.0",
-  "main": "server.js",
   "type": "module",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
@@ -13,9 +13,6 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^4.22.2",
-    "mongodb": "^7.2.0",
-    "mongoose": "^9.6.3",
-    "pdfkit": "^0.18.0",
-    "openai": "^4.0.0"
+    "mongoose": "^9.6.3"
   }
 }

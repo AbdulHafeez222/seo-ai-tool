@@ -89,7 +89,7 @@ app.get("/analyze", async (req, res) => {
     const metaDescription = $('meta[name="description"]').attr("content") || "";
 
     // Better keywords with stop words filter
-    const stopWords = ['with','from','your','this','that','about','after','have','will','into'];
+    const stopWords = ['with','from','your','this','that','about','after','have','will','into','which','their'];
     const keywords = title
     .toLowerCase()
     .replace(/[^\w\s]/g,'')
@@ -101,14 +101,24 @@ app.get("/analyze", async (req, res) => {
     const wordCount = text? text.trim().split(/\s+/).filter(Boolean).length : 0;
 
     const links = $("a").length;
-    const images = $("img").length;
-    const imagesWithoutAlt = $("img").filter((i, el) =>!$(el).attr("alt")).length;
+
+    // ---------------- IMAGES ALT CHECK ----------------
+    const images = $("img");
+    const totalImages = images.length;
+    let imagesWithoutAlt = 0;
+
+    images.each((i, img) => {
+      const alt = $(img).attr("alt");
+      if (!alt || alt.trim() === "") {
+        imagesWithoutAlt++;
+      }
+    });
 
     const h2 = $("h2").length;
     const canonical = $('link[rel="canonical"]').attr("href");
     const viewport = $('meta[name="viewport"]').attr("content");
 
-    // ---------------- ROBOTS.TXT CHECK - FIXED ----------------
+    // ---------------- ROBOTS.TXT CHECK ----------------
     let robotsExists = false;
     try {
       const robots = await axios.get(`${baseUrl}/robots.txt`, {
@@ -120,7 +130,7 @@ app.get("/analyze", async (req, res) => {
       }
     } catch(e) {}
 
-    // ---------------- SITEMAP.XML CHECK - NEW ----------------
+    // ---------------- SITEMAP.XML CHECK ----------------
     let sitemapExists = false;
     try {
       const sitemap = await axios.get(`${baseUrl}/sitemap.xml`, {
@@ -133,12 +143,12 @@ app.get("/analyze", async (req, res) => {
     } catch(e) {}
 
     // Fixed internal/external links logic
-    const internalLinks = $("a[href]").filter((i, el) => {
+    const internalLinks = $("a").filter((i, el) => {
       const href = $(el).attr("href");
       return href && (href.startsWith("/") || href.includes(hostname));
     }).length;
 
-    const externalLinks = $("a[href]").filter((i, el) => {
+    const externalLinks = $("a").filter((i, el) => {
       const href = $(el).attr("href");
       return href && href.startsWith("http") &&!href.includes(hostname);
     }).length;
@@ -176,7 +186,9 @@ app.get("/analyze", async (req, res) => {
     if (!title) issues.push("Missing title tag");
     if (!metaDescription) issues.push("Missing meta description");
     if (!h1) issues.push("Missing H1 tag");
-    if (imagesWithoutAlt > 0) issues.push(`${imagesWithoutAlt} images missing alt text`);
+    if (imagesWithoutAlt > 0) {
+      issues.push(`${imagesWithoutAlt} out of ${totalImages} images are missing ALT text`);
+    }
     if (!canonical) issues.push("Missing canonical URL");
     if (wordCount < 300) issues.push("Thin content - less than 300 words");
     if (!viewport) issues.push("Website is not mobile optimized");
@@ -202,7 +214,7 @@ app.get("/analyze", async (req, res) => {
     if (h2 > 0) score += 5;
     if (wordCount > 500) score += 15;
     if (links > 5) score += 10;
-    if (images > 0 && imagesWithoutAlt < images) score += 10;
+    if (totalImages > 0 && imagesWithoutAlt < totalImages) score += 10;
     if (canonical) score += 10;
     if (wordCount > 1000) score += 10;
     if (viewport) score += 10;
@@ -237,6 +249,7 @@ app.get("/analyze", async (req, res) => {
     if (!title) tips.push("Add title tag 50-60 characters");
     if (!h1) tips.push("Add one H1 tag with main keyword");
     if (!metaDescription) tips.push("Add meta description 120-155 characters");
+    if (imagesWithoutAlt > 0) tips.push(`Add ALT text to ${imagesWithoutAlt} images for better SEO & accessibility`);
     if (!robotsExists) tips.push("Create robots.txt to allow AI crawlers like GPTBot");
     if (!sitemapExists) tips.push("Add sitemap.xml and submit to Google Search Console");
     if (!hasFAQ) tips.push("Add FAQ Schema to get quoted by ChatGPT");
@@ -270,39 +283,40 @@ app.get("/analyze", async (req, res) => {
       {
         url, title, h1, metaDescription, wordCount, score, status,
         aeoScore, aeoStatus, schemas, hasFAQ, hasHowTo, hasDirectAnswer,
-        robotsExists, sitemapExists,
+        robotsExists, sitemapExists, totalImages, imagesWithoutAlt,
         tips, aiReport, issues, keywords, internalLinks, externalLinks,
         lastModified
       },
       { upsert: true, new: true }
     );
 
-    // ---------------- RESPONSE - FIXED ----------------
     // ---------------- RESPONSE ----------------
-res.json({
-  url,
-  title,
-  h1,
-  metaDescription,
-  wordCount,
-  score,
-  status,
-  aeoScore,
-  aeoStatus,
-  schemas,
-  hasFAQ,
-  hasHowTo,
-  hasDirectAnswer,
-  lastModified,
-  robotsExists,
-  sitemapExists,
-  tips,
-  aiReport,
-  issues,
-  keywords,
-  internalLinks,
-  externalLinks
-});
+    res.json({
+      url,
+      title,
+      h1,
+      metaDescription,
+      wordCount,
+      score,
+      status,
+      aeoScore,
+      aeoStatus,
+      schemas,
+      hasFAQ,
+      hasHowTo,
+      hasDirectAnswer,
+      lastModified,
+      robotsExists,
+      sitemapExists,
+      totalImages,
+      imagesWithoutAlt,
+      tips,
+      aiReport,
+      issues,
+      keywords,
+      internalLinks,
+      externalLinks
+    });
 
   } catch (error) {
     console.error("Analyze Error:", error);

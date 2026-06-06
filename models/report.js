@@ -17,7 +17,11 @@ const reportSchema = new mongoose.Schema(
     internalLinks: Number,
     externalLinks: Number,
 
-    // AEO Fields - NEW
+    // Images Fields
+    totalImages: Number,
+    imagesWithoutAlt: Number,
+
+    // AEO Fields
     aeoScore: Number,
     aeoStatus: String,
     schemas: [String],
@@ -26,7 +30,7 @@ const reportSchema = new mongoose.Schema(
     hasDirectAnswer: Boolean,
     lastModified: String,
 
-    // Technical Checks - NEW
+    // Technical Checks
     robotsExists: Boolean,
     sitemapExists: Boolean,
 

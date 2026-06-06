@@ -7,9 +7,30 @@ const reportSchema = new mongoose.Schema(
     h1: String,
     metaDescription: String,
     wordCount: Number,
+
+    // SEO Fields
     score: Number,
     status: String,
     tips: [String],
+    issues: [String],
+    keywords: [String],
+    internalLinks: Number,
+    externalLinks: Number,
+
+    // AEO Fields - NEW
+    aeoScore: Number,
+    aeoStatus: String,
+    schemas: [String],
+    hasFAQ: Boolean,
+    hasHowTo: Boolean,
+    hasDirectAnswer: Boolean,
+    lastModified: String,
+
+    // Technical Checks - NEW
+    robotsExists: Boolean,
+    sitemapExists: Boolean,
+
+    // AI Report
     aiReport: String
   },
   { timestamps: true }

@@ -201,6 +201,9 @@ async function scan() {
         <p><b>H1:</b> ${data.h1}</p>
         <p><b>Meta:</b> ${data.metaDescription}</p>
         <p><b>Word Count:</b> ${data.wordCount}</p>
+        <p><b>Robots.txt:</b>
+${data.robotsExists ? "✅ Found" : "❌ Missing"}
+</p>
         <p><b>Internal Links:</b> ${data.internalLinks}</p>
        <p><b>External Links:</b> ${data.externalLinks}</p>
 

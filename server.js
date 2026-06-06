@@ -105,6 +105,17 @@ app.get("/analyze", async (req, res) => {
     const h2 = $("h2").length;
     const canonical = $('link[rel="canonical"]').attr("href");
     const viewport = $('meta[name="viewport"]').attr("content");
+   let robotsExists = false;
+
+try {
+  const robots = await axios.get(url + "/robots.txt", {
+    timeout: 5000
+  });
+
+  if (robots.status === 200) {
+    robotsExists = true;
+  }
+} catch {}
 
     // Fixed internal/external links logic
     const internalLinks = $("a[href]").filter((i, el) => {
@@ -262,6 +273,19 @@ app.get("/analyze", async (req, res) => {
       tips,
       aiReport,
       issues,
+     res.json({
+  url,
+  title,
+  h1,
+  metaDescription,
+  wordCount,
+  score,
+  status,
+  tips,
+  aiReport,
+  issues,
+  robotsExists
+});
       keywords,
       internalLinks,
       externalLinks

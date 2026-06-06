@@ -75,7 +75,7 @@ canvas {
   transform: translate(-50%, -50%);
   font-size: 42px;
   font-weight: 700;
-  color: #1a8917;
+  color: #ffffff;
   text-align: center;
   line-height: 1;
   pointer-events: none;
@@ -90,7 +90,7 @@ canvas {
 }
 .dark .card {
   background: #1e293b;
-  color: #fffff;
+  color: #ffffff;
   border: 1px solid #334155;
 }
 .dark .ai-box {
@@ -180,14 +180,14 @@ async function scan() {
   data.score >= 60 ? "B" :
   data.score >= 40 ? "C" : "D";
     
-    // Neeche wala text khali kar diya
+    // 
     document.getElementById("scoreText").innerHTML = "";
     
-    // Center mein score set karo
-    document.getElementById("centerScore").innerHTML = `
-      ${data.score}
-      <span>${data.status}</span>
-    `;
+    // 
+   document.getElementById("centerScore").innerHTML = `
+  ${data.score}
+  <span>${grade}</span>
+`;
     
     document.getElementById("result").innerHTML = `
       <div class="card" id="report">

@@ -63,6 +63,8 @@ button {
 canvas {
   width: 100% !important;
   height: 100% !important;
+  position: relative;
+  z-index: 1;
 }
 .loading {
   display: none;
@@ -78,10 +80,9 @@ canvas {
   text-align: center;
   line-height: 1;
   pointer-events: none;
-  z-index: 10;
+  z-index: 9999;
   color: #16a34a;
 }
-
 .dark #centerScore {
   color: #4ade80;
 }

@@ -32,13 +32,13 @@ console.log("OpenRouter Loaded");
 mongoose.set("strictQuery", false);
 
 mongoose.connect(process.env.MONGO_URL)
- .then(() => {
+.then(() => {
     console.log("MongoDB Connected ✅");
     app.listen(PORT, () => {
       console.log("Server running on port", PORT);
     });
   })
- .catch(err => {
+.catch(err => {
     console.log("MongoDB Error:", err);
   });
 
@@ -68,6 +68,8 @@ app.get("/analyze", async (req, res) => {
       return res.json({ error: "Invalid URL format" });
     }
 
+    const baseUrl = new URL(url).origin;
+
     const response = await axios.get(url, {
       timeout: 15000,
       maxRedirects: 5,
@@ -89,11 +91,11 @@ app.get("/analyze", async (req, res) => {
     // Better keywords with stop words filter
     const stopWords = ['with','from','your','this','that','about','after','have','will','into'];
     const keywords = title
-     .toLowerCase()
-     .replace(/[^\w\s]/g,'')
-     .split(" ")
-     .filter(word => word.length > 3 &&!stopWords.includes(word))
-     .slice(0, 5);
+    .toLowerCase()
+    .replace(/[^\w\s]/g,'')
+    .split(" ")
+    .filter(word => word.length > 3 &&!stopWords.includes(word))
+    .slice(0, 5);
 
     const text = $("body").text();
     const wordCount = text? text.trim().split(/\s+/).filter(Boolean).length : 0;
@@ -105,17 +107,30 @@ app.get("/analyze", async (req, res) => {
     const h2 = $("h2").length;
     const canonical = $('link[rel="canonical"]').attr("href");
     const viewport = $('meta[name="viewport"]').attr("content");
-   let robotsExists = false;
 
-try {
-  const robots = await axios.get(url + "/robots.txt", {
-    timeout: 5000
-  });
+    // ---------------- ROBOTS.TXT CHECK - FIXED ----------------
+    let robotsExists = false;
+    try {
+      const robots = await axios.get(`${baseUrl}/robots.txt`, {
+        timeout: 5000,
+        validateStatus: status => status < 500
+      });
+      if (robots.status === 200) {
+        robotsExists = true;
+      }
+    } catch(e) {}
 
-  if (robots.status === 200) {
-    robotsExists = true;
-  }
-} catch }
+    // ---------------- SITEMAP.XML CHECK - NEW ----------------
+    let sitemapExists = false;
+    try {
+      const sitemap = await axios.get(`${baseUrl}/sitemap.xml`, {
+        timeout: 5000,
+        validateStatus: status => status < 500
+      });
+      if (sitemap.status === 200) {
+        sitemapExists = true;
+      }
+    } catch(e) {}
 
     // Fixed internal/external links logic
     const internalLinks = $("a[href]").filter((i, el) => {
@@ -165,6 +180,8 @@ try {
     if (!canonical) issues.push("Missing canonical URL");
     if (wordCount < 300) issues.push("Thin content - less than 300 words");
     if (!viewport) issues.push("Website is not mobile optimized");
+    if (!robotsExists) issues.push("robots.txt not found - AI crawlers may get blocked");
+    if (!sitemapExists) issues.push("sitemap.xml not found - Google indexing will be slow");
 
     // AEO Issues
     if(!hasFAQ) issues.push("Missing FAQ Schema - ChatGPT won't quote you");
@@ -189,6 +206,8 @@ try {
     if (canonical) score += 10;
     if (wordCount > 1000) score += 10;
     if (viewport) score += 10;
+    if (robotsExists) score += 5;
+    if (sitemapExists) score += 5;
 
     if (score > 100) score = 100;
 
@@ -205,6 +224,7 @@ try {
     if(hasArticle) aeoScore += 15;
     if(lastModified) aeoScore += 10;
     if(hasSpeakable) aeoScore += 10;
+    if(sitemapExists) aeoScore += 5;
 
     let aeoStatus =
       aeoScore >= 80? "AEO Ready - ChatGPT Will Quote You" :
@@ -217,6 +237,8 @@ try {
     if (!title) tips.push("Add title tag 50-60 characters");
     if (!h1) tips.push("Add one H1 tag with main keyword");
     if (!metaDescription) tips.push("Add meta description 120-155 characters");
+    if (!robotsExists) tips.push("Create robots.txt to allow AI crawlers like GPTBot");
+    if (!sitemapExists) tips.push("Add sitemap.xml and submit to Google Search Console");
     if (!hasFAQ) tips.push("Add FAQ Schema to get quoted by ChatGPT");
     if (!hasDirectAnswer) tips.push("Add 40-60 word paragraph right after H2");
     if (wordCount < 500) tips.push("Increase content to 800+ words");
@@ -248,13 +270,14 @@ try {
       {
         url, title, h1, metaDescription, wordCount, score, status,
         aeoScore, aeoStatus, schemas, hasFAQ, hasHowTo, hasDirectAnswer,
+        robotsExists, sitemapExists,
         tips, aiReport, issues, keywords, internalLinks, externalLinks,
         lastModified
       },
       { upsert: true, new: true }
     );
 
-    // ---------------- RESPONSE ----------------
+    // ---------------- RESPONSE - FIXED ----------------
     res.json({
       url,
       title,
@@ -270,22 +293,11 @@ try {
       hasHowTo,
       hasDirectAnswer,
       lastModified,
+      robotsExists,
+      sitemapExists,
       tips,
       aiReport,
       issues,
-     res.json({
-  url,
-  title,
-  h1,
-  metaDescription,
-  wordCount,
-  score,
-  status,
-  tips,
-  aiReport,
-  issues,
-  robotsExists
-});
       keywords,
       internalLinks,
       externalLinks

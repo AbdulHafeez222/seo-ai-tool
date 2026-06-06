@@ -115,7 +115,7 @@ try {
   if (robots.status === 200) {
     robotsExists = true;
   }
-} catch {}
+} catch }
 
     // Fixed internal/external links logic
     const internalLinks = $("a[href]").filter((i, el) => {

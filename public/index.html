@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>SEO AI Tool</title>
+  <title>SEO + AEO AI Tool</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
@@ -19,7 +20,7 @@ body {
   background: white;
   padding: 25px;
   border-radius: 15px;
-  max-width: 700px;
+  max-width: 800px;
   margin: auto;
   box-shadow: 0 0 15px rgba(0,0,0,0.1);
 }
@@ -38,6 +39,10 @@ button {
   color: white;
   cursor: pointer;
   border-radius: 8px;
+  margin: 5px;
+}
+button:hover {
+  background: #1d4ed8;
 }
 .card {
   text-align: left;
@@ -51,11 +56,17 @@ button {
   padding: 15px;
   border-radius: 10px;
 }
+.chartContainer {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
 .chartBox {
   position: relative;
-  width: 220px;
-  height: 220px;
-  margin: 20px auto;
+  width: 200px;
+  height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -70,29 +81,36 @@ canvas {
   display: none;
   margin-top: 10px;
 }
-#centerScore {
+.centerScore {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 42px;
+  font-size: 36px;
   font-weight: 700;
   text-align: center;
   line-height: 1;
   pointer-events: none;
   z-index: 9999;
-  color: #16a34a;
 }
-.dark #centerScore {
-  color: #4ade80;
-}
-#centerScore span {
+.centerScore span {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: #666;
   margin-top: 2px;
 }
+.badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 8px;
+}
+.badge-green { background: #dcfce7; color: #166534; }
+.badge-red { background: #fee2e2; color: #991b1b; }
+.badge-orange { background: #ffedd5; color: #9a3412; }
 .dark .card {
   background: #1e293b;
   color: #ffffff;
@@ -108,152 +126,171 @@ canvas {
   color: white;
   border: 1px solid #334155;
 }
-.dark #centerScore span {
+.dark .centerScore span {
   color: #94a3b8;
 }
+.dark .badge-green { background: #14532d; color: #bbf7d0; }
+.dark .badge-red { background: #7f1d1d; color: #fecaca; }
+.dark .badge-orange { background: #7c2d12; color: #fed7aa; }
 </style>
 </head>
 <body>
 <div class="box">
-  <h2>SEO AI Analyzer</h2>
-  <button onclick="toggleDarkMode()">Dark Mode</button>
+  <h2>🚀 SEO + AEO Analyzer</h2>
+  <button onclick="toggleDarkMode()">🌙 Dark Mode</button>
   <input id="url" placeholder="Enter website URL">
   <br>
-  <button onclick="scan()">Scan</button>
-  <button onclick="downloadPDF()">Download PDF</button>
-  <button onclick="loadHistory()">History</button>
-  <div class="loading" id="loading">Scanning...</div>
-  <div class="chartBox">
-    <canvas id="scoreChart"></canvas>
-    <div id="centerScore"></div>
+  <button onclick="scan()">🔍 Scan</button>
+  <button onclick="downloadPDF()">📄 Download PDF</button>
+  <button onclick="loadHistory()">📊 History</button>
+  <div class="loading" id="loading">⏳ Scanning...</div>
+  
+  <div class="chartContainer">
+    <div class="chartBox">
+      <canvas id="seoChart"></canvas>
+      <div class="centerScore" id="seoScore"></div>
+    </div>
+    <div class="chartBox">
+      <canvas id="aeoChart"></canvas>
+      <div class="centerScore" id="aeoScore"></div>
+    </div>
   </div>
-  <h3 id="scoreText"></h3>
+  
   <div id="result"></div>
 </div>
+
 <script>
 const API_BASE = "https://seo-ai-tool-s47q.onrender.com";
-let scoreChart;
+let seoChart, aeoChart;
+
 async function scan() {
   let url = document.getElementById("url").value;
   if (!url) return alert("Enter URL");
   if (!url.startsWith("http")) {
     url = "https://" + url;
   }
+  
   document.getElementById("loading").style.display = "block";
   document.getElementById("result").innerHTML = "";
+  
   try {
-   const res = await fetch(
-  `${API_BASE}/analyze?url=${encodeURIComponent(url)}`
-);
+    const res = await fetch(`${API_BASE}/analyze?url=${encodeURIComponent(url)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
+    
     if (data.error) {
-      document.getElementById("result").innerHTML =
-        `<div class="card">${data.error}</div>`;
+      document.getElementById("result").innerHTML = `<div class="card">${data.error}</div>`;
       return;
     }
-    let color = "red";
-    if (data.score >= 80) color = "green";
-    else if (data.score >= 50) color = "orange";
-    if (scoreChart) scoreChart.destroy();
-    scoreChart = new Chart(
-      document.getElementById("scoreChart"),
-      {
-        type: "doughnut",
-        data: {
-          datasets: [{
-            data: [
-  data.score || 0,
-  100 - (data.score || 0)
-],
-            backgroundColor: [color, "#e5e7eb"],
-            borderWidth: 0
-          }]
-        },
-        options: {
-          cutout: "75%",
-          plugins: { 
-            legend: { display: false },
-            tooltip: { enabled: false }
-          }
-        }
+
+    // SEO Chart
+    let seoColor = data.score >= 80 ? "#16a34a" : data.score >= 50 ? "#f97316" : "#dc2626";
+    if (seoChart) seoChart.destroy();
+    seoChart = new Chart(document.getElementById("seoChart"), {
+      type: "doughnut",
+      data: {
+        datasets: [{
+          data: [data.score || 0, 100 - (data.score || 0)],
+          backgroundColor: [seoColor, "#e5e7eb"],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        cutout: "75%",
+        plugins: { legend: { display: false }, tooltip: { enabled: false } }
       }
-    );
-    let grade =
-  data.score >= 90 ? "A+" :
-  data.score >= 80 ? "A" :
-  data.score >= 60 ? "B" :
-  data.score >= 40 ? "C" : "D";
-    
-    // 
-    document.getElementById("scoreText").innerHTML = "";
-    
-    // 
-   document.getElementById("centerScore").innerHTML = `
-  ${data.score}
-  <span>${grade}</span>
-`;
-    
+    });
+
+    let seoGrade = data.score >= 90 ? "A+" : data.score >= 80 ? "A" : data.score >= 60 ? "B" : data.score >= 40 ? "C" : "D";
+    document.getElementById("seoScore").innerHTML = `${data.score}<span>SEO ${seoGrade}</span>`;
+    document.getElementById("seoScore").style.color = seoColor;
+
+    // AEO Chart
+    let aeoColor = data.aeoScore >= 80 ? "#16a34a" : data.aeoScore >= 50 ? "#f97316" : "#dc2626";
+    if (aeoChart) aeoChart.destroy();
+    aeoChart = new Chart(document.getElementById("aeoChart"), {
+      type: "doughnut",
+      data: {
+        datasets: [{
+          data: [data.aeoScore || 0, 100 - (data.aeoScore || 0)],
+          backgroundColor: [aeoColor, "#e5e7eb"],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        cutout: "75%",
+        plugins: { legend: { display: false }, tooltip: { enabled: false } }
+      }
+    });
+
+    let aeoGrade = data.aeoScore >= 90 ? "A+" : data.aeoScore >= 80 ? "A" : data.aeoScore >= 60 ? "B" : data.aeoScore >= 40 ? "C" : "D";
+    document.getElementById("aeoScore").innerHTML = `${data.aeoScore}<span>AEO ${aeoGrade}</span>`;
+    document.getElementById("aeoScore").style.color = aeoColor;
+
+    // Result HTML
     document.getElementById("result").innerHTML = `
       <div class="card" id="report">
+        <h3>📊 Basic Info</h3>
         <p><b>Website:</b> ${data.url}</p>
         <p><b>Title:</b> ${data.title}</p>
         <p><b>H1:</b> ${data.h1}</p>
-        <p><b>Meta:</b> ${data.metaDescription}</p>
+        <p><b>Meta Description:</b> ${data.metaDescription}</p>
         <p><b>Word Count:</b> ${data.wordCount}</p>
-        <p><b>Robots.txt:</b>
-${data.robotsExists ? "✅ Found" : "❌ Missing"}
-</p>
-        <p><b>Internal Links:</b> ${data.internalLinks}</p>
-       <p><b>External Links:</b> ${data.externalLinks}</p>
-
-       <p><b>Suggested Keywords:</b></p>
-       <ul>
-       ${(data.keywords || []).map(k => `<li>${k}</li>`).join("")}
-       </ul>
-        <p><b>Status:</b> ${data.status}</p>
-        <p><b>SEO Tips:</b></p>
-        <ul>
-          ${(data.tips || []).map(t => `<li>${t}</li>`).join("")}
-        </ul>
-       <p><b>AI Report:</b></p>
-<div class="ai-box">
-  ${data.aiReport || "No AI Report"}
-</div>
-<p><b>SEO Issues:</b></p>
-<div class="ai-box">
-  ${(data.issues || []).length
-    ? `<ul>${data.issues.map(i => `<li>${i}</li>`).join("")}</ul>`
-    : "No issues found"}
-</div>
+        <p><b>Last Modified:</b> ${data.lastModified || 'Not found'}</p>
+        
+        <h3>🔍 SEO Status</h3>
+        <p><b>SEO Score:</b> ${data.score}/100 <span class="badge badge-${data.score >= 80 ? 'green' : data.score >= 50 ? 'orange' : 'red'}">${data.status}</span></p>
+        <p><b>Internal Links:</b> ${data.internalLinks} | <b>External Links:</b> ${data.externalLinks}</p>
+        <p><b>Robots.txt:</b> ${data.robotsExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        <p><b>Sitemap.xml:</b> ${data.sitemapExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        
+        <h3>🤖 AEO Status - ChatGPT Ready?</h3>
+        <p><b>AEO Score:</b> ${data.aeoScore}/100 <span class="badge badge-${data.aeoScore >= 80 ? 'green' : data.aeoScore >= 50 ? 'orange' : 'red'}">${data.aeoStatus}</span></p>
+        <p><b>FAQ Schema:</b> ${data.hasFAQ ? '<span class="badge badge-green">✅ Yes - ChatGPT Will Quote</span>' : '<span class="badge badge-red">❌ No</span>'}</p>
+        <p><b>HowTo Schema:</b> ${data.hasHowTo ? '<span class="badge badge-green">✅ Yes</span>' : '<span class="badge badge-red">❌ No</span>'}</p>
+        <p><b>Direct Answer:</b> ${data.hasDirectAnswer ? '<span class="badge badge-green">✅ Yes - Featured Snippet Ready</span>' : '<span class="badge badge-red">❌ No</span>'}</p>
+        <p><b>Schemas Found:</b> ${(data.schemas || []).length ? data.schemas.join(', ') : 'None'}</p>
+        
+        <h3>🔑 Suggested Keywords</h3>
+        <ul>${(data.keywords || []).map(k => `<li>${k}</li>`).join("")}</ul>
+        
+        <h3>💡 SEO Tips</h3>
+        <ul>${(data.tips || []).map(t => `<li>${t}</li>`).join("")}</ul>
+        
+        <h3>⚠️ Issues Found</h3>
+        <div class="ai-box">
+          ${(data.issues || []).length ? `<ul>${data.issues.map(i => `<li>${i}</li>`).join("")}</ul>` : "No issues found"}
+        </div>
+        
+        <h3>🤖 AI Report</h3>
+        <div class="ai-box">${data.aiReport || "No AI Report"}</div>
+      </div>
     `;
   } catch (err) {
     document.getElementById("loading").style.display = "none";
-    document.getElementById("result").innerHTML =
-      `<div class="card">Server Error</div>`;
+    document.getElementById("result").innerHTML = `<div class="card">❌ Server Error: ${err.message}</div>`;
   }
 }
+
 async function loadHistory() {
   const res = await fetch(`${API_BASE}/history`);
   const data = await res.json();
-  document.getElementById("result").innerHTML =
-    data.map(item => `
-      <div class="card">
-        <p><b>URL:</b> ${item.url}</p>
-        <p><b>Score:</b> ${item.score}</p>
-        <p><b>Status:</b> ${item.status}</p>
-        <p><b>Issues:</b></p>
-        <ul>
-          ${(item.issues || []).map(i => `<li>${i}</li>`).join("")}
-        </ul>
-      </div>
-    `).join("");
+  document.getElementById("result").innerHTML = data.map(item => `
+    <div class="card">
+      <p><b>URL:</b> ${item.url}</p>
+      <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0}</p>
+      <p><b>Status:</b> ${item.status}</p>
+      <p><b>FAQ Schema:</b> ${item.hasFAQ ? '✅' : '❌'} | <b>Direct Answer:</b> ${item.hasDirectAnswer ? '✅' : '❌'}</p>
+    </div>
+  `).join("");
 }
+
 function downloadPDF() {
   const el = document.getElementById("report");
   if (!el) return alert("Scan first!");
-  html2pdf().from(el).save("seo-report.pdf");
+  html2pdf().from(el).save("seo-aeo-report.pdf");
 }
+
 function toggleDarkMode() {
   document.body.classList.toggle("dark");
 }

@@ -31,6 +31,8 @@ input {
   width: 80%;
   padding: 12px;
   margin: 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
 }
 button {
   padding: 12px 20px;
@@ -40,6 +42,7 @@ button {
   cursor: pointer;
   border-radius: 8px;
   margin: 5px;
+  font-weight: 600;
 }
 button:hover {
   background: #1d4ed8;
@@ -55,6 +58,7 @@ button:hover {
   background: #eef4ff;
   padding: 15px;
   border-radius: 10px;
+  margin-top: 10px;
 }
 .chartContainer {
   display: flex;
@@ -80,6 +84,7 @@ canvas {
 .loading {
   display: none;
   margin-top: 10px;
+  font-size: 18px;
 }
 .centerScore {
   position: absolute;
@@ -111,6 +116,17 @@ canvas {
 .badge-green { background: #dcfce7; color: #166534; }
 .badge-red { background: #fee2e2; color: #991b1b; }
 .badge-orange { background: #ffedd5; color: #9a3412; }
+h3 {
+  margin-top: 25px;
+  margin-bottom: 10px;
+  color: #1e293b;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 8px;
+}
+.dark h3 {
+  color: #f1f5f9;
+  border-bottom-color: #334155;
+}
 .dark .card {
   background: #1e293b;
   color: #ffffff;
@@ -132,18 +148,24 @@ canvas {
 .dark .badge-green { background: #14532d; color: #bbf7d0; }
 .dark .badge-red { background: #7f1d1d; color: #fecaca; }
 .dark .badge-orange { background: #7c2d12; color: #fed7aa; }
+ul {
+  padding-left: 20px;
+}
+li {
+  margin: 5px 0;
+}
 </style>
 </head>
 <body>
 <div class="box">
   <h2>🚀 SEO + AEO Analyzer</h2>
   <button onclick="toggleDarkMode()">🌙 Dark Mode</button>
-  <input id="url" placeholder="Enter website URL">
+  <input id="url" placeholder="Enter website URL" value="hafeezdigitalstudio.com">
   <br>
-  <button onclick="scan()">🔍 Scan</button>
+  <button onclick="scan()">🔍 Scan Website</button>
   <button onclick="downloadPDF()">📄 Download PDF</button>
   <button onclick="loadHistory()">📊 History</button>
-  <div class="loading" id="loading">⏳ Scanning...</div>
+  <div class="loading" id="loading">⏳ Scanning... Please wait</div>
   
   <div class="chartContainer">
     <div class="chartBox">
@@ -179,7 +201,7 @@ async function scan() {
     document.getElementById("loading").style.display = "none";
     
     if (data.error) {
-      document.getElementById("result").innerHTML = `<div class="card">${data.error}</div>`;
+      document.getElementById("result").innerHTML = `<div class="card">❌ ${data.error}</div>`;
       return;
     }
 
@@ -232,14 +254,15 @@ async function scan() {
       <div class="card" id="report">
         <h3>📊 Basic Info</h3>
         <p><b>Website:</b> ${data.url}</p>
-        <p><b>Title:</b> ${data.title}</p>
-        <p><b>H1:</b> ${data.h1}</p>
-        <p><b>Meta Description:</b> ${data.metaDescription}</p>
+        <p><b>Title:</b> ${data.title || 'Not found'}</p>
+        <p><b>H1:</b> ${data.h1 || 'Not found'}</p>
+        <p><b>Meta Description:</b> ${data.metaDescription || 'Not found'}</p>
         <p><b>Word Count:</b> ${data.wordCount}</p>
         <p><b>Last Modified:</b> ${data.lastModified || 'Not found'}</p>
         
         <h3>🔍 SEO Status</h3>
         <p><b>SEO Score:</b> ${data.score}/100 <span class="badge badge-${data.score >= 80 ? 'green' : data.score >= 50 ? 'orange' : 'red'}">${data.status}</span></p>
+        <p><b>Images:</b> ${data.totalImages} total, ${data.imagesWithoutAlt} missing ALT text ${data.imagesWithoutAlt > 0 ? '<span class="badge badge-red">⚠️ Fix Needed</span>' : '<span class="badge badge-green">✅ Perfect</span>'}</p>
         <p><b>Internal Links:</b> ${data.internalLinks} | <b>External Links:</b> ${data.externalLinks}</p>
         <p><b>Robots.txt:</b> ${data.robotsExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
         <p><b>Sitemap.xml:</b> ${data.sitemapExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
@@ -252,7 +275,7 @@ async function scan() {
         <p><b>Schemas Found:</b> ${(data.schemas || []).length ? data.schemas.join(', ') : 'None'}</p>
         
         <h3>🔑 Suggested Keywords</h3>
-        <ul>${(data.keywords || []).map(k => `<li>${k}</li>`).join("")}</ul>
+        <ul>${(data.keywords || []).map(k => `<li>${k}</li>`).join("") || '<li>No keywords found</li>'}</ul>
         
         <h3>💡 SEO Tips</h3>
         <ul>${(data.tips || []).map(t => `<li>${t}</li>`).join("")}</ul>
@@ -273,26 +296,47 @@ async function scan() {
 }
 
 async function loadHistory() {
-  const res = await fetch(`${API_BASE}/history`);
-  const data = await res.json();
-  document.getElementById("result").innerHTML = data.map(item => `
-    <div class="card">
-      <p><b>URL:</b> ${item.url}</p>
-      <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0}</p>
-      <p><b>Status:</b> ${item.status}</p>
-      <p><b>FAQ Schema:</b> ${item.hasFAQ ? '✅' : '❌'} | <b>Direct Answer:</b> ${item.hasDirectAnswer ? '✅' : '❌'}</p>
-    </div>
-  `).join("");
+  try {
+    const res = await fetch(`${API_BASE}/history`);
+    const data = await res.json();
+    document.getElementById("result").innerHTML = `
+      <h3>📊 Scan History</h3>
+      ${data.map(item => `
+        <div class="card">
+          <p><b>URL:</b> ${item.url}</p>
+          <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0}</p>
+          <p><b>Status:</b> ${item.status}</p>
+          <p><b>FAQ Schema:</b> ${item.hasFAQ ? '✅' : '❌'} | <b>Direct Answer:</b> ${item.hasDirectAnswer ? '✅' : '❌'}</p>
+          <p><b>Sitemap:</b> ${item.sitemapExists ? '✅' : '❌'} | <b>Images:</b> ${item.imagesWithoutAlt || 0}/${item.totalImages || 0} missing ALT</p>
+          <p><b>Scanned:</b> ${new Date(item.createdAt).toLocaleString()}</p>
+        </div>
+      `).join("")}
+    `;
+  } catch (err) {
+    document.getElementById("result").innerHTML = `<div class="card">❌ Failed to load history</div>`;
+  }
 }
 
 function downloadPDF() {
   const el = document.getElementById("report");
   if (!el) return alert("Scan first!");
-  html2pdf().from(el).save("seo-aeo-report.pdf");
+  const opt = {
+    margin: 10,
+    filename: 'seo-aeo-report.pdf',
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+  html2pdf().from(el).set(opt).save();
 }
 
 function toggleDarkMode() {
   document.body.classList.toggle("dark");
+}
+
+// Auto scan on load for demo
+window.onload = () => {
+  // scan();
 }
 </script>
 </body>

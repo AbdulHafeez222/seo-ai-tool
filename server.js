@@ -278,30 +278,31 @@ app.get("/analyze", async (req, res) => {
     );
 
     // ---------------- RESPONSE - FIXED ----------------
-    res.json({
-      url,
-      title,
-      h1,
-      metaDescription,
-      wordCount,
-      score,
-      status,
-      aeoScore,
-      aeoStatus,
-      schemas,
-      hasFAQ,
-      hasHowTo,
-      hasDirectAnswer,
-      lastModified,
-      robotsExists,
-      sitemapExists,
-      tips,
-      aiReport,
-      issues,
-      keywords,
-      internalLinks,
-      externalLinks
-    });
+    // ---------------- RESPONSE ----------------
+res.json({
+  url,
+  title,
+  h1,
+  metaDescription,
+  wordCount,
+  score,
+  status,
+  aeoScore,
+  aeoStatus,
+  schemas,
+  hasFAQ,
+  hasHowTo,
+  hasDirectAnswer,
+  lastModified,
+  robotsExists,
+  sitemapExists,
+  tips,
+  aiReport,
+  issues,
+  keywords,
+  internalLinks,
+  externalLinks
+});
 
   } catch (error) {
     console.error("Analyze Error:", error);

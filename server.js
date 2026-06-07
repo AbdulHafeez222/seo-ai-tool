@@ -91,11 +91,11 @@ app.get("/analyze", async (req, res) => {
     // Better keywords with stop words filter
     const stopWords = ['with','from','your','this','that','about','after','have','will','into','which','their'];
     const keywords = title
-    .toLowerCase()
-    .replace(/[^\w\s]/g,'')
-    .split(" ")
-    .filter(word => word.length > 3 &&!stopWords.includes(word))
-    .slice(0, 5);
+   .toLowerCase()
+   .replace(/[^\w\s]/g,'')
+   .split(" ")
+   .filter(word => word.length > 3 &&!stopWords.includes(word))
+   .slice(0, 5);
 
     const text = $("body").text();
     const wordCount = text? text.trim().split(/\s+/).filter(Boolean).length : 0;
@@ -117,6 +117,12 @@ app.get("/analyze", async (req, res) => {
     const h2 = $("h2").length;
     const canonical = $('link[rel="canonical"]').attr("href");
     const viewport = $('meta[name="viewport"]').attr("content");
+
+    // ---------------- OPEN GRAPH TAGS CHECK ----------------
+    const ogTitle = $('meta[property="og:title"]').attr("content") || "";
+    const ogDescription = $('meta[property="og:description"]').attr("content") || "";
+    const ogImage = $('meta[property="og:image"]').attr("content") || "";
+    const hasOGTags =!!ogTitle &&!!ogDescription &&!!ogImage;
 
     // ---------------- ROBOTS.TXT CHECK ----------------
     let robotsExists = false;
@@ -194,6 +200,9 @@ app.get("/analyze", async (req, res) => {
     if (!viewport) issues.push("Website is not mobile optimized");
     if (!robotsExists) issues.push("robots.txt not found - AI crawlers may get blocked");
     if (!sitemapExists) issues.push("sitemap.xml not found - Google indexing will be slow");
+    if (!hasOGTags) {
+      issues.push("Open Graph tags missing - Poor social media sharing");
+    }
 
     // AEO Issues
     if(!hasFAQ) issues.push("Missing FAQ Schema - ChatGPT won't quote you");
@@ -220,6 +229,7 @@ app.get("/analyze", async (req, res) => {
     if (viewport) score += 10;
     if (robotsExists) score += 5;
     if (sitemapExists) score += 5;
+    if (hasOGTags) score += 5; // <-- FIX: Pehle +5 phir cap karo
 
     if (score > 100) score = 100;
 
@@ -255,6 +265,9 @@ app.get("/analyze", async (req, res) => {
     if (!hasFAQ) tips.push("Add FAQ Schema to get quoted by ChatGPT");
     if (!hasDirectAnswer) tips.push("Add 40-60 word paragraph right after H2");
     if (wordCount < 500) tips.push("Increase content to 800+ words");
+    if (!hasOGTags) {
+      tips.push("Add Open Graph tags for better Facebook, LinkedIn and social sharing previews");
+    }
 
     // ---------------- AI REPORT ----------------
     let aiReport = "";
@@ -284,6 +297,7 @@ app.get("/analyze", async (req, res) => {
         url, title, h1, metaDescription, wordCount, score, status,
         aeoScore, aeoStatus, schemas, hasFAQ, hasHowTo, hasDirectAnswer,
         robotsExists, sitemapExists, totalImages, imagesWithoutAlt,
+        hasOGTags, ogTitle, ogDescription, ogImage, // <-- FIX: Add kiya
         tips, aiReport, issues, keywords, internalLinks, externalLinks,
         lastModified
       },
@@ -310,6 +324,10 @@ app.get("/analyze", async (req, res) => {
       sitemapExists,
       totalImages,
       imagesWithoutAlt,
+      hasOGTags, // <-- FIX: Add kiya
+      ogTitle, // <-- FIX: Add kiya
+      ogDescription, // <-- FIX: Add kiya
+      ogImage, // <-- FIX: Add kiya
       tips,
       aiReport,
       issues,

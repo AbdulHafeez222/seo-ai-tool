@@ -85,8 +85,11 @@ app.get("/analyze", async (req, res) => {
     const loadTime = Date.now() - startTime; // in ms
 
     const $ = cheerio.load(response.data);
+    
+    // 👇 BAS EK HI BAAR DECLARE KAR - LINE 125 WALI RAKH
     const canonical = $('link[rel="canonical"]').attr("href");
-const hasCanonical =!!canonical;
+    const hasCanonical = !!canonical;
+    
     // Remove script/style tags before word count
     $('script, style, noscript, svg').remove();
 
@@ -101,7 +104,7 @@ const hasCanonical =!!canonical;
   .toLowerCase()
   .replace(/[^\w\s]/g,'')
   .split(" ")
-  .filter(word => word.length > 3 &&!stopWords.includes(word))
+  .filter(word => word.length > 3 && !stopWords.includes(word))
   .slice(0, 5);
 
     const text = $("body").text();
@@ -122,17 +125,19 @@ const hasCanonical =!!canonical;
     });
 
     const h2 = $("h2").length;
-    const canonical = $('link[rel="canonical"]').attr("href");
+    
+    // 👇 YE LINE DELETE KAR DI - DUPLICATE THI
+    // const canonical = $('link[rel="canonical"]').attr("href");
 
     // ---------------- MOBILE FRIENDLY CHECK ----------------
     const viewportTag = $('meta[name="viewport"]').attr("content");
-    const mobileFriendly =!!viewportTag && viewportTag.includes("width=device-width");
+    const mobileFriendly = !!viewportTag && viewportTag.includes("width=device-width");
 
     // ---------------- OPEN GRAPH TAGS CHECK ----------------
     const ogTitle = $('meta[property="og:title"]').attr("content") || "";
     const ogDescription = $('meta[property="og:description"]').attr("content") || "";
     const ogImage = $('meta[property="og:image"]').attr("content") || "";
-    const hasOGTags =!!ogTitle &&!!ogDescription &&!!ogImage;
+    const hasOGTags = !!ogTitle && !!ogDescription && !!ogImage;
 
     // ---------------- ROBOTS.TXT CHECK ----------------
     let robotsExists = false;
@@ -162,7 +167,7 @@ const hasCanonical =!!canonical;
     const allLinks = [];
     $("a").each((i, el) => {
       const href = $(el).attr("href");
-      if (href && href.startsWith("http") &&!href.includes('#')) {
+      if (href && href.startsWith("http") && !href.includes('#')) {
         allLinks.push(href);
       }
     });
@@ -191,7 +196,7 @@ const hasCanonical =!!canonical;
 
     const externalLinks = $("a").filter((i, el) => {
       const href = $(el).attr("href");
-      return href && href.startsWith("http") &&!href.includes(hostname);
+      return href && href.startsWith("http") && !href.includes(hostname);
     }).length;
 
     // ---------------- SCHEMA MARKUP CHECK ----------------
@@ -236,9 +241,9 @@ const hasCanonical =!!canonical;
     if (imagesWithoutAlt > 0) {
       issues.push(`${imagesWithoutAlt} out of ${totalImages} images are missing ALT text`);
     }
-   if (!canonical) {
-  issues.push("Canonical URL tag missing");
-}
+    if (!canonical) {
+      issues.push("Canonical URL tag missing");
+    }
     if (wordCount < 300) issues.push("Thin content - less than 300 words");
     if (!mobileFriendly) issues.push("Website is not mobile optimized - Missing viewport tag");
     if (!robotsExists) issues.push("robots.txt not found - AI crawlers may get blocked");
@@ -269,7 +274,7 @@ const hasCanonical =!!canonical;
     if (wordCount > 500) score += 10;
     if (links > 5) score += 5;
     if (totalImages > 0 && imagesWithoutAlt < totalImages) score += 8;
-    if (canonical) score += 8;
+    if (hasCanonical) score += 2; // 👈 YE ADD KAR DIYA
     if (wordCount > 1000) score += 5;
     if (mobileFriendly) score += 10;
     if (robotsExists) score += 3;
@@ -305,22 +310,22 @@ const hasCanonical =!!canonical;
     // ---------------- TIPS ----------------
     let tips = [];
 
-if (!title) tips.push("Add title tag 50-60 characters");
-if (!h1) tips.push("Add one H1 tag with main keyword");
-if (!metaDescription) tips.push("Add meta description 120-155 characters");
-if (imagesWithoutAlt > 0) tips.push(`Add ALT text to ${imagesWithoutAlt} images for better SEO & accessibility`);
-if (!robotsExists) tips.push("Create robots.txt to allow AI crawlers like GPTBot");
-if (!sitemapExists) tips.push("Add sitemap.xml and submit to Google Search Console");
-if (!hasFAQ) tips.push("Add FAQ Schema to get quoted by ChatGPT");
-if (!hasDirectAnswer) tips.push("Add 40-60 word paragraph right after H2");
-if (wordCount < 500) tips.push("Increase content to 800+ words");
-if (!hasOGTags) tips.push("Add Open Graph tags for better Facebook, LinkedIn and social sharing previews");
-if (!mobileFriendly) tips.push("Add viewport meta tag: <meta name='viewport' content='width=device-width, initial-scale=1.0'>");
-if (!isHttps) tips.push("Migrate to HTTPS - Get SSL certificate for security & rankings");
-if (loadTime > 3000) tips.push(`Optimize page speed - Current: ${loadTime}ms. Compress images, enable caching`);
-if (brokenLinks > 0) tips.push(`Fix ${brokenLinks} broken links to improve user experience`);
-if (!hasSchemaMarkup) tips.push("Add Schema.org markup for rich snippets in Google");
-if (!hasCanonical) tips.push("Add canonical URL: <link rel='canonical' href='https://your-page-url'>");
+    if (!title) tips.push("Add title tag 50-60 characters");
+    if (!h1) tips.push("Add one H1 tag with main keyword");
+    if (!metaDescription) tips.push("Add meta description 120-155 characters");
+    if (imagesWithoutAlt > 0) tips.push(`Add ALT text to ${imagesWithoutAlt} images for better SEO & accessibility`);
+    if (!robotsExists) tips.push("Create robots.txt to allow AI crawlers like GPTBot");
+    if (!sitemapExists) tips.push("Add sitemap.xml and submit to Google Search Console");
+    if (!hasFAQ) tips.push("Add FAQ Schema to get quoted by ChatGPT");
+    if (!hasDirectAnswer) tips.push("Add 40-60 word paragraph right after H2");
+    if (wordCount < 500) tips.push("Increase content to 800+ words");
+    if (!hasOGTags) tips.push("Add Open Graph tags for better Facebook, LinkedIn and social sharing previews");
+    if (!mobileFriendly) tips.push("Add viewport meta tag: <meta name='viewport' content='width=device-width, initial-scale=1.0'>");
+    if (!isHttps) tips.push("Migrate to HTTPS - Get SSL certificate for security & rankings");
+    if (loadTime > 3000) tips.push(`Optimize page speed - Current: ${loadTime}ms. Compress images, enable caching`);
+    if (brokenLinks > 0) tips.push(`Fix ${brokenLinks} broken links to improve user experience`);
+    if (!hasSchemaMarkup) tips.push("Add Schema.org markup for rich snippets in Google");
+    if (!hasCanonical) tips.push("Add canonical URL: <link rel='canonical' href='https://your-page-url'>");
       
     // ---------------- AI REPORT ----------------
     let aiReport = "";
@@ -353,7 +358,9 @@ if (!hasCanonical) tips.push("Add canonical URL: <link rel='canonical' href='htt
         hasOGTags, ogTitle, ogDescription, ogImage,
         mobileFriendly, isHttps, loadTime, brokenLinks, brokenLinksList, hasSchemaMarkup,
         tips, aiReport, issues, keywords, internalLinks, externalLinks,
-        lastModified
+        lastModified,
+        hasCanonical,
+        canonical
       },
       { upsert: true, new: true }
     );
@@ -394,8 +401,8 @@ if (!hasCanonical) tips.push("Add canonical URL: <link rel='canonical' href='htt
       keywords,
       internalLinks,
       externalLinks,
-     hasCanonical,
-canonical,
+      hasCanonical,
+      canonical
     });
 
   } catch (error) {

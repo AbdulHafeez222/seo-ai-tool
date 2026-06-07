@@ -21,6 +21,22 @@ const reportSchema = new mongoose.Schema(
     totalImages: Number,
     imagesWithoutAlt: Number,
 
+    // Open Graph Fields
+    hasOGTags: Boolean,
+    ogTitle: String,
+    ogDescription: String,
+    ogImage: String,
+
+    // Technical Checks - NEW FIELDS
+    mobileFriendly: Boolean,
+    isHttps: Boolean,
+    loadTime: Number,
+    brokenLinks: Number,
+    brokenLinksList: [String],
+    hasSchemaMarkup: Boolean,
+    robotsExists: Boolean,
+    sitemapExists: Boolean,
+
     // AEO Fields
     aeoScore: Number,
     aeoStatus: String,
@@ -29,10 +45,6 @@ const reportSchema = new mongoose.Schema(
     hasHowTo: Boolean,
     hasDirectAnswer: Boolean,
     lastModified: String,
-
-    // Technical Checks
-    robotsExists: Boolean,
-    sitemapExists: Boolean,
 
     // AI Report
     aiReport: String

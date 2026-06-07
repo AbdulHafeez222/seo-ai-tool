@@ -47,6 +47,102 @@ function countSyllables(word) {
   return matches? matches.length : 1;
 }
 
+// ---------------- AI CITATION PROBABILITY ----------------
+function calculateCitationProbability({ hasFAQ, hasHowTo, hasDirectAnswer, hasArticle, hasSpeakable, schemas, wordCount, hasAuthor }) {
+  let chatGPT = 0, gemini = 0, perplexity = 0;
+
+  // ChatGPT prefers FAQ + Direct Answers + Fresh
+  if (hasFAQ) chatGPT += 35;
+  if (hasDirectAnswer) chatGPT += 30;
+  if (hasArticle) chatGPT += 15;
+  if (wordCount > 500) chatGPT += 10;
+  if (hasAuthor) chatGPT += 10;
+
+  // Gemini prefers Schema + Technical + Structured
+  if (hasHowTo) gemini += 30;
+  if (schemas.length > 2) gemini += 25;
+  if (hasArticle) gemini += 20;
+  if (hasDirectAnswer) gemini += 15;
+  if (wordCount > 800) gemini += 10;
+
+  // Perplexity prefers Lists + Tables + Citations
+  if (hasFAQ) perplexity += 30;
+  if (hasHowTo) perplexity += 25;
+  if (hasDirectAnswer) perplexity += 25;
+  if (hasSpeakable) perplexity += 10;
+  if (wordCount > 600) perplexity += 10;
+
+  return {
+    chatGPT: Math.min(100, chatGPT),
+    gemini: Math.min(100, gemini),
+    perplexity: Math.min(100, perplexity)
+  };
+}
+
+// ---------------- AI ANSWER EXTRACTION ----------------
+function extractAIAnswer($) {
+  // 1. FAQ Schema se
+  let faqAnswer = '';
+  $('script[type="application/ld+json"]').each((i, el) => {
+    try {
+      const json = JSON.parse($(el).html());
+      if (json['@type'] === 'FAQPage' && json.mainEntity?.[0]) {
+        const q = json.mainEntity[0].name;
+        const a = json.mainEntity[0].acceptedAnswer?.text;
+        if (q && a) faqAnswer = `Q: ${q}\nA: ${a.substring(0, 200)}...`;
+      }
+    } catch(e) {}
+  });
+  if (faqAnswer) return faqAnswer;
+
+  // 2. H2 + Next Paragraph 40-80 words
+  let directAnswer = '';
+  $('h2').each((i, el) => {
+    if (directAnswer) return;
+    const question = $(el).text().trim();
+    const nextP = $(el).next('p').text().trim();
+    const words = nextP.split(/\s+/).filter(Boolean);
+    if (words.length >= 40 && words.length <= 80) {
+      directAnswer = `Q: ${question}\nA: ${nextP.substring(0, 200)}...`;
+    }
+  });
+  if (directAnswer) return directAnswer;
+
+  // 3. First H1 + First Para
+  const h1 = $("h1").first().text().trim();
+  const firstPara = $("p").first().text().trim();
+  if (h1 && firstPara) {
+    return `Q: ${h1}\nA: ${firstPara.substring(0, 200)}...`;
+  }
+
+  return "No clear AI-extractable answer found. Add FAQ schema or direct answers under H2.";
+}
+
+// ---------------- AEO SIMULATOR ----------------
+function generateAEOSimulation({ title, h1, metaDescription, hasFAQ, directAnswer, url, wordCount }) {
+  const brand = new URL(url).hostname.replace('www.', '').split('.')[0];
+  const brandName = brand.charAt(0).toUpperCase() + brand.slice(1);
+
+  if (hasFAQ && directAnswer.includes('Q:')) {
+    return `"According to ${brandName}, ${directAnswer.split('A: ')[1]?.substring(0, 150) || 'this service is available'}."`;
+  }
+
+  if (h1 && wordCount > 300) {
+    const answer = metaDescription || `${h1} services are available`;
+    return `"According to ${brandName}, ${answer.substring(0, 150)}..."`;
+  }
+
+  return `"${brandName} provides ${title || 'web services'}. Visit ${url} for more details."`;
+}
+
+// ---------------- AUTHOR DETECTION ----------------
+function detectAuthor($) {
+  const authorMeta = $('meta[name="author"]').attr('content');
+  const authorSchema = $('script[type="application/ld+json"]').text().includes('"author"');
+  const authorText = $('body').text().match(/by\s+([A-Z][a-z]+\s+[A-Z][a-z]+)/);
+  return!!(authorMeta || authorSchema || authorText);
+}
+
 // ---------------- APP ----------------
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -145,8 +241,8 @@ app.get("/analyze", async (req, res) => {
 
     // Single words
     const singleWords = cleanText
-     .split(/\s+/)
-     .filter(word => word.length > 3 &&!stopWords.includes(word));
+    .split(/\s+/)
+    .filter(word => word.length > 3 &&!stopWords.includes(word));
 
     // 2-word phrases
     const phrases = [];
@@ -164,9 +260,9 @@ app.get("/analyze", async (req, res) => {
     });
 
     const keywords = Object.entries(keywordCount)
-     .sort((a, b) => b[1] - a[1])
-     .slice(0, 8)
-     .map(([word]) => word);
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([word]) => word);
 
     const wordCount = text? text.trim().split(/\s+/).filter(Boolean).length : 0;
 
@@ -312,6 +408,22 @@ app.get("/analyze", async (req, res) => {
                          $('meta[property="article:published_time"]').attr('content') ||
                          $('time').attr('datetime') || null;
 
+    // AUTHOR DETECTION
+    const hasAuthor = detectAuthor($);
+
+    // 2. AI ANSWER EXTRACTION
+    const aiExtractedAnswer = extractAIAnswer($);
+
+    // 1. AI CITATION PROBABILITY
+    const citationScores = calculateCitationProbability({
+      hasFAQ, hasHowTo, hasDirectAnswer, hasArticle, hasSpeakable, schemas, wordCount, hasAuthor
+    });
+
+    // 3. AEO SIMULATOR
+    const aeoSimulation = generateAEOSimulation({
+      title, h1, metaDescription, hasFAQ, directAnswer: aiExtractedAnswer, url, wordCount
+    });
+
     // ---------------- ISSUES ----------------
     let issues = [];
 
@@ -331,6 +443,8 @@ app.get("/analyze", async (req, res) => {
     if (readability.score < 50) issues.push(`Content difficult to read - Score: ${readability.score}/100`);
     if (!hasFacebook &&!hasLinkedIn &&!hasYouTube) issues.push("No social media links found");
     if (!hasEmail &&!hasPhone) issues.push("No contact information found - Missing trust signals");
+    if (!hasAuthor) issues.push("No author found - Reduces EEAT and AI trust");
+    if (citationScores.chatGPT < 50) issues.push("Low ChatGPT citation chance - Add FAQ schema and direct answers");
     if (!mobileFriendly) issues.push("Website is not mobile optimized - Missing viewport tag");
     if (!robotsExists) issues.push("robots.txt not found - AI crawlers may get blocked");
     if (!sitemapExists) issues.push("sitemap.xml not found - Google indexing will be slow");
@@ -365,6 +479,7 @@ app.get("/analyze", async (req, res) => {
     if (readability.score >= 60) score += 5; // NEW: Readability
     if (hasEmail || hasPhone) score += 2; // NEW: Contact info
     if (hasFacebook || hasLinkedIn) score += 1; // NEW: Social
+    if (hasAuthor) score += 2; // NEW: Author EEAT
     if (wordCount > 1000) score += 5;
     if (mobileFriendly) score += 10;
     if (robotsExists) score += 3;
@@ -407,6 +522,8 @@ app.get("/analyze", async (req, res) => {
     if (readability.score < 60) tips.push(`Improve readability - Current: ${readability.score}/100. Use shorter sentences and simpler words`);
     if (!hasFacebook &&!hasLinkedIn) tips.push("Add social media links to build trust and authority");
     if (!hasEmail &&!hasPhone) tips.push("Add contact information (email/phone) to improve EEAT signals");
+    if (!hasAuthor) tips.push("Add author byline to improve EEAT and AI citation chance");
+    if (citationScores.chatGPT < 60) tips.push("Add FAQ Schema and 40-60 word direct answers to boost ChatGPT citation chance");
     if (!robotsExists) tips.push("Create robots.txt to allow AI crawlers like GPTBot");
     if (!sitemapExists) tips.push("Add sitemap.xml and submit to Google Search Console");
     if (!hasFAQ) tips.push("Add FAQ Schema to get quoted by ChatGPT");
@@ -449,12 +566,14 @@ app.get("/analyze", async (req, res) => {
 SEO SCORE: ${score}/100 - ${status}
 AEO SCORE: ${aeoScore}/100 - ${aeoStatus}
 READABILITY: ${readability.score}/100 - ${readability.status}
+AI CITATION: ChatGPT ${citationScores.chatGPT}% | Gemini ${citationScores.gemini}% | Perplexity ${citationScores.perplexity}%
 
 ✅ STRENGTHS:
 ${title? `• Strong title tag (${title.length} chars)` : ''}
 ${h1? `• H1 tag present` : ''}
 ${wordCount > 500? `• Good content length (${wordCount} words)` : ''}
 ${hasFAQ? `• FAQ Schema detected - AI ready` : ''}
+${hasAuthor? `• Author found - EEAT boost` : ''}
 ${isHttps? `• HTTPS secure` : ''}
 ${mobileFriendly? `• Mobile optimized` : ''}
 
@@ -483,6 +602,11 @@ ${aeoScore >= 80? 'Your content is well-optimized for ChatGPT, Perplexity & Gemi
         readabilityScore: readability.score, readabilityStatus: readability.status,
         hasFacebook, hasLinkedIn, hasYouTube, hasTwitter,
         hasEmail, hasPhone, email, phone,
+        hasAuthor, aiExtractedAnswer,
+        citationChatGPT: citationScores.chatGPT,
+        citationGemini: citationScores.gemini,
+        citationPerplexity: citationScores.perplexity,
+        aeoSimulation,
         tips, aiReport, issues, keywords, internalLinks, externalLinks,
         lastModified
       },
@@ -500,6 +624,11 @@ ${aeoScore >= 80? 'Your content is well-optimized for ChatGPT, Perplexity & Gemi
       readabilityScore: readability.score, readabilityStatus: readability.status,
       hasFacebook, hasLinkedIn, hasYouTube, hasTwitter,
       hasEmail, hasPhone, email, phone,
+      hasAuthor, aiExtractedAnswer,
+      citationChatGPT: citationScores.chatGPT,
+      citationGemini: citationScores.gemini,
+      citationPerplexity: citationScores.perplexity,
+      aeoSimulation,
       tips, aiReport, issues, keywords, internalLinks, externalLinks
     });
 

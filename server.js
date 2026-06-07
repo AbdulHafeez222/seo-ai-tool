@@ -1,3 +1,6 @@
+*📄 `server.js` - COMPLETE UPDATED CODE*
+
+Copy karke pura replace kar do 👇
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -9,7 +12,7 @@ import mongoose from "mongoose";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { getAIReport } from "./aiService.js";
+import { getAIReport, getAISearchSimulation, generateSchemaCode } from "./aiService.js";
 import Report from "./models/report.js";
 
 // ---------------- HELPER FUNCTIONS ----------------
@@ -287,6 +290,122 @@ function generateInstantFixes(issues) {
   return fixes;
 }
 
+// 🚀 2. REAL AEO ENGINE - Q/A Detection
+function detectAEOReadiness($) {
+  let aeoScore = 0;
+  let signals = [];
+  const hasFAQ = $('script[type="application/ld+json"]').text().includes('FAQPage');
+  if (hasFAQ) { aeoScore += 25; signals.push('✅ FAQ Schema'); }
+  else { signals.push('❌ FAQ Schema Missing'); }
+  let directAnswers = 0;
+  $('h2').each((i, el) => {
+    const nextP = $(el).next('p').text().trim();
+    const words = nextP.split(/\s+/).filter(Boolean).length;
+    if (words >= 40 && words <= 60) directAnswers++;
+  });
+  if (directAnswers > 0) { aeoScore += 25; signals.push(`✅ ${directAnswers} Direct Answers`); }
+  else { signals.push('❌ No 40-60 word answers'); }
+  const questionH2s = $('h2').filter((i, el) => {
+    const text = $(el).text().toLowerCase();
+    return text.includes('what') || text.includes('how') || text.includes('why') || text.includes('?');
+  }).length;
+  if (questionH2s > 0) { aeoScore += 20; signals.push(`✅ ${questionH2s} Question H2s`); }
+  else { signals.push('❌ No question headings'); }
+  const hasLists = $('ul, ol').length > 0;
+  if (hasLists) { aeoScore += 15; signals.push('✅ Step-by-step Lists'); }
+  else { signals.push('❌ No lists'); }
+  const hasDate = $('meta[property="article:modified_time"]').length > 0 || $('time').length > 0;
+  if (hasDate) { aeoScore += 15; signals.push('✅ Fresh Content Date'); }
+  else { signals.push('❌ No last updated date'); }
+  return { score: Math.min(100, aeoScore), signals };
+}
+
+// 🚀 3. AI CITATION ENGINE - USP FEATURE
+function calculateAICitationScore($, text) {
+  let chatGPT = 0, gemini = 0, perplexity = 0;
+  let reasons = [];
+  const hasAccording = text.toLowerCase().includes('according to');
+  const hasResearch = text.toLowerCase().includes('research') || text.toLowerCase().includes('study');
+  const hasData = /\d+%|\d+\s+(users|customers|clients)/.test(text);
+  const hasDefinition = $('p').first().text().length > 50 && $('p').first().text().length < 200;
+  if ($('script[type="application/ld+json"]').text().includes('FAQPage')) {
+    chatGPT += 40; reasons.push('ChatGPT: FAQ Schema found');
+  }
+  if (hasDefinition) {
+    chatGPT += 30; reasons.push('ChatGPT: Clear definition found');
+  }
+  if (hasAccording) {
+    chatGPT += 30; reasons.push('ChatGPT: Authority tone');
+  }
+  if ($('script[type="application/ld+json"]').text().includes('HowTo')) {
+    gemini += 40; reasons.push('Gemini: HowTo Schema found');
+  }
+  if ($('ul, ol').length > 2) {
+    gemini += 35; reasons.push('Gemini: Step-by-step lists');
+  }
+  if (hasData) {
+    gemini += 25; reasons.push('Gemini: Data-driven content');
+  }
+  if (hasResearch) {
+    perplexity += 40; reasons.push('Perplexity: Research mentions');
+  }
+  if (hasData) {
+    perplexity += 35; reasons.push('Perplexity: Statistics found');
+  }
+  if ($('a[href^="http"]').length > 5) {
+    perplexity += 25; reasons.push('Perplexity: External citations');
+  }
+  return {
+    chatGPT: Math.min(100, chatGPT),
+    gemini: Math.min(100, gemini),
+    perplexity: Math.min(100, perplexity),
+    reasons
+  };
+}
+
+// 🚀 7. AUTO SEO FIX SUGGESTION ENGINE
+function generateFixSuggestions(issues) {
+  const fixes = [];
+  issues.forEach(issue => {
+    if (issue.includes('FAQ Schema')) {
+      fixes.push({
+        problem: 'Missing FAQ Schema',
+        solution: 'Add JSON-LD FAQ markup in <head>',
+        code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[...]}</script>`
+      });
+    }
+    if (issue.includes('Direct answer')) {
+      fixes.push({
+        problem: 'No 40-60 word answers',
+        solution: 'Add direct answer under each H2',
+        code: `<h2>What is...?</h2>\n<p>[Write 40-60 word direct answer here]</p>`
+      });
+    }
+    if (issue.includes('Last Updated')) {
+      fixes.push({
+        problem: 'No freshness date',
+        solution: 'Add last modified meta tag',
+        code: `<meta property="article:modified_time" content="2026-01-15T10:00:00+00:00">`
+      });
+    }
+    if (issue.includes('ALT text')) {
+      fixes.push({
+        problem: 'Images missing ALT',
+        solution: 'Add descriptive ALT to all images',
+        code: `<img src="image.jpg" alt="descriptive text about image content">`
+      });
+    }
+    if (issue.includes('meta description')) {
+      fixes.push({
+        problem: 'Missing/poor meta description',
+        solution: 'Add 150-160 char meta description',
+        code: `<meta name="description" content="Your compelling 155 char description here">`
+      });
+    }
+  });
+  return fixes;
+}
+
 // ---------------- APP ----------------
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -459,7 +578,7 @@ app.get("/analyze", async (req, res) => {
     const structureData = calculateContentStructure($);
     const avgCitation = Math.round((citationScores.chatGPT + citationScores.gemini + citationScores.perplexity) / 3);
     const schemaCoverage = calculateSchemaCoverage(schemas);
-    
+
     let issues = [];
     if (!title) issues.push("Missing title tag");
     if (!metaDescription) issues.push("Missing meta description");
@@ -488,9 +607,9 @@ app.get("/analyze", async (req, res) => {
     if(!hasDirectAnswer) issues.push("No direct answer under H2 - Missing featured snippet");
     if(!lastModified) issues.push("No last updated date - AI prefers fresh content");
     if (issues.length === 0) issues.push("No major SEO issues found");
-    
+
     const { critical, important, minor } = categorizeIssues(issues);
-    
+
     let score = 0;
     if (title.length > 10 && title.length < 70) score += 10;
     if (metaDescription.length > 50 && metaDescription.length < 160) score += 10;
@@ -512,7 +631,7 @@ app.get("/analyze", async (req, res) => {
     if (hasSchemaMarkup) score += 5;
     score = Math.min(100, score);
     let status = score >= 80? "Excellent" : score >= 50? "Good" : "Poor";
-    
+
     let aeoScore = 0;
     if(hasFAQ) aeoScore += 25;
     if(hasHowTo) aeoScore += 20;
@@ -523,16 +642,16 @@ app.get("/analyze", async (req, res) => {
     if(hasSpeakable) aeoScore += 5;
     aeoScore = Math.min(100, aeoScore);
     let aeoStatus = aeoScore >= 80? "Excellent" : aeoScore >= 50? "Good" : "Poor";
-    
+
     const overallAIVisibility = Math.round((score * 0.25) + (aeoScore * 0.25) + (trustData.score * 0.2) + (avgCitation * 0.3));
-    const aiVisibilityData = calculateAIVisibilityScore({ 
-      seoScore: score, 
-      aeoScore: aeoScore, 
-      aiTrust: trustData.score, 
-      readability: readability.score, 
-      schemaCoverage 
+    const aiVisibilityData = calculateAIVisibilityScore({
+      seoScore: score,
+      aeoScore: aeoScore,
+      aiTrust: trustData.score,
+      readability: readability.score,
+      schemaCoverage
     });
-    
+
     const answerQualityData = checkAnswerQuality($);
     const autoFAQ = generateAutoFAQ(title, h1, metaDescription, url);
     const serpPreview = generateSERPPreview(title, metaDescription, url);
@@ -542,7 +661,7 @@ app.get("/analyze", async (req, res) => {
     const instantFixes = generateInstantFixes(issues);
     const mobileScore = mobileFriendly? 95 : 40;
     const desktopScore = score;
-    
+
     let tips = [];
     if(!hasFAQ) tips.push("Add FAQ Schema to boost AI citation by 35%");
     if(!hasDirectAnswer) tips.push("Add 40-60 word answers under H2 headings for featured snippets");
@@ -554,19 +673,27 @@ app.get("/analyze", async (req, res) => {
     if(!hasPrivacyPolicy) tips.push("Add Privacy Policy page to boost AI trust score");
     if(!hasAboutPage) tips.push("Add About Us page to improve EEAT signals");
     if (tips.length === 0) tips.push("Your site is well optimized for AI search");
-    
+
+    // 🚀 NEW UPGRADE CALCULATIONS - FINAL PACK
+    const aeoData = detectAEOReadiness($);
+    const citationData = calculateAICitationScore($, text);
+    const fixSuggestions = generateFixSuggestions(issues);
+    const aiSearchSim = await getAISearchSimulation({
+      url, title, h1, metaDescription, aiExtractedAnswer
+    });
+
     let aiReport = "";
     try {
-      aiReport = await getAIReport({ 
-        url, title, h1, metaDescription, score, status, wordCount, issues, tips, keywords, 
-        aeoScore, aeoStatus, schemas, hasFAQ, hasHowTo, hasDirectAnswer, lastModified, 
-        hasArticle, hasSpeakable, readability, hasFacebook, hasLinkedIn, hasYouTube, hasTwitter, 
-        hasEmail, hasPhone, email, phone, hasAuthor, aiExtractedAnswer, citationScores, aeoSimulation 
+      aiReport = await getAIReport({
+        url, title, h1, metaDescription, score, status, wordCount, issues, tips, keywords,
+        aeoScore, aeoStatus, schemas, hasFAQ, hasHowTo, hasDirectAnswer, lastModified,
+        hasArticle, hasSpeakable, readability, hasFacebook, hasLinkedIn, hasYouTube, hasTwitter,
+        hasEmail, hasPhone, email, phone, hasAuthor, aiExtractedAnswer, citationScores, aeoSimulation
       });
     } catch(e) {
       aiReport = "AI Report not available";
     }
-    
+
     if (!aiReport || aiReport.includes("not available")) {
       aiReport = `📊 AUTOMATED SEO + AEO ANALYSIS
 
@@ -586,7 +713,7 @@ ${issues.filter(i =>!i.includes('No')).join('\n')}
 💡 TOP 3 RECOMMENDATIONS:
 ${tips.slice(0,3).join('\n')}`;
     }
-    
+
     const reportData = {
       url, title, h1, metaDescription, wordCount, score, status, tips, issues, keywords,
       internalLinks, externalLinks, totalImages, imagesWithoutAlt, hasOGTags, ogTitle, ogDescription, ogImage,
@@ -601,7 +728,17 @@ ${tips.slice(0,3).join('\n')}`;
       contentStructureScore: structureData.score, criticalIssues: critical, importantIssues: important, minorIssues: minor,
       overallAIVisibility, schemaCoverage, aiVisibilityScore: aiVisibilityData.score, aiVisibilityLevel: aiVisibilityData.level,
       citationSimulator, topicAuthority, answerQuality: answerQualityData.score, answerQualityChecks: answerQualityData.checks,
-      autoFAQ, serpPreview, mobileScore, desktopScore, businessValue, instantFixes, aiReport
+      autoFAQ, serpPreview, mobileScore, desktopScore, businessValue, instantFixes, aiReport,
+
+      // 🚀 NEW UPGRADE FIELDS - FINAL PACK
+      aeoReadiness: aeoData.score,
+      aeoSignals: aeoData.signals,
+      citationReasons: citationData.reasons,
+      fixSuggestions: fixSuggestions,
+      aiSearchSimulation: aiSearchSim,
+      realCitationChatGPT: citationData.chatGPT,
+      realCitationGemini: citationData.gemini,
+      realCitationPerplexity: citationData.perplexity
     };
 
     const existingReport = await Report.findOne({ url });
@@ -621,4 +758,15 @@ ${tips.slice(0,3).join('\n')}`;
 app.get("/history", async (req, res) => {
   const data = await Report.find().sort({ createdAt: -1 }).limit(10);
   res.json(data);
+});
+
+// ---------------- SCHEMA GENERATOR ROUTE ----------------
+app.post("/generate-schema", async (req, res) => {
+  const { type, data } = req.body;
+  try {
+    const schemaCode = await generateSchemaCode(type, data);
+    res.json({ schema: schemaCode });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
 });

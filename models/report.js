@@ -36,7 +36,12 @@ const reportSchema = new mongoose.Schema(
     hasSchemaMarkup: Boolean,
     robotsExists: Boolean,
     sitemapExists: Boolean,
+   hasCanonical: Boolean,
+  canonical: String,
 
+  aiReport: String,
+  createdAt: { type: Date, default: Date.now }
+});
     // AEO Fields
     aeoScore: Number,
     aeoStatus: String,

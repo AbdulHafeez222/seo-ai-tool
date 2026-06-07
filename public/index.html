@@ -116,6 +116,7 @@ canvas {
 .badge-green { background: #dcfce7; color: #166534; }
 .badge-red { background: #fee2e2; color: #991b1b; }
 .badge-orange { background: #ffedd5; color: #9a3412; }
+.badge-purple { background: #f3e8ff; color: #6b21a8; }
 h3 {
   margin-top: 25px;
   margin-bottom: 10px;
@@ -148,11 +149,24 @@ h3 {
 .dark .badge-green { background: #14532d; color: #bbf7d0; }
 .dark .badge-red { background: #7f1d1d; color: #fecaca; }
 .dark .badge-orange { background: #7c2d12; color: #fed7aa; }
+.dark .badge-purple { background: #581c87; color: #e9d5ff; }
 ul {
   padding-left: 20px;
 }
 li {
   margin: 5px 0;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+}
+td {
+  padding: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.dark td {
+  border-bottom-color: #334155;
 }
 </style>
 </head>
@@ -196,12 +210,12 @@ async function scan() {
   document.getElementById("result").innerHTML = "";
   
   try {
-    const res = await fetch(`${API_BASE}/analyze?url=${encodeURIComponent(url)}`);
+    const res = await fetch(${API_BASE}/analyze?url=${encodeURIComponent(url)});
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
     
     if (data.error) {
-      document.getElementById("result").innerHTML = `<div class="card">❌ ${data.error}</div>`;
+      document.getElementById("result").innerHTML = <div class="card">❌ ${data.error}</div>;
       return;
     }
 
@@ -224,7 +238,7 @@ async function scan() {
     });
 
     let seoGrade = data.score >= 90 ? "A+" : data.score >= 80 ? "A" : data.score >= 60 ? "B" : data.score >= 40 ? "C" : "D";
-    document.getElementById("seoScore").innerHTML = `${data.score}<span>SEO ${seoGrade}</span>`;
+    document.getElementById("seoScore").innerHTML = ${data.score}<span>SEO ${seoGrade}</span>;
     document.getElementById("seoScore").style.color = seoColor;
 
     // AEO Chart
@@ -246,7 +260,7 @@ async function scan() {
     });
 
     let aeoGrade = data.aeoScore >= 90 ? "A+" : data.aeoScore >= 80 ? "A" : data.aeoScore >= 60 ? "B" : data.aeoScore >= 40 ? "C" : "D";
-    document.getElementById("aeoScore").innerHTML = `${data.aeoScore}<span>AEO ${aeoGrade}</span>`;
+    document.getElementById("aeoScore").innerHTML = ${data.aeoScore}<span>AEO ${aeoGrade}</span>;
     document.getElementById("aeoScore").style.color = aeoColor;
 
     // Readability Color
@@ -266,8 +280,48 @@ async function scan() {
         <h3>📖 Content Quality</h3>
         <p><b>Readability Score:</b> ${data.readabilityScore}/100 <span class="badge" style="background:${readabilityColor}20;color:${readabilityColor}">${data.readabilityStatus}</span></p>
         <p><b>Author Found:</b> ${data.hasAuthor? '<span class="badge badge-green">✅ Yes - EEAT Boost</span>' : '<span class="badge badge-red">❌ No</span>'}</p>
+
+        <h3>🏆 AI Trust Score - Unique Feature</h3>
+        <p><b>AI Trust Score:</b> ${data.aiTrustScore}/100 <span class="badge badge-${data.aiTrustScore >= 80? 'green' : data.aiTrustScore >= 50? 'orange' : 'red'}">${data.aiTrustScore >= 80? 'Excellent' : data.aiTrustScore >= 50? 'Good' : 'Poor'}</span></p>
+        <div style="font-size: 13px; margin-left: 20px; margin-top: 8px;">
+          <b>Trust Signals:</b><br>
+          ${data.aiTrustSignals?.map(s => • ${s}).join('<br>') || 'No signals found'}
+        </div>
+        <p style="margin-top: 10px;"><b>Privacy Policy:</b> ${data.hasPrivacyPolicy? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        <p><b>About Page:</b> ${data.hasAboutPage? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        <p><b>Contact Page:</b> ${data.hasContactPage? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
+
+        <h3>🎯 Featured Snippet Predictor</h3>
+        <p><b>Featured Snippet Chance:</b> ${data.featuredSnippetChance}% <span class="badge badge-${data.featuredSnippetChance >= 80? 'green' : data.featuredSnippetChance >= 50? 'orange' : 'red'}">${data.featuredSnippetChance >= 80? 'High' : data.featuredSnippetChance >= 50? 'Medium' : 'Low'}</span></p>
+        <div style="font-size: 13px; margin-left: 20px; margin-top: 8px;">
+          <b>Reason:</b><br>
+          ${data.snippetReasons?.map(r => • ${r}).join('<br>') || 'No data'}
+        </div>
+
+        <h3>📊 Content Structure Score</h3>
+        <p><b>Content Structure:</b> ${data.contentStructureScore}/100 <span class="badge badge-${data.contentStructureScore >= 80? 'green' : data.contentStructureScore >= 50? 'orange' : 'red'}">${data.contentStructureScore >= 80? 'Excellent' : data.contentStructureScore >= 50? 'Good' : 'Poor'}</span></p>
+        <table>
+          <tr><td><b>H1:</b></td><td>${data.h1Count || 1} ${data.h1Count === 1? '<span class="badge badge-green">✅</span>' : '<span class="badge badge-red">❌</span>'}</td></tr>
+          <tr><td><b>H2:</b></td><td>${data.h2Count || 0} ${data.h2Count >= 3? '<span class="badge badge-green">✅</span>' : '<span class="badge badge-orange">⚠️</span>'}</td></tr>
+          <tr><td><b>H3:</b></td><td>${data.h3Count || 0} ${data.h3Count >= 5? '<span class="badge badge-green">✅</span>' : '<span class="badge badge-orange">⚠️</span>'}</td></tr>
+          <tr><td><b>Lists:</b></td><td>${data.listCount || 0} ${data.listCount >= 2? '<span class="badge badge-green">✅</span>' : '<span class="badge badge-orange">⚠️</span>'}</td></tr>
+          <tr><td><b>Tables:</b></td><td>${data.tableCount || 0} ${data.tableCount >= 1? '<span class="badge badge-green">✅</span>' : '<span class="badge badge-red">❌</span>'}</td></tr>
+        </table>
+
+        <h3>🎖️ Overall AI Visibility Score</h3>
+        <div class="ai-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+          <div style="font-size: 48px; font-weight: 700; text-align: center; margin: 10px 0;">
+            ${data.overallAIVisibility}/100
+          </div>
+          <div style="font-size: 14px; text-align: center; opacity: 0.9;">
+            Combined: SEO ${data.score} + AEO ${data.aeoScore} + Trust ${data.aiTrustScore} + Citation ${Math.round((data.citationChatGPT + data.citationGemini + data.citationPerplexity) / 3)}
+          </div>
+          <div style="font-size: 12px; text-align: center; margin-top: 8px; opacity: 0.8;">
+            ${data.overallAIVisibility >= 80? '🚀 Excellent - AI Search Ready' : data.overallAIVisibility >= 60? '✅ Good - Needs Minor Fixes' : data.overallAIVisibility >= 40? '⚠️ Fair - Major Improvements Needed' : '❌ Poor - Not AI Ready'}
+          </div>
+        </div>
         
-        <h3>🚀 AI Citation Probability - Unique Feature</h3>
+        <h3>🚀 AI Citation Probability</h3>
         <p><b>ChatGPT Citation Chance:</b> ${data.citationChatGPT}% <span class="badge badge-${data.citationChatGPT >= 80? 'green' : data.citationChatGPT >= 50? 'orange' : 'red'}">${data.citationChatGPT >= 80? 'High' : data.citationChatGPT >= 50? 'Medium' : 'Low'}</span></p>
         <p><b>Gemini Citation Chance:</b> ${data.citationGemini}% <span class="badge badge-${data.citationGemini >= 80? 'green' : data.citationGemini >= 50? 'orange' : 'red'}">${data.citationGemini >= 80? 'High' : data.citationGemini >= 50? 'Medium' : 'Low'}</span></p>
         <p><b>Perplexity Citation Chance:</b> ${data.citationPerplexity}% <span class="badge badge-${data.citationPerplexity >= 80? 'green' : data.citationPerplexity >= 50? 'orange' : 'red'}">${data.citationPerplexity >= 80? 'High' : data.citationPerplexity >= 50? 'Medium' : 'Low'}</span></p>
@@ -289,12 +343,12 @@ async function scan() {
         <p><b>Mobile Friendly:</b> ${data.mobileFriendly? '<span class="badge badge-green">✅ Optimized</span>' : '<span class="badge badge-red">❌ Not Optimized</span>'}</p>
         <p><b>HTTPS:</b> ${data.isHttps? '<span class="badge badge-green">✅ Secure</span>' : '<span class="badge badge-red">❌ Not Secure</span>'}</p>
         <p><b>Load Time:</b> ${data.loadTime}ms ${data.loadTime < 3000? '<span class="badge badge-green">✅ Fast</span>' : '<span class="badge badge-red">⚠️ Slow</span>'}</p>
-        <p><b>Broken Links:</b> ${data.brokenLinks === 0? '<span class="badge badge-green">✅ None</span>' : `<span class="badge badge-red">❌ ${data.brokenLinks} Found</span>`}</p>
+        <p><b>Broken Links:</b> ${data.brokenLinks === 0? '<span class="badge badge-green">✅ None</span>' : <span class="badge badge-red">❌ ${data.brokenLinks} Found</span>}</p>
         <p><b>Schema Markup:</b> ${data.hasSchemaMarkup? '<span class="badge badge-green">✅ Present</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
         <p><b>Robots.txt:</b> ${data.robotsExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
         <p><b>Sitemap.xml:</b> ${data.sitemapExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
-        <p><b>Canonical URL:</b> ${data.hasCanonical ? `<span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.canonical || ''}</small>` : '<span class="badge badge-red">❌ Missing</span>'}</p>
-        <p><b>Favicon:</b> ${data.hasFavicon ? `<span class="badge badge-green">✅ Found</span>` : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        <p><b>Canonical URL:</b> ${data.hasCanonical ? <span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.canonical || ''}</small> : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        <p><b>Favicon:</b> ${data.hasFavicon ? <span class="badge badge-green">✅ Found</span> : '<span class="badge badge-red">❌ Missing</span>'}</p>
         <p><b>Open Graph:</b> ${data.hasOGTags? '<span class="badge badge-green">✅ Complete - Social Ready</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
         ${data.hasOGTags? `
           <p style="font-size: 12px; margin-left: 20px; margin-top: -10px;">
@@ -307,7 +361,7 @@ async function scan() {
           <details style="font-size: 12px; margin-left: 20px; margin-top: 5px;">
             <summary style="cursor: pointer; color: #dc2626;">View Broken Links</summary>
             <ul style="margin-top: 5px;">
-              ${data.brokenLinksList.slice(0, 5).map(link => `<li>${link}</li>`).join("")}
+              ${data.brokenLinksList.slice(0, 5).map(link => <li>${link}</li>).join("")}
             </ul>
           </details>
         ` : ''}
@@ -319,8 +373,8 @@ async function scan() {
         <p><b>Twitter/X:</b> ${data.hasTwitter ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Not Found</span>'}</p>
         
         <h3>📞 Contact Information</h3>
-        <p><b>Email:</b> ${data.hasEmail ? `<span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.email}</small>` : '<span class="badge badge-red">❌ Not Found</span>'}</p>
-        <p><b>Phone:</b> ${data.hasPhone ? `<span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.phone}</small>` : '<span class="badge badge-red">❌ Not Found</span>'}</p>
+        <p><b>Email:</b> ${data.hasEmail ? <span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.email}</small> : '<span class="badge badge-red">❌ Not Found</span>'}</p>
+        <p><b>Phone:</b> ${data.hasPhone ? <span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.phone}</small> : '<span class="badge badge-red">❌ Not Found</span>'}</p>
         
         <h3>🤖 AEO Status - ChatGPT Ready?</h3>
         <p><b>AEO Score:</b> ${data.aeoScore}/100 <span class="badge badge-${data.aeoScore >= 80 ? 'green' : data.aeoScore >= 50 ? 'orange' : 'red'}">${data.aeoStatus}</span></p>
@@ -330,15 +384,32 @@ async function scan() {
         <p><b>Schemas Found:</b> ${(data.schemas || []).length ? data.schemas.join(', ') : 'None'}</p>
         
         <h3>🔑 Suggested Keywords</h3>
-        <ul>${(data.keywords || []).map(k => `<li>${k}</li>`).join("") || '<li>No keywords found</li>'}</ul>
+        <ul>${(data.keywords || []).map(k => <li>${k}</li>).join("") || '<li>No keywords found</li>'}</ul>
         
         <h3>💡 SEO Tips</h3>
-        <ul>${(data.tips || []).map(t => `<li>${t}</li>`).join("")}</ul>
+        <ul>${(data.tips || []).map(t => <li>${t}</li>).join("")}</ul>
         
-        <h3>⚠️ Issues Found</h3>
-        <div class="ai-box">
-          ${(data.issues || []).length ? `<ul>${data.issues.map(i => `<li>${i}</li>`).join("")}</ul>` : "No issues found"}
+        <h3>🚨 Priority Fixes</h3>
+        ${data.criticalIssues && data.criticalIssues.length > 0 ? `
+        <div class="ai-box" style="background: #fee2e2; border-left: 4px solid #dc2626;">
+          <b style="color: #991b1b;">🔴 Critical:</b>
+          <ul style="margin-top: 8px;">${data.criticalIssues.map(i => <li>${i}</li>).join("")}</ul>
         </div>
+        ` : ''}
+        
+        ${data.importantIssues && data.importantIssues.length > 0 ? `
+        <div class="ai-box" style="background: #ffedd5; border-left: 4px solid #f97316; margin-top: 10px;">
+          <b style="color: #9a3412;">🟠 Important:</b>
+          <ul style="margin-top: 8px;">${data.importantIssues.map(i => <li>${i}</li>).join("")}</ul>
+        </div>
+        ` : ''}
+        
+        ${data.minorIssues && data.minorIssues.length > 0 ? `
+        <div class="ai-box" style="background: #fef3c7; border-left: 4px solid #f59e0b; margin-top: 10px;">
+          <b style="color: #92400e;">🟡 Minor:</b>
+          <ul style="margin-top: 8px;">${data.minorIssues.map(i => <li>${i}</li>).join("")}</ul>
+        </div>
+        ` : ''}
         
         <h3>🤖 AI Report</h3>
         <div class="ai-box" style="white-space: pre-wrap;">${data.aiReport || "No AI Report"}</div>
@@ -346,23 +417,26 @@ async function scan() {
     `;
   } catch (err) {
     document.getElementById("loading").style.display = "none";
-    document.getElementById("result").innerHTML = `<div class="card">❌ Server Error: ${err.message}</div>`;
+    document.getElementById("result").innerHTML = <div class="card">❌ Server Error: ${err.message}</div>;
   }
 }
 
 async function loadHistory() {
   try {
-    const res = await fetch(`${API_BASE}/history`);
+    const res = await fetch(${API_BASE}/history);
     const data = await res.json();
     document.getElementById("result").innerHTML = `
       <h3>📊 Scan History</h3>
       ${data.map(item => `
         <div class="card">
           <p><b>URL:</b> ${item.url}</p>
-          <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0} | <b>Readability:</b> ${item.readabilityScore || 0}/100</p>
+          <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0} | <b>Trust:</b> ${item.aiTrustScore || 0}/100</p>
+          <p><b>AI Visibility:</b> ${item.overallAIVisibility || 0}/100 | <b>Readability:</b> ${item.readabilityScore || 0}/100</p>
           <p><b>AI Citation:</b> ChatGPT ${item.citationChatGPT || 0}% | Gemini ${item.citationGemini || 0}% | Perplexity ${item.citationPerplexity || 0}%</p>
+          <p><b>Featured Snippet:</b> ${item.featuredSnippetChance || 0}% | <b>Structure:</b> ${item.contentStructureScore || 0}/100</p>
           <p><b>Status:</b> ${item.status}</p>
           <p><b>FAQ Schema:</b> ${item.hasFAQ ? '✅' : '❌'} | <b>Direct Answer:</b> ${item.hasDirectAnswer ? '✅' : '❌'} | <b>Author:</b> ${item.hasAuthor ? '✅' : '❌'}</p>
+          <p><b>Trust Pages:</b> Privacy ${item.hasPrivacyPolicy ? '✅' : '❌'} | About ${item.hasAboutPage ? '✅' : '❌'} | Contact ${item.hasContactPage ? '✅' : '❌'}</p>
           <p><b>Social:</b> ${item.hasFacebook ? 'FB' : ''} ${item.hasLinkedIn ? 'LI' : ''} ${item.hasYouTube ? 'YT' : ''} ${item.hasTwitter ? 'TW' : ''} | <b>Contact:</b> ${item.hasEmail ? 'Email' : ''} ${item.hasPhone ? 'Phone' : ''}</p>
           <p><b>Canonical:</b> ${item.hasCanonical ? '✅' : '❌'} | <b>Favicon:</b> ${item.hasFavicon ? '✅' : '❌'} | <b>Open Graph:</b> ${item.hasOGTags ? '✅' : '❌'} | <b>Sitemap:</b> ${item.sitemapExists ? '✅' : '❌'} | <b>Images:</b> ${item.imagesWithoutAlt || 0}/${item.totalImages || 0} missing ALT</p>
           <p><b>Scanned:</b> ${new Date(item.createdAt).toLocaleString()}</p>
@@ -370,7 +444,7 @@ async function loadHistory() {
       `).join("")}
     `;
   } catch (err) {
-    document.getElementById("result").innerHTML = `<div class="card">❌ Failed to load history</div>`;
+    document.getElementById("result").innerHTML = <div class="card">❌ Failed to load history</div>;
   }
 }
 
@@ -391,7 +465,6 @@ function toggleDarkMode() {
   document.body.classList.toggle("dark");
 }
 
-// Auto scan on load for demo
 window.onload = () => {
   // scan();
 }

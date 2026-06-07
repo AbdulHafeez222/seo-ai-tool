@@ -266,6 +266,14 @@ async function scan() {
         <p><b>Internal Links:</b> ${data.internalLinks} | <b>External Links:</b> ${data.externalLinks}</p>
         <p><b>Robots.txt:</b> ${data.robotsExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
         <p><b>Sitemap.xml:</b> ${data.sitemapExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        <p><b>Open Graph:</b> ${data.hasOGTags? '<span class="badge badge-green">✅ Complete - Social Ready</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        ${data.hasOGTags? `
+          <p style="font-size: 12px; margin-left: 20px; margin-top: -10px;">
+            <b>OG Title:</b> ${data.ogTitle || 'N/A'}<br>
+            <b>OG Description:</b> ${(data.ogDescription || 'N/A').substring(0, 60)}...<br>
+            <b>OG Image:</b> ${data.ogImage? '✅ Found' : '❌ Missing'}
+          </p>
+        ` : ''}
         
         <h3>🤖 AEO Status - ChatGPT Ready?</h3>
         <p><b>AEO Score:</b> ${data.aeoScore}/100 <span class="badge badge-${data.aeoScore >= 80 ? 'green' : data.aeoScore >= 50 ? 'orange' : 'red'}">${data.aeoStatus}</span></p>
@@ -307,7 +315,7 @@ async function loadHistory() {
           <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0}</p>
           <p><b>Status:</b> ${item.status}</p>
           <p><b>FAQ Schema:</b> ${item.hasFAQ ? '✅' : '❌'} | <b>Direct Answer:</b> ${item.hasDirectAnswer ? '✅' : '❌'}</p>
-          <p><b>Sitemap:</b> ${item.sitemapExists ? '✅' : '❌'} | <b>Images:</b> ${item.imagesWithoutAlt || 0}/${item.totalImages || 0} missing ALT</p>
+          <p><b>Open Graph:</b> ${item.hasOGTags ? '✅' : '❌'} | <b>Sitemap:</b> ${item.sitemapExists ? '✅' : '❌'} | <b>Images:</b> ${item.imagesWithoutAlt || 0}/${item.totalImages || 0} missing ALT</p>
           <p><b>Scanned:</b> ${new Date(item.createdAt).toLocaleString()}</p>
         </div>
       `).join("")}

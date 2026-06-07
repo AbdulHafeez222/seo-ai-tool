@@ -262,31 +262,32 @@ async function scan() {
         
         <h3>🔍 SEO Status</h3>
         <p><b>SEO Score:</b> ${data.score}/100 <span class="badge badge-${data.score >= 80 ? 'green' : data.score >= 50 ? 'orange' : 'red'}">${data.status}</span></p>
-<p><b>Images:</b> ${data.totalImages} total, ${data.imagesWithoutAlt} missing ALT text ${data.imagesWithoutAlt > 0 ? '<span class="badge badge-red">⚠️ Fix Needed</span>' : '<span class="badge badge-green">✅ Perfect</span>'}</p>
-<p><b>Internal Links:</b> ${data.internalLinks} | <b>External Links:</b> ${data.externalLinks}</p>
-<p><b>Mobile Friendly:</b> ${data.mobileFriendly? '<span class="badge badge-green">✅ Optimized</span>' : '<span class="badge badge-red">❌ Not Optimized</span>'}</p>
-<p><b>HTTPS:</b> ${data.isHttps? '<span class="badge badge-green">✅ Secure</span>' : '<span class="badge badge-red">❌ Not Secure</span>'}</p>
-<p><b>Load Time:</b> ${data.loadTime}ms ${data.loadTime < 3000? '<span class="badge badge-green">✅ Fast</span>' : '<span class="badge badge-red">⚠️ Slow</span>'}</p>
-<p><b>Broken Links:</b> ${data.brokenLinks === 0? '<span class="badge badge-green">✅ None</span>' : `<span class="badge badge-red">❌ ${data.brokenLinks} Found</span>`}</p>
-<p><b>Schema Markup:</b> ${data.hasSchemaMarkup? '<span class="badge badge-green">✅ Present</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
-<p><b>Robots.txt:</b> ${data.robotsExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
-<p><b>Sitemap.xml:</b> ${data.sitemapExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
-<p><b>Open Graph:</b> ${data.hasOGTags? '<span class="badge badge-green">✅ Complete - Social Ready</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
-${data.hasOGTags? `
-  <p style="font-size: 12px; margin-left: 20px; margin-top: -10px;">
-    <b>OG Title:</b> ${data.ogTitle || 'N/A'}<br>
-    <b>OG Description:</b> ${(data.ogDescription || 'N/A').substring(0, 60)}...<br>
-    <b>OG Image:</b> ${data.ogImage? '✅ Found' : '❌ Missing'}
-  </p>
-` : ''}
-${data.brokenLinks > 0 && data.brokenLinksList? `
-  <details style="font-size: 12px; margin-left: 20px; margin-top: 5px;">
-    <summary style="cursor: pointer; color: #dc2626;">View Broken Links</summary>
-    <ul style="margin-top: 5px;">
-      ${data.brokenLinksList.slice(0, 5).map(link => `<li>${link}</li>`).join("")}
-    </ul>
-  </details>
-` : ''}
+        <p><b>Images:</b> ${data.totalImages} total, ${data.imagesWithoutAlt} missing ALT text ${data.imagesWithoutAlt > 0 ? '<span class="badge badge-red">⚠️ Fix Needed</span>' : '<span class="badge badge-green">✅ Perfect</span>'}</p>
+        <p><b>Internal Links:</b> ${data.internalLinks} | <b>External Links:</b> ${data.externalLinks}</p>
+        <p><b>Mobile Friendly:</b> ${data.mobileFriendly? '<span class="badge badge-green">✅ Optimized</span>' : '<span class="badge badge-red">❌ Not Optimized</span>'}</p>
+        <p><b>HTTPS:</b> ${data.isHttps? '<span class="badge badge-green">✅ Secure</span>' : '<span class="badge badge-red">❌ Not Secure</span>'}</p>
+        <p><b>Load Time:</b> ${data.loadTime}ms ${data.loadTime < 3000? '<span class="badge badge-green">✅ Fast</span>' : '<span class="badge badge-red">⚠️ Slow</span>'}</p>
+        <p><b>Broken Links:</b> ${data.brokenLinks === 0? '<span class="badge badge-green">✅ None</span>' : `<span class="badge badge-red">❌ ${data.brokenLinks} Found</span>`}</p>
+        <p><b>Schema Markup:</b> ${data.hasSchemaMarkup? '<span class="badge badge-green">✅ Present</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        <p><b>Robots.txt:</b> ${data.robotsExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        <p><b>Sitemap.xml:</b> ${data.sitemapExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        <p><b>Canonical URL:</b> ${data.hasCanonical ? `<span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.canonical || ''}</small>` : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        <p><b>Open Graph:</b> ${data.hasOGTags? '<span class="badge badge-green">✅ Complete - Social Ready</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        ${data.hasOGTags? `
+          <p style="font-size: 12px; margin-left: 20px; margin-top: -10px;">
+            <b>OG Title:</b> ${data.ogTitle || 'N/A'}<br>
+            <b>OG Description:</b> ${(data.ogDescription || 'N/A').substring(0, 60)}...<br>
+            <b>OG Image:</b> ${data.ogImage? '✅ Found' : '❌ Missing'}
+          </p>
+        ` : ''}
+        ${data.brokenLinks > 0 && data.brokenLinksList? `
+          <details style="font-size: 12px; margin-left: 20px; margin-top: 5px;">
+            <summary style="cursor: pointer; color: #dc2626;">View Broken Links</summary>
+            <ul style="margin-top: 5px;">
+              ${data.brokenLinksList.slice(0, 5).map(link => `<li>${link}</li>`).join("")}
+            </ul>
+          </details>
+        ` : ''}
         
         <h3>🤖 AEO Status - ChatGPT Ready?</h3>
         <p><b>AEO Score:</b> ${data.aeoScore}/100 <span class="badge badge-${data.aeoScore >= 80 ? 'green' : data.aeoScore >= 50 ? 'orange' : 'red'}">${data.aeoStatus}</span></p>
@@ -328,7 +329,7 @@ async function loadHistory() {
           <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0}</p>
           <p><b>Status:</b> ${item.status}</p>
           <p><b>FAQ Schema:</b> ${item.hasFAQ ? '✅' : '❌'} | <b>Direct Answer:</b> ${item.hasDirectAnswer ? '✅' : '❌'}</p>
-          <p><b>Open Graph:</b> ${item.hasOGTags ? '✅' : '❌'} | <b>Sitemap:</b> ${item.sitemapExists ? '✅' : '❌'} | <b>Images:</b> ${item.imagesWithoutAlt || 0}/${item.totalImages || 0} missing ALT</p>
+          <p><b>Canonical:</b> ${item.hasCanonical ? '✅' : '❌'} | <b>Open Graph:</b> ${item.hasOGTags ? '✅' : '❌'} | <b>Sitemap:</b> ${item.sitemapExists ? '✅' : '❌'} | <b>Images:</b> ${item.imagesWithoutAlt || 0}/${item.totalImages || 0} missing ALT</p>
           <p><b>Scanned:</b> ${new Date(item.createdAt).toLocaleString()}</p>
         </div>
       `).join("")}

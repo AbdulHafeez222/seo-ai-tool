@@ -1,3 +1,5 @@
+*`public/index.html` - COMPLETE WITH ALL 15 FEATURES* ✅
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -20,7 +22,7 @@ body {
   background: white;
   padding: 25px;
   border-radius: 15px;
-  max-width: 800px;
+  max-width: 900px;
   margin: auto;
   box-shadow: 0 0 15px rgba(0,0,0,0.1);
 }
@@ -169,11 +171,16 @@ td {
 .dark td {
   border-bottom-color: #334155;
 }
+details summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 0;
+}
 </style>
 </head>
 <body>
 <div class="box">
-  <h2>🚀 SEO + AEO Analyzer</h2>
+  <h2>🚀 AI Visibility Platform</h2>
   <button onclick="toggleDarkMode()">🌙 Dark Mode</button>
   <input id="url" placeholder="Enter website URL" value="hafeezdigitalstudio.com">
   <br>
@@ -197,7 +204,7 @@ td {
 </div>
 
 <script>
-const API_BASE = "https://seo-ai-tool-s47q.onrender.com";
+const API_BASE = "";
 let seoChart, aeoChart;
 
 async function scan() {
@@ -268,12 +275,23 @@ async function scan() {
     document.getElementById("aeoScore").innerHTML = `${data.aeoScore}<span>AEO ${aeoGrade}</span>`;
     document.getElementById("aeoScore").style.color = aeoColor;
 
-    // Readability Color
     const readabilityColor = data.readabilityScore >= 60 ? "#16a34a" : data.readabilityScore >= 30 ? "#f97316" : "#dc2626";
 
-    // Result HTML
     document.getElementById("result").innerHTML = `
       <div class="card" id="report">
+        <h3>🎯 AI Visibility Score - MAIN FEATURE</h3>
+        <div class="ai-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+          <div style="font-size: 48px; font-weight: 700; text-align: center; margin: 10px 0;">
+            ${data.aiVisibilityScore}/100
+          </div>
+          <div style="font-size: 14px; text-align: center; opacity: 0.9;">
+            Level: ${data.aiVisibilityLevel}
+          </div>
+          <div style="font-size: 12px; text-align: center; margin-top: 8px; opacity: 0.8;">
+            Combined: SEO ${data.score} + AEO ${data.aeoScore} + Trust ${data.aiTrustScore} + Readability ${data.readabilityScore} + Schema ${data.schemaCoverage}%
+          </div>
+        </div>
+
         <h3>📊 Basic Info</h3>
         <p><b>Website:</b> ${data.url}</p>
         <p><b>Title:</b> ${data.title || 'Not found'}</p>
@@ -286,7 +304,7 @@ async function scan() {
         <p><b>Readability Score:</b> ${data.readabilityScore}/100 <span class="badge" style="background:${readabilityColor}20;color:${readabilityColor}">${data.readabilityStatus}</span></p>
         <p><b>Author Found:</b> ${data.hasAuthor? '<span class="badge badge-green">✅ Yes - EEAT Boost</span>' : '<span class="badge badge-red">❌ No</span>'}</p>
 
-        <h3>🏆 AI Trust Score - Unique Feature</h3>
+        <h3>🏆 AI Trust Score</h3>
         <p><b>AI Trust Score:</b> ${data.aiTrustScore}/100 <span class="badge badge-${data.aiTrustScore >= 80? 'green' : data.aiTrustScore >= 50? 'orange' : 'red'}">${data.aiTrustScore >= 80? 'Excellent' : data.aiTrustScore >= 50? 'Good' : 'Poor'}</span></p>
         <div style="font-size: 13px; margin-left: 20px; margin-top: 8px;">
           <b>Trust Signals:</b><br>
@@ -326,6 +344,11 @@ async function scan() {
           </div>
         </div>
         
+        <h3>🏆 AI Citation Simulator - UNIQUE</h3>
+        <div class="ai-box" style="white-space: pre-wrap; background: #dbeafe; border-left: 4px solid #3b82f6;">
+          <b>${data.citationSimulator || 'No simulation available'}</b>
+        </div>
+
         <h3>🚀 AI Citation Probability</h3>
         <p><b>ChatGPT Citation Chance:</b> ${data.citationChatGPT}% <span class="badge badge-${data.citationChatGPT >= 80? 'green' : data.citationChatGPT >= 50? 'orange' : 'red'}">${data.citationChatGPT >= 80? 'High' : data.citationChatGPT >= 50? 'Medium' : 'Low'}</span></p>
         <p><b>Gemini Citation Chance:</b> ${data.citationGemini}% <span class="badge badge-${data.citationGemini >= 80? 'green' : data.citationGemini >= 50? 'orange' : 'red'}">${data.citationGemini >= 80? 'High' : data.citationGemini >= 50? 'Medium' : 'Low'}</span></p>
@@ -336,9 +359,42 @@ async function scan() {
           <b>AI Will Extract:</b><br><br>${data.aiExtractedAnswer || 'No answer found'}
         </div>
 
-        <h3>💎 AEO Simulator - ChatGPT Preview</h3>
-        <div class="ai-box" style="white-space: pre-wrap; background: #dbeafe; border-left: 4px solid #3b82f6;">
-          <b>If ChatGPT quotes your website:</b><br><br>${data.aeoSimulation || 'No simulation available'}
+        <h3>🤖 AI Answer Quality Checker</h3>
+        <p><b>Answer Quality:</b> ${data.answerQuality}/100 <span class="badge badge-${data.answerQuality >= 80? 'green' : data.answerQuality >= 50? 'orange' : 'red'}">${data.answerQuality >= 80? 'Excellent' : data.answerQuality >= 50? 'Good' : 'Poor'}</span></p>
+        <div style="font-size: 13px; margin-left: 20px; margin-top: 8px;">
+          ${data.answerQualityChecks?.map(c => `• ${c}`).join('<br>') || 'No data'}
+        </div>
+
+        <h3>🧾 FAQ Generator - AUTO</h3>
+        <div class="ai-box">
+          ${data.autoFAQ?.map(f => `<p><b>Q: ${f.q}</b><br>A: ${f.a}</p>`).join('') || 'No FAQ generated'}
+        </div>
+
+        <h3>🔥 SERP Preview</h3>
+        <div class="ai-box" style="background: white; border: 1px solid #e2e8f0;">
+          <div style="color: #1a0dab; font-size: 18px; margin-bottom: 4px;">${data.serpPreview?.title}</div>
+          <div style="color: #006621; font-size: 14px; margin-bottom: 4px;">${data.serpPreview?.displayUrl}</div>
+          <div style="color: #545454; font-size: 13px;">${data.serpPreview?.description}</div>
+        </div>
+
+        <h3>📱 Mobile vs Desktop SEO Score</h3>
+        <p><b>Mobile Score:</b> ${data.mobileScore} | <b>Desktop Score:</b> ${data.desktopScore}</p>
+        <p><b>Difference:</b> ${Math.abs(data.mobileScore - data.desktopScore) < 10? '<span class="badge badge-green">Minimal (Good)</span>' : '<span class="badge badge-orange">Needs Work</span>'}</p>
+
+        <h3>📊 Topic Authority Map</h3>
+        <p><b>Main Topic:</b> ${data.topicAuthority?.mainTopic}</p>
+        <div style="font-size: 13px; margin-left: 20px;">
+          <b>Sub Topics Found:</b><br>
+          ${data.topicAuthority?.found?.map(t => `✔ ${t}`).join('<br>') || 'None'}
+          <br><br><b>Missing Topics:</b><br>
+          ${data.topicAuthority?.missing?.map(t => `❌ ${t}`).join('<br>') || 'None'}
+        </div>
+
+        <h3>💰 Business Value Estimator</h3>
+        <div class="ai-box">
+          <p><b>Traffic Increase:</b> ${data.businessValue?.trafficIncrease}</p>
+          <p><b>Leads Increase:</b> ${data.businessValue?.leadsIncrease}</p>
+          <p><b>Revenue Impact:</b> ${data.businessValue?.revenueImpact}</p>
         </div>
         
         <h3>🔍 SEO Status</h3>
@@ -361,14 +417,6 @@ async function scan() {
             <b>OG Description:</b> ${(data.ogDescription || 'N/A').substring(0, 60)}...<br>
             <b>OG Image:</b> ${data.ogImage? '✅ Found' : '❌ Missing'}
           </p>
-        ` : ''}
-        ${data.brokenLinks > 0 && data.brokenLinksList? `
-          <details style="font-size: 12px; margin-left: 20px; margin-top: 5px;">
-            <summary style="cursor: pointer; color: #dc2626;">View Broken Links</summary>
-            <ul style="margin-top: 5px;">
-              ${data.brokenLinksList.slice(0, 5).map(link => `<li>${link}</li>`).join("")}
-            </ul>
-          </details>
         ` : ''}
         
         <h3>📱 Social Media Presence</h3>
@@ -416,6 +464,11 @@ async function scan() {
         </div>
         ` : ''}
         
+        <h3>⚡ Instant Fix Suggestions</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          ${data.instantFixes?.map(f => `<button style="background:#10b981;font-size:12px;padding:8px 12px;">${f}</button>`).join('') || 'No fixes needed'}
+        </div>
+        
         <h3>🤖 AI Report</h3>
         <div class="ai-box" style="white-space: pre-wrap;">${data.aiReport || "No AI Report"}</div>
       </div>
@@ -435,15 +488,12 @@ async function loadHistory() {
       ${data.map(item => `
         <div class="card">
           <p><b>URL:</b> ${item.url}</p>
+          <p><b>AI Visibility:</b> ${item.aiVisibilityScore || 0}/100 (${item.aiVisibilityLevel})</p>
           <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0} | <b>Trust:</b> ${item.aiTrustScore || 0}/100</p>
-          <p><b>AI Visibility:</b> ${item.overallAIVisibility || 0}/100 | <b>Readability:</b> ${item.readabilityScore || 0}/100</p>
+          <p><b>Overall AI Visibility:</b> ${item.overallAIVisibility || 0}/100 | <b>Readability:</b> ${item.readabilityScore || 0}/100</p>
           <p><b>AI Citation:</b> ChatGPT ${item.citationChatGPT || 0}% | Gemini ${item.citationGemini || 0}% | Perplexity ${item.citationPerplexity || 0}%</p>
           <p><b>Featured Snippet:</b> ${item.featuredSnippetChance || 0}% | <b>Structure:</b> ${item.contentStructureScore || 0}/100</p>
-          <p><b>Status:</b> ${item.status}</p>
-          <p><b>FAQ Schema:</b> ${item.hasFAQ ? '✅' : '❌'} | <b>Direct Answer:</b> ${item.hasDirectAnswer ? '✅' : '❌'} | <b>Author:</b> ${item.hasAuthor ? '✅' : '❌'}</p>
-          <p><b>Trust Pages:</b> Privacy ${item.hasPrivacyPolicy ? '✅' : '❌'} | About ${item.hasAboutPage ? '✅' : '❌'} | Contact ${item.hasContactPage ? '✅' : '❌'}</p>
-          <p><b>Social:</b> ${item.hasFacebook ? 'FB' : ''} ${item.hasLinkedIn ? 'LI' : ''} ${item.hasYouTube ? 'YT' : ''} ${item.hasTwitter ? 'TW' : ''} | <b>Contact:</b> ${item.hasEmail ? 'Email' : ''} ${item.hasPhone ? 'Phone' : ''}</p>
-          <p><b>Canonical:</b> ${item.hasCanonical ? '✅' : '❌'} | <b>Favicon:</b> ${item.hasFavicon ? '✅' : '❌'} | <b>Open Graph:</b> ${item.hasOGTags ? '✅' : '❌'} | <b>Sitemap:</b> ${item.sitemapExists ? '✅' : '❌'} | <b>Images:</b> ${item.imagesWithoutAlt || 0}/${item.totalImages || 0} missing ALT</p>
+          <p><b>Answer Quality:</b> ${item.answerQuality || 0}/100 | <b>Mobile:</b> ${item.mobileScore || 0} | <b>Desktop:</b> ${item.desktopScore || 0}</p>
           <p><b>Scanned:</b> ${new Date(item.createdAt).toLocaleString()}</p>
         </div>
       `).join("")}
@@ -458,7 +508,7 @@ function downloadPDF() {
   if (!el) return alert("Scan first!");
   const opt = {
     margin: 10,
-    filename: 'seo-aeo-report.pdf',
+    filename: 'ai-visibility-report.pdf',
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: { scale: 2 },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -470,9 +520,7 @@ function toggleDarkMode() {
   document.body.classList.toggle("dark");
 }
 
-window.onload = () => {
-  // scan();
-}
+window.onload = () => {}
 </script>
 </body>
 </html>

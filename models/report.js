@@ -57,6 +57,14 @@ const reportSchema = new mongoose.Schema(
     email: String,
     phone: String,
 
+    // AI CITATION FIELDS - NEW
+    hasAuthor: Boolean,
+    aiExtractedAnswer: String,
+    citationChatGPT: Number,
+    citationGemini: Number,
+    citationPerplexity: Number,
+    aeoSimulation: String,
+
     // AEO Fields
     aeoScore: Number,
     aeoStatus: String,

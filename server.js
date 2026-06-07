@@ -499,9 +499,6 @@ app.get("/analyze", async (req, res) => {
     if (canonical) score += 5;
     if (hasFavicon) score += 5;
     if (wordCount > 300) score += 10;
-*📄 PART 2/2 - `server.js` (Baaki ka code)* ✅
-
-Part 1 ke end me ye jod do. `/analyze` route complete + `/history` route:
     if (readability.score >= 60) score += 10;
     if (imagesWithoutAlt === 0 && totalImages > 0) score += 5;
     else if (totalImages === 0) score += 5;

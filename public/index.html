@@ -265,6 +265,22 @@ async function scan() {
         
         <h3>📖 Content Quality</h3>
         <p><b>Readability Score:</b> ${data.readabilityScore}/100 <span class="badge" style="background:${readabilityColor}20;color:${readabilityColor}">${data.readabilityStatus}</span></p>
+        <p><b>Author Found:</b> ${data.hasAuthor? '<span class="badge badge-green">✅ Yes - EEAT Boost</span>' : '<span class="badge badge-red">❌ No</span>'}</p>
+        
+        <h3>🚀 AI Citation Probability - Unique Feature</h3>
+        <p><b>ChatGPT Citation Chance:</b> ${data.citationChatGPT}% <span class="badge badge-${data.citationChatGPT >= 80? 'green' : data.citationChatGPT >= 50? 'orange' : 'red'}">${data.citationChatGPT >= 80? 'High' : data.citationChatGPT >= 50? 'Medium' : 'Low'}</span></p>
+        <p><b>Gemini Citation Chance:</b> ${data.citationGemini}% <span class="badge badge-${data.citationGemini >= 80? 'green' : data.citationGemini >= 50? 'orange' : 'red'}">${data.citationGemini >= 80? 'High' : data.citationGemini >= 50? 'Medium' : 'Low'}</span></p>
+        <p><b>Perplexity Citation Chance:</b> ${data.citationPerplexity}% <span class="badge badge-${data.citationPerplexity >= 80? 'green' : data.citationPerplexity >= 50? 'orange' : 'red'}">${data.citationPerplexity >= 80? 'High' : data.citationPerplexity >= 50? 'Medium' : 'Low'}</span></p>
+
+        <h3>🤖 AI Answer Extraction Test</h3>
+        <div class="ai-box" style="white-space: pre-wrap; background: #fef3c7; border-left: 4px solid #f59e0b;">
+          <b>AI Will Extract:</b><br><br>${data.aiExtractedAnswer || 'No answer found'}
+        </div>
+
+        <h3>💎 AEO Simulator - ChatGPT Preview</h3>
+        <div class="ai-box" style="white-space: pre-wrap; background: #dbeafe; border-left: 4px solid #3b82f6;">
+          <b>If ChatGPT quotes your website:</b><br><br>${data.aeoSimulation || 'No simulation available'}
+        </div>
         
         <h3>🔍 SEO Status</h3>
         <p><b>SEO Score:</b> ${data.score}/100 <span class="badge badge-${data.score >= 80 ? 'green' : data.score >= 50 ? 'orange' : 'red'}">${data.status}</span></p>
@@ -344,8 +360,9 @@ async function loadHistory() {
         <div class="card">
           <p><b>URL:</b> ${item.url}</p>
           <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0} | <b>Readability:</b> ${item.readabilityScore || 0}/100</p>
+          <p><b>AI Citation:</b> ChatGPT ${item.citationChatGPT || 0}% | Gemini ${item.citationGemini || 0}% | Perplexity ${item.citationPerplexity || 0}%</p>
           <p><b>Status:</b> ${item.status}</p>
-          <p><b>FAQ Schema:</b> ${item.hasFAQ ? '✅' : '❌'} | <b>Direct Answer:</b> ${item.hasDirectAnswer ? '✅' : '❌'}</p>
+          <p><b>FAQ Schema:</b> ${item.hasFAQ ? '✅' : '❌'} | <b>Direct Answer:</b> ${item.hasDirectAnswer ? '✅' : '❌'} | <b>Author:</b> ${item.hasAuthor ? '✅' : '❌'}</p>
           <p><b>Social:</b> ${item.hasFacebook ? 'FB' : ''} ${item.hasLinkedIn ? 'LI' : ''} ${item.hasYouTube ? 'YT' : ''} ${item.hasTwitter ? 'TW' : ''} | <b>Contact:</b> ${item.hasEmail ? 'Email' : ''} ${item.hasPhone ? 'Phone' : ''}</p>
           <p><b>Canonical:</b> ${item.hasCanonical ? '✅' : '❌'} | <b>Favicon:</b> ${item.hasFavicon ? '✅' : '❌'} | <b>Open Graph:</b> ${item.hasOGTags ? '✅' : '❌'} | <b>Sitemap:</b> ${item.sitemapExists ? '✅' : '❌'} | <b>Images:</b> ${item.imagesWithoutAlt || 0}/${item.totalImages || 0} missing ALT</p>
           <p><b>Scanned:</b> ${new Date(item.createdAt).toLocaleString()}</p>

@@ -41,23 +41,23 @@ const reportSchema = new mongoose.Schema(
     hasFavicon: Boolean,
     favicon: String,
 
-    // READABILITY FIELDS
+    // READABILITY
     readabilityScore: Number,
     readabilityStatus: String,
 
-    // SOCIAL MEDIA FIELDS
+    // SOCIAL MEDIA
     hasFacebook: Boolean,
     hasLinkedIn: Boolean,
     hasYouTube: Boolean,
     hasTwitter: Boolean,
 
-    // CONTACT INFO FIELDS
+    // CONTACT INFO
     hasEmail: Boolean,
     hasPhone: Boolean,
     email: String,
     phone: String,
 
-    // AI CITATION FIELDS
+    // AI CITATION
     hasAuthor: Boolean,
     aiExtractedAnswer: String,
     citationChatGPT: Number,
@@ -74,30 +74,46 @@ const reportSchema = new mongoose.Schema(
     hasDirectAnswer: Boolean,
     lastModified: String,
 
-    // AI TRUST SCORE FIELDS - NEW
+    // AI TRUST SCORE
     hasPrivacyPolicy: Boolean,
     hasAboutPage: Boolean,
     hasContactPage: Boolean,
     aiTrustScore: Number,
     aiTrustSignals: [String],
 
-    // FEATURED SNIPPET FIELDS - NEW
+    // FEATURED SNIPPET
     featuredSnippetChance: Number,
     snippetReasons: [String],
 
-    // CONTENT STRUCTURE FIELDS - NEW
+    // CONTENT STRUCTURE
     h3Count: Number,
     listCount: Number,
     tableCount: Number,
     contentStructureScore: Number,
 
-    // PRIORITY FIXES FIELDS - NEW
+    // PRIORITY FIXES
     criticalIssues: [String],
     importantIssues: [String],
     minorIssues: [String],
 
-    // OVERALL AI VISIBILITY - NEW
+    // OVERALL AI VISIBILITY
     overallAIVisibility: Number,
+    schemaCoverage: Number,
+
+    // NEW FINAL UPGRADE FEATURES
+    aiVisibilityScore: Number,
+    aiVisibilityLevel: String,
+    citationSimulator: String,
+    competitorGap: Object,
+    topicAuthority: Object,
+    answerQuality: Number,
+    answerQualityChecks: [String],
+    autoFAQ: [Object],
+    serpPreview: Object,
+    mobileScore: Number,
+    desktopScore: Number,
+    businessValue: Object,
+    instantFixes: [String],
 
     // AI Report
     aiReport: String

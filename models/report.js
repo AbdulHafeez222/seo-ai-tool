@@ -38,6 +38,24 @@ const reportSchema = new mongoose.Schema(
     sitemapExists: Boolean,
     hasCanonical: Boolean,
     canonical: String,
+    hasFavicon: Boolean,
+    favicon: String,
+
+    // 1. READABILITY FIELDS
+    readabilityScore: Number,
+    readabilityStatus: String,
+
+    // 3. SOCIAL MEDIA FIELDS
+    hasFacebook: Boolean,
+    hasLinkedIn: Boolean,
+    hasYouTube: Boolean,
+    hasTwitter: Boolean,
+
+    // 4. CONTACT INFO FIELDS
+    hasEmail: Boolean,
+    hasPhone: Boolean,
+    email: String,
+    phone: String,
 
     // AEO Fields
     aeoScore: Number,

@@ -1,3 +1,4 @@
+Ye lo *100% complete `index.html`* - bas copy paste karo 👇
 <!DOCTYPE html>
 <html>
 <head>
@@ -174,6 +175,31 @@ details summary {
   font-weight: 600;
   padding: 8px 0;
 }
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin: 15px 0;
+}
+.metric-box {
+  text-align: center;
+  padding: 15px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 10px;
+  color: white;
+}
+.metric-value {
+  font-size: 28px;
+  font-weight: bold;
+}
+.metric-label {
+  font-size: 13px;
+  opacity: 0.9;
+  margin-top: 5px;
+}
+.dark .metric-box {
+  background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 100%);
+}
 </style>
 </head>
 <body>
@@ -197,6 +223,51 @@ details summary {
       <div class="centerScore" id="aeoScore"></div>
     </div>
   </div>
+
+  <!-- 🚀 AI Search Simulation - USP FEATURE -->
+  <div id="aiSimulationCard" class="card" style="display:none; border-left: 5px solid #ff6b6b;">
+    <h3>🤖 AI Search Simulation</h3>
+    <p style="color: #666; font-size: 14px; margin-bottom: 15px;">ChatGPT/Gemini tumhari site ko kaise quote karenge:</p>
+    <div id="aiSimulationText" style="background: #f8f9fa; padding: 15px; border-radius: 8px; font-style: italic; border-left: 3px solid #667eea;">
+      Loading...
+    </div>
+  </div>
+
+  <!-- 🚀 Real AEO Readiness Score -->
+  <div id="aeoReadinessCard" class="card" style="display:none;">
+    <h3>🎯 Real AEO Readiness Score</h3>
+    <div class="score-display" style="text-align: center; margin: 15px 0;">
+      <div style="font-size: 48px; font-weight: bold; color: #667eea;" id="aeoReadinessScore">0</div>
+      <div style="font-size: 14px; color: #666;">AEO Ready</div>
+    </div>
+    <div id="aeoSignalsList" style="margin-top: 15px;"></div>
+  </div>
+
+  <!-- 🚀 Auto SEO Fix Suggestions -->
+  <div id="fixSuggestionsCard" class="card" style="display:none;">
+    <h3>🔧 Auto SEO Fix Suggestions</h3>
+    <p style="color: #666; font-size: 14px;">Copy-paste ready code fixes:</p>
+    <div id="fixSuggestionsList"></div>
+  </div>
+
+  <!-- 🚀 Real AI Citation Scores -->
+  <div id="realCitationCard" class="card" style="display:none;">
+    <h3>📊 True AI Citation Probability</h3>
+    <div class="grid-3">
+      <div class="metric-box">
+        <div class="metric-value" id="realChatGPT">0%</div>
+        <div class="metric-label">ChatGPT</div>
+      </div>
+      <div class="metric-box">
+        <div class="metric-value" id="realGemini">0%</div>
+        <div class="metric-label">Gemini</div>
+      </div>
+      <div class="metric-box">
+        <div class="metric-value" id="realPerplexity">0%</div>
+        <div class="metric-label">Perplexity</div>
+      </div>
+    <div id="citationReasonsList" style="margin-top: 15px; font-size: 13px; padding: 10px; background: #f0f0f0; border-radius: 5px;"></div>
+  </div>
   
   <div id="result"></div>
 </div>
@@ -214,6 +285,10 @@ async function scan() {
   
   document.getElementById("loading").style.display = "block";
   document.getElementById("result").innerHTML = "";
+  document.getElementById("aiSimulationCard").style.display = "none";
+  document.getElementById("aeoReadinessCard").style.display = "none";
+  document.getElementById("fixSuggestionsCard").style.display = "none";
+  document.getElementById("realCitationCard").style.display = "none";
   
   try {
     const res = await fetch(`${API_BASE}/analyze?url=${encodeURIComponent(url)}`);
@@ -272,6 +347,57 @@ async function scan() {
     let aeoGrade = data.aeoScore >= 90 ? "A+" : data.aeoScore >= 80 ? "A" : data.aeoScore >= 60 ? "B" : data.aeoScore >= 40 ? "C" : "D";
     document.getElementById("aeoScore").innerHTML = `${data.aeoScore}<span>AEO ${aeoGrade}</span>`;
     document.getElementById("aeoScore").style.color = aeoColor;
+
+    // 🚀 NEW UPGRADE FIELDS DISPLAY
+    if (data.aiSearchSimulation) {
+      document.getElementById('aiSimulationCard').style.display = 'block';
+      document.getElementById('aiSimulationText').textContent = data.aiSearchSimulation;
+    }
+
+    if (data.aeoReadiness) {
+      document.getElementById('aeoReadinessCard').style.display = 'block';
+      document.getElementById('aeoReadinessScore').textContent = data.aeoReadiness;
+      
+      const signalsList = document.getElementById('aeoSignalsList');
+      signalsList.innerHTML = '';
+      data.aeoSignals?.forEach(signal => {
+        const div = document.createElement('div');
+        div.style.cssText = 'padding: 8px; margin: 5px 0; background: #f0f0f0; border-radius: 5px; font-size: 14px;';
+        div.textContent = signal;
+        signalsList.appendChild(div);
+      });
+    }
+
+    if (data.fixSuggestions && data.fixSuggestions.length > 0) {
+      document.getElementById('fixSuggestionsCard').style.display = 'block';
+      const fixesList = document.getElementById('fixSuggestionsList');
+      fixesList.innerHTML = '';
+      data.fixSuggestions.forEach(fix => {
+        const div = document.createElement('div');
+        div.style.cssText = 'background: #fff3cd; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #ffc107;';
+        const escapedCode = fix.code.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+        div.innerHTML = `
+          <strong style="color: #d32f2f;">❌ ${fix.problem}</strong><br>
+          <strong style="color: #388e3c;">✅ ${fix.solution}</strong><br>
+          <pre style="background: #2d2d2d; color: #f8f8f2; padding: 10px; border-radius: 5px; margin-top: 10px; overflow-x: auto; font-size: 12px;"><code>${fix.code}</code></pre>
+          <button onclick="navigator.clipboard.writeText(\`${escapedCode}\`)" style="margin-top: 8px; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">📋 Copy Code</button>
+        `;
+        fixesList.appendChild(div);
+      });
+    }
+
+    if (data.realCitationChatGPT !== undefined) {
+      document.getElementById('realCitationCard').style.display = 'block';
+      document.getElementById('realChatGPT').textContent = data.realCitationChatGPT + '%';
+      document.getElementById('realGemini').textContent = data.realCitationGemini + '%';
+      document.getElementById('realPerplexity').textContent = data.realCitationPerplexity + '%';
+      
+      const reasonsList = document.getElementById('citationReasonsList');
+      reasonsList.innerHTML = '<strong>Why AI will cite you:</strong><br>';
+      data.citationReasons?.forEach(reason => {
+        reasonsList.innerHTML += `• ${reason}<br>`;
+      });
+    }
 
     const readabilityColor = data.readabilityScore >= 60 ? "#16a34a" : data.readabilityScore >= 30 ? "#f97316" : "#dc2626";
 
@@ -438,9 +564,8 @@ async function scan() {
         <ul>${(data.keywords || []).map(k => `<li>${k}</li>`).join("") || '<li>No keywords found</li>'}</ul>
         
         <h3>💡 SEO Tips</h3>
-        <ul>${(data.tips || []).map(t => `<li>${t}</li>`).join("")}</ul>
-        
-        <h3>🚨 Priority Fixes</h3>
+         <ul>${(data.tips || []).map(t => `<li>${t}</li>`).join("")}</ul>
+          <h3>🚨 Priority Fixes</h3>
         ${data.criticalIssues && data.criticalIssues.length > 0 ? `
         <div class="ai-box" style="background: #fee2e2; border-left: 4px solid #dc2626;">
           <b style="color: #991b1b;">🔴 Critical:</b>
@@ -492,6 +617,7 @@ async function loadHistory() {
           <p><b>AI Citation:</b> ChatGPT ${item.citationChatGPT || 0}% | Gemini ${item.citationGemini || 0}% | Perplexity ${item.citationPerplexity || 0}%</p>
           <p><b>Featured Snippet:</b> ${item.featuredSnippetChance || 0}% | <b>Structure:</b> ${item.contentStructureScore || 0}/100</p>
           <p><b>Answer Quality:</b> ${item.answerQuality || 0}/100 | <b>Mobile:</b> ${item.mobileScore || 0} | <b>Desktop:</b> ${item.desktopScore || 0}</p>
+          <p><b>AEO Readiness:</b> ${item.aeoReadiness || 0}/100</p>
           <p><b>Scanned:</b> ${new Date(item.createdAt).toLocaleString()}</p>
         </div>
       `).join("")}

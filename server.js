@@ -1,18 +1,17 @@
 import express from "express";
 import * as cheerio from "cheerio";
 import cors from "cors";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getAISearchSimulation } from "./aiService.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static("."));
 
-const ai = GEMINI_API_KEY? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
+
 
 // ========== HELPER FUNCTIONS ==========
 function extractDomain(url) {

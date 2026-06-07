@@ -41,23 +41,23 @@ const reportSchema = new mongoose.Schema(
     hasFavicon: Boolean,
     favicon: String,
 
-    // 1. READABILITY FIELDS
+    // READABILITY FIELDS
     readabilityScore: Number,
     readabilityStatus: String,
 
-    // 3. SOCIAL MEDIA FIELDS
+    // SOCIAL MEDIA FIELDS
     hasFacebook: Boolean,
     hasLinkedIn: Boolean,
     hasYouTube: Boolean,
     hasTwitter: Boolean,
 
-    // 4. CONTACT INFO FIELDS
+    // CONTACT INFO FIELDS
     hasEmail: Boolean,
     hasPhone: Boolean,
     email: String,
     phone: String,
 
-    // AI CITATION FIELDS - NEW
+    // AI CITATION FIELDS
     hasAuthor: Boolean,
     aiExtractedAnswer: String,
     citationChatGPT: Number,
@@ -73,6 +73,31 @@ const reportSchema = new mongoose.Schema(
     hasHowTo: Boolean,
     hasDirectAnswer: Boolean,
     lastModified: String,
+
+    // AI TRUST SCORE FIELDS - NEW
+    hasPrivacyPolicy: Boolean,
+    hasAboutPage: Boolean,
+    hasContactPage: Boolean,
+    aiTrustScore: Number,
+    aiTrustSignals: [String],
+
+    // FEATURED SNIPPET FIELDS - NEW
+    featuredSnippetChance: Number,
+    snippetReasons: [String],
+
+    // CONTENT STRUCTURE FIELDS - NEW
+    h3Count: Number,
+    listCount: Number,
+    tableCount: Number,
+    contentStructureScore: Number,
+
+    // PRIORITY FIXES FIELDS - NEW
+    criticalIssues: [String],
+    importantIssues: [String],
+    minorIssues: [String],
+
+    // OVERALL AI VISIBILITY - NEW
+    overallAIVisibility: Number,
 
     // AI Report
     aiReport: String

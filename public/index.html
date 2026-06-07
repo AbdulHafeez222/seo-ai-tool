@@ -249,6 +249,9 @@ async function scan() {
     document.getElementById("aeoScore").innerHTML = `${data.aeoScore}<span>AEO ${aeoGrade}</span>`;
     document.getElementById("aeoScore").style.color = aeoColor;
 
+    // Readability Color
+    const readabilityColor = data.readabilityScore >= 60 ? "#16a34a" : data.readabilityScore >= 30 ? "#f97316" : "#dc2626";
+
     // Result HTML
     document.getElementById("result").innerHTML = `
       <div class="card" id="report">
@@ -259,6 +262,9 @@ async function scan() {
         <p><b>Meta Description:</b> ${data.metaDescription || 'Not found'}</p>
         <p><b>Word Count:</b> ${data.wordCount}</p>
         <p><b>Last Modified:</b> ${data.lastModified || 'Not found'}</p>
+        
+        <h3>📖 Content Quality</h3>
+        <p><b>Readability Score:</b> ${data.readabilityScore}/100 <span class="badge" style="background:${readabilityColor}20;color:${readabilityColor}">${data.readabilityStatus}</span></p>
         
         <h3>🔍 SEO Status</h3>
         <p><b>SEO Score:</b> ${data.score}/100 <span class="badge badge-${data.score >= 80 ? 'green' : data.score >= 50 ? 'orange' : 'red'}">${data.status}</span></p>
@@ -290,6 +296,16 @@ async function scan() {
           </details>
         ` : ''}
         
+        <h3>📱 Social Media Presence</h3>
+        <p><b>Facebook:</b> ${data.hasFacebook ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Not Found</span>'}</p>
+        <p><b>LinkedIn:</b> ${data.hasLinkedIn ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Not Found</span>'}</p>
+        <p><b>YouTube:</b> ${data.hasYouTube ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Not Found</span>'}</p>
+        <p><b>Twitter/X:</b> ${data.hasTwitter ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Not Found</span>'}</p>
+        
+        <h3>📞 Contact Information</h3>
+        <p><b>Email:</b> ${data.hasEmail ? `<span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.email}</small>` : '<span class="badge badge-red">❌ Not Found</span>'}</p>
+        <p><b>Phone:</b> ${data.hasPhone ? `<span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.phone}</small>` : '<span class="badge badge-red">❌ Not Found</span>'}</p>
+        
         <h3>🤖 AEO Status - ChatGPT Ready?</h3>
         <p><b>AEO Score:</b> ${data.aeoScore}/100 <span class="badge badge-${data.aeoScore >= 80 ? 'green' : data.aeoScore >= 50 ? 'orange' : 'red'}">${data.aeoStatus}</span></p>
         <p><b>FAQ Schema:</b> ${data.hasFAQ ? '<span class="badge badge-green">✅ Yes - ChatGPT Will Quote</span>' : '<span class="badge badge-red">❌ No</span>'}</p>
@@ -309,7 +325,7 @@ async function scan() {
         </div>
         
         <h3>🤖 AI Report</h3>
-        <div class="ai-box">${data.aiReport || "No AI Report"}</div>
+        <div class="ai-box" style="white-space: pre-wrap;">${data.aiReport || "No AI Report"}</div>
       </div>
     `;
   } catch (err) {
@@ -327,9 +343,10 @@ async function loadHistory() {
       ${data.map(item => `
         <div class="card">
           <p><b>URL:</b> ${item.url}</p>
-          <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0}</p>
+          <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0} | <b>Readability:</b> ${item.readabilityScore || 0}/100</p>
           <p><b>Status:</b> ${item.status}</p>
           <p><b>FAQ Schema:</b> ${item.hasFAQ ? '✅' : '❌'} | <b>Direct Answer:</b> ${item.hasDirectAnswer ? '✅' : '❌'}</p>
+          <p><b>Social:</b> ${item.hasFacebook ? 'FB' : ''} ${item.hasLinkedIn ? 'LI' : ''} ${item.hasYouTube ? 'YT' : ''} ${item.hasTwitter ? 'TW' : ''} | <b>Contact:</b> ${item.hasEmail ? 'Email' : ''} ${item.hasPhone ? 'Phone' : ''}</p>
           <p><b>Canonical:</b> ${item.hasCanonical ? '✅' : '❌'} | <b>Favicon:</b> ${item.hasFavicon ? '✅' : '❌'} | <b>Open Graph:</b> ${item.hasOGTags ? '✅' : '❌'} | <b>Sitemap:</b> ${item.sitemapExists ? '✅' : '❌'} | <b>Images:</b> ${item.imagesWithoutAlt || 0}/${item.totalImages || 0} missing ALT</p>
           <p><b>Scanned:</b> ${new Date(item.createdAt).toLocaleString()}</p>
         </div>

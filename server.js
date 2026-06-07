@@ -62,14 +62,19 @@ app.get("/analyze", async (req, res) => {
 
     // Validate URL first
     let hostname = '';
+    let isHttps = false;
     try {
-      hostname = new URL(url).hostname;
+      const urlObj = new URL(url);
+      hostname = urlObj.hostname;
+      isHttps = urlObj.protocol === 'https:';
     } catch(e) {
       return res.json({ error: "Invalid URL format" });
     }
 
     const baseUrl = new URL(url).origin;
 
+    // ---------------- PAGE LOAD TIME CHECK ----------------
+    const startTime = Date.now();
     const response = await axios.get(url, {
       timeout: 15000,
       maxRedirects: 5,
@@ -77,6 +82,7 @@ app.get("/analyze", async (req, res) => {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
       }
     });
+    const loadTime = Date.now() - startTime; // in ms
 
     const $ = cheerio.load(response.data);
 
@@ -91,11 +97,11 @@ app.get("/analyze", async (req, res) => {
     // Better keywords with stop words filter
     const stopWords = ['with','from','your','this','that','about','after','have','will','into','which','their'];
     const keywords = title
-   .toLowerCase()
-   .replace(/[^\w\s]/g,'')
-   .split(" ")
-   .filter(word => word.length > 3 &&!stopWords.includes(word))
-   .slice(0, 5);
+  .toLowerCase()
+  .replace(/[^\w\s]/g,'')
+  .split(" ")
+  .filter(word => word.length > 3 &&!stopWords.includes(word))
+  .slice(0, 5);
 
     const text = $("body").text();
     const wordCount = text? text.trim().split(/\s+/).filter(Boolean).length : 0;
@@ -116,7 +122,10 @@ app.get("/analyze", async (req, res) => {
 
     const h2 = $("h2").length;
     const canonical = $('link[rel="canonical"]').attr("href");
-    const viewport = $('meta[name="viewport"]').attr("content");
+
+    // ---------------- MOBILE FRIENDLY CHECK ----------------
+    const viewportTag = $('meta[name="viewport"]').attr("content");
+    const mobileFriendly =!!viewportTag && viewportTag.includes("width=device-width");
 
     // ---------------- OPEN GRAPH TAGS CHECK ----------------
     const ogTitle = $('meta[property="og:title"]').attr("content") || "";
@@ -148,6 +157,31 @@ app.get("/analyze", async (req, res) => {
       }
     } catch(e) {}
 
+    // ---------------- BROKEN LINKS CHECK ----------------
+    const allLinks = [];
+    $("a").each((i, el) => {
+      const href = $(el).attr("href");
+      if (href && href.startsWith("http") &&!href.includes('#')) {
+        allLinks.push(href);
+      }
+    });
+
+    // Check first 10 links only to avoid timeout
+    const linksToCheck = allLinks.slice(0, 10);
+    let brokenLinks = 0;
+    const brokenLinksList = [];
+
+    await Promise.all(
+      linksToCheck.map(async (link) => {
+        try {
+          await axios.head(link, { timeout: 5000, validateStatus: s => s < 400 });
+        } catch (e) {
+          brokenLinks++;
+          brokenLinksList.push(link);
+        }
+      })
+    );
+
     // Fixed internal/external links logic
     const internalLinks = $("a").filter((i, el) => {
       const href = $(el).attr("href");
@@ -159,11 +193,14 @@ app.get("/analyze", async (req, res) => {
       return href && href.startsWith("http") &&!href.includes(hostname);
     }).length;
 
-    // ---------------- AEO CHECKS ----------------
+    // ---------------- SCHEMA MARKUP CHECK ----------------
     const schemas = [];
+    let hasSchemaMarkup = false;
+
     $('script[type="application/ld+json"]').each((i, el) => {
       try {
         const json = JSON.parse($(el).html());
+        hasSchemaMarkup = true;
         const type = json['@type'] || json['@graph']?.[0]?.['@type'];
         if(type) schemas.push(type);
       } catch(e) {}
@@ -173,6 +210,9 @@ app.get("/analyze", async (req, res) => {
     const hasHowTo = schemas.includes('HowTo');
     const hasArticle = schemas.includes('Article') || schemas.includes('BlogPosting');
     const hasSpeakable = schemas.includes('SpeakableSpecification');
+    const hasLocalBusiness = schemas.includes('LocalBusiness');
+    const hasProduct = schemas.includes('Product');
+    const hasBreadcrumb = schemas.includes('BreadcrumbList');
 
     // Direct Answer Pattern: H2 ke baad 40-60 words ka para
     let hasDirectAnswer = false;
@@ -197,12 +237,14 @@ app.get("/analyze", async (req, res) => {
     }
     if (!canonical) issues.push("Missing canonical URL");
     if (wordCount < 300) issues.push("Thin content - less than 300 words");
-    if (!viewport) issues.push("Website is not mobile optimized");
+    if (!mobileFriendly) issues.push("Website is not mobile optimized - Missing viewport tag");
     if (!robotsExists) issues.push("robots.txt not found - AI crawlers may get blocked");
     if (!sitemapExists) issues.push("sitemap.xml not found - Google indexing will be slow");
-    if (!hasOGTags) {
-      issues.push("Open Graph tags missing - Poor social media sharing");
-    }
+    if (!hasOGTags) issues.push("Open Graph tags missing - Poor social media sharing");
+    if (!isHttps) issues.push("Not using HTTPS - Security risk, Google ranks HTTP lower");
+    if (loadTime > 3000) issues.push(`Slow page load time: ${loadTime}ms - Should be under 3 seconds`);
+    if (brokenLinks > 0) issues.push(`${brokenLinks} broken links found - Hurts SEO & user experience`);
+    if (!hasSchemaMarkup) issues.push("No Schema Markup found - Missing rich snippets opportunity");
 
     // AEO Issues
     if(!hasFAQ) issues.push("Missing FAQ Schema - ChatGPT won't quote you");
@@ -217,19 +259,23 @@ app.get("/analyze", async (req, res) => {
     // ---------------- SEO SCORE ----------------
     let score = 0;
 
-    if (title.length > 10 && title.length < 70) score += 15;
-    if (metaDescription.length > 80 && metaDescription.length < 160) score += 15;
-    if (h1) score += 10;
+    if (title.length > 10 && title.length < 70) score += 12;
+    if (metaDescription.length > 80 && metaDescription.length < 160) score += 12;
+    if (h1) score += 8;
     if (h2 > 0) score += 5;
-    if (wordCount > 500) score += 15;
-    if (links > 5) score += 10;
-    if (totalImages > 0 && imagesWithoutAlt < totalImages) score += 10;
-    if (canonical) score += 10;
-    if (wordCount > 1000) score += 10;
-    if (viewport) score += 10;
-    if (robotsExists) score += 5;
-    if (sitemapExists) score += 5;
-    if (hasOGTags) score += 5; // <-- FIX: Pehle +5 phir cap karo
+    if (wordCount > 500) score += 10;
+    if (links > 5) score += 5;
+    if (totalImages > 0 && imagesWithoutAlt < totalImages) score += 8;
+    if (canonical) score += 8;
+    if (wordCount > 1000) score += 5;
+    if (mobileFriendly) score += 10;
+    if (robotsExists) score += 3;
+    if (sitemapExists) score += 3;
+    if (hasOGTags) score += 3;
+    if (isHttps) score += 5;
+    if (loadTime < 3000) score += 3;
+    if (brokenLinks === 0) score += 3;
+    if (hasSchemaMarkup) score += 2;
 
     if (score > 100) score = 100;
 
@@ -245,7 +291,7 @@ app.get("/analyze", async (req, res) => {
     if(hasDirectAnswer) aeoScore += 20;
     if(hasArticle) aeoScore += 15;
     if(lastModified) aeoScore += 10;
-    if(hasSpeakable) aeoScore += 10;
+    if(hasSpeakable) aeoScore += 5;
     if(sitemapExists) aeoScore += 5;
 
     let aeoStatus =
@@ -265,9 +311,12 @@ app.get("/analyze", async (req, res) => {
     if (!hasFAQ) tips.push("Add FAQ Schema to get quoted by ChatGPT");
     if (!hasDirectAnswer) tips.push("Add 40-60 word paragraph right after H2");
     if (wordCount < 500) tips.push("Increase content to 800+ words");
-    if (!hasOGTags) {
-      tips.push("Add Open Graph tags for better Facebook, LinkedIn and social sharing previews");
-    }
+    if (!hasOGTags) tips.push("Add Open Graph tags for better Facebook, LinkedIn and social sharing previews");
+    if (!mobileFriendly) tips.push("Add viewport meta tag: <meta name='viewport' content='width=device-width, initial-scale=1.0'>");
+    if (!isHttps) tips.push("Migrate to HTTPS - Get SSL certificate for security & rankings");
+    if (loadTime > 3000) tips.push(`Optimize page speed - Current: ${loadTime}ms. Compress images, enable caching`);
+    if (brokenLinks > 0) tips.push(`Fix ${brokenLinks} broken links to improve user experience`);
+    if (!hasSchemaMarkup) tips.push("Add Schema.org markup for rich snippets in Google");
 
     // ---------------- AI REPORT ----------------
     let aiReport = "";
@@ -297,7 +346,8 @@ app.get("/analyze", async (req, res) => {
         url, title, h1, metaDescription, wordCount, score, status,
         aeoScore, aeoStatus, schemas, hasFAQ, hasHowTo, hasDirectAnswer,
         robotsExists, sitemapExists, totalImages, imagesWithoutAlt,
-        hasOGTags, ogTitle, ogDescription, ogImage, // <-- FIX: Add kiya
+        hasOGTags, ogTitle, ogDescription, ogImage,
+        mobileFriendly, isHttps, loadTime, brokenLinks, brokenLinksList, hasSchemaMarkup,
         tips, aiReport, issues, keywords, internalLinks, externalLinks,
         lastModified
       },
@@ -324,10 +374,16 @@ app.get("/analyze", async (req, res) => {
       sitemapExists,
       totalImages,
       imagesWithoutAlt,
-      hasOGTags, // <-- FIX: Add kiya
-      ogTitle, // <-- FIX: Add kiya
-      ogDescription, // <-- FIX: Add kiya
-      ogImage, // <-- FIX: Add kiya
+      hasOGTags,
+      ogTitle,
+      ogDescription,
+      ogImage,
+      mobileFriendly,
+      isHttps,
+      loadTime,
+      brokenLinks,
+      brokenLinksList,
+      hasSchemaMarkup,
       tips,
       aiReport,
       issues,

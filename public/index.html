@@ -272,6 +272,7 @@ async function scan() {
         <p><b>Robots.txt:</b> ${data.robotsExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
         <p><b>Sitemap.xml:</b> ${data.sitemapExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
         <p><b>Canonical URL:</b> ${data.hasCanonical ? `<span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.canonical || ''}</small>` : '<span class="badge badge-red">❌ Missing</span>'}</p>
+        <p><b>Favicon:</b> ${data.hasFavicon ? `<span class="badge badge-green">✅ Found</span>` : '<span class="badge badge-red">❌ Missing</span>'}</p>
         <p><b>Open Graph:</b> ${data.hasOGTags? '<span class="badge badge-green">✅ Complete - Social Ready</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
         ${data.hasOGTags? `
           <p style="font-size: 12px; margin-left: 20px; margin-top: -10px;">
@@ -329,7 +330,7 @@ async function loadHistory() {
           <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0}</p>
           <p><b>Status:</b> ${item.status}</p>
           <p><b>FAQ Schema:</b> ${item.hasFAQ ? '✅' : '❌'} | <b>Direct Answer:</b> ${item.hasDirectAnswer ? '✅' : '❌'}</p>
-          <p><b>Canonical:</b> ${item.hasCanonical ? '✅' : '❌'} | <b>Open Graph:</b> ${item.hasOGTags ? '✅' : '❌'} | <b>Sitemap:</b> ${item.sitemapExists ? '✅' : '❌'} | <b>Images:</b> ${item.imagesWithoutAlt || 0}/${item.totalImages || 0} missing ALT</p>
+          <p><b>Canonical:</b> ${item.hasCanonical ? '✅' : '❌'} | <b>Favicon:</b> ${item.hasFavicon ? '✅' : '❌'} | <b>Open Graph:</b> ${item.hasOGTags ? '✅' : '❌'} | <b>Sitemap:</b> ${item.sitemapExists ? '✅' : '❌'} | <b>Images:</b> ${item.imagesWithoutAlt || 0}/${item.totalImages || 0} missing ALT</p>
           <p><b>Scanned:</b> ${new Date(item.createdAt).toLocaleString()}</p>
         </div>
       `).join("")}

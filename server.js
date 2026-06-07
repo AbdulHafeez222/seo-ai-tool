@@ -1,6 +1,3 @@
-*📄 `server.js` - COMPLETE UPDATED CODE*
-
-Copy karke pura replace kar do 👇
 import dotenv from "dotenv";
 dotenv.config();
 

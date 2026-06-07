@@ -96,7 +96,8 @@ canvas {
   text-align: center;
   line-height: 1;
   pointer-events: none;
-  z-index: 9999;
+  z-index: 10;
+  width: 100%;
 }
 .centerScore span {
   display: block;
@@ -233,7 +234,9 @@ async function scan() {
       },
       options: {
         cutout: "75%",
-        plugins: { legend: { display: false }, tooltip: { enabled: false } }
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        responsive: true,
+        maintainAspectRatio: true
       }
     });
 
@@ -255,7 +258,9 @@ async function scan() {
       },
       options: {
         cutout: "75%",
-        plugins: { legend: { display: false }, tooltip: { enabled: false } }
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        responsive: true,
+        maintainAspectRatio: true
       }
     });
 

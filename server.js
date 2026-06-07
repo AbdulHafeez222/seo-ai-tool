@@ -86,9 +86,14 @@ app.get("/analyze", async (req, res) => {
 
     const $ = cheerio.load(response.data);
     
-    // 👇 BAS EK HI BAAR DECLARE KAR - LINE 125 WALI RAKH
     const canonical = $('link[rel="canonical"]').attr("href");
     const hasCanonical = !!canonical;
+    
+    // 👇 FAVICON DETECTION
+    const favicon = $('link[rel="icon"]').attr("href") || 
+                    $('link[rel="shortcut icon"]').attr("href") ||
+                    $('link[rel="apple-touch-icon"]').attr("href");
+    const hasFavicon = !!favicon;
     
     // Remove script/style tags before word count
     $('script, style, noscript, svg').remove();
@@ -125,9 +130,6 @@ app.get("/analyze", async (req, res) => {
     });
 
     const h2 = $("h2").length;
-    
-    // 👇 YE LINE DELETE KAR DI - DUPLICATE THI
-    // const canonical = $('link[rel="canonical"]').attr("href");
 
     // ---------------- MOBILE FRIENDLY CHECK ----------------
     const viewportTag = $('meta[name="viewport"]').attr("content");
@@ -244,6 +246,9 @@ app.get("/analyze", async (req, res) => {
     if (!canonical) {
       issues.push("Canonical URL tag missing");
     }
+    if (!hasFavicon) {
+      issues.push("Favicon missing - Hurts branding");
+    }
     if (wordCount < 300) issues.push("Thin content - less than 300 words");
     if (!mobileFriendly) issues.push("Website is not mobile optimized - Missing viewport tag");
     if (!robotsExists) issues.push("robots.txt not found - AI crawlers may get blocked");
@@ -274,7 +279,8 @@ app.get("/analyze", async (req, res) => {
     if (wordCount > 500) score += 10;
     if (links > 5) score += 5;
     if (totalImages > 0 && imagesWithoutAlt < totalImages) score += 8;
-    if (hasCanonical) score += 2; // 👈 YE ADD KAR DIYA
+    if (hasCanonical) score += 2;
+    if (hasFavicon) score += 1;
     if (wordCount > 1000) score += 5;
     if (mobileFriendly) score += 10;
     if (robotsExists) score += 3;
@@ -326,6 +332,7 @@ app.get("/analyze", async (req, res) => {
     if (brokenLinks > 0) tips.push(`Fix ${brokenLinks} broken links to improve user experience`);
     if (!hasSchemaMarkup) tips.push("Add Schema.org markup for rich snippets in Google");
     if (!hasCanonical) tips.push("Add canonical URL: <link rel='canonical' href='https://your-page-url'>");
+    if (!hasFavicon) tips.push("Add a favicon to improve branding and user experience");
       
     // ---------------- AI REPORT ----------------
     let aiReport = "";
@@ -357,10 +364,12 @@ app.get("/analyze", async (req, res) => {
         robotsExists, sitemapExists, totalImages, imagesWithoutAlt,
         hasOGTags, ogTitle, ogDescription, ogImage,
         mobileFriendly, isHttps, loadTime, brokenLinks, brokenLinksList, hasSchemaMarkup,
-        tips, aiReport, issues, keywords, internalLinks, externalLinks,
-        lastModified,
         hasCanonical,
-        canonical
+        canonical,
+        hasFavicon,
+        favicon,
+        tips, aiReport, issues, keywords, internalLinks, externalLinks,
+        lastModified
       },
       { upsert: true, new: true }
     );
@@ -395,14 +404,16 @@ app.get("/analyze", async (req, res) => {
       brokenLinks,
       brokenLinksList,
       hasSchemaMarkup,
+      hasCanonical,
+      canonical,
+      hasFavicon,
+      favicon,
       tips,
       aiReport,
       issues,
       keywords,
       internalLinks,
-      externalLinks,
-      hasCanonical,
-      canonical
+      externalLinks
     });
 
   } catch (error) {

@@ -13,27 +13,21 @@ import { getAIReport } from "./aiService.js";
 import Report from "./models/report.js";
 
 // ---------------- HELPER FUNCTIONS ----------------
-// 1. Readability Score - Flesch Reading Ease
 function calculateReadability(text) {
   if (!text || text.length < 100) return { score: 0, status: "Not Enough Content" };
-
   const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
   const words = text.trim().split(/\s+/).filter(Boolean);
   const wordCount = words.length;
   const syllables = words.reduce((count, word) => count + countSyllables(word), 0);
-
   if (sentences === 0 || wordCount === 0) return { score: 0, status: "Not Enough Content" };
-
   const score = 206.835 - 1.015 * (wordCount / sentences) - 84.6 * (syllables / wordCount);
   const roundedScore = Math.max(0, Math.min(100, Math.round(score)));
-
   let status =
     roundedScore >= 80? "Very Easy" :
     roundedScore >= 70? "Easy" :
     roundedScore >= 60? "Fairly Easy" :
     roundedScore >= 50? "Standard" :
     roundedScore >= 30? "Difficult" : "Very Difficult";
-
   return { score: roundedScore, status };
 }
 
@@ -46,28 +40,23 @@ function countSyllables(word) {
   return matches? matches.length : 1;
 }
 
-// ---------------- AI CITATION PROBABILITY ----------------
 function calculateCitationProbability({ hasFAQ, hasHowTo, hasDirectAnswer, hasArticle, hasSpeakable, schemas, wordCount, hasAuthor }) {
   let chatGPT = 0, gemini = 0, perplexity = 0;
-
   if (hasFAQ) chatGPT += 35;
   if (hasDirectAnswer) chatGPT += 30;
   if (hasArticle) chatGPT += 15;
   if (wordCount > 500) chatGPT += 10;
   if (hasAuthor) chatGPT += 10;
-
   if (hasHowTo) gemini += 30;
   if (schemas.length > 2) gemini += 25;
   if (hasArticle) gemini += 20;
   if (hasDirectAnswer) gemini += 15;
   if (wordCount > 800) gemini += 10;
-
   if (hasFAQ) perplexity += 30;
   if (hasHowTo) perplexity += 25;
   if (hasDirectAnswer) perplexity += 25;
   if (hasSpeakable) perplexity += 10;
   if (wordCount > 600) perplexity += 10;
-
   return {
     chatGPT: Math.min(100, chatGPT),
     gemini: Math.min(100, gemini),
@@ -75,7 +64,6 @@ function calculateCitationProbability({ hasFAQ, hasHowTo, hasDirectAnswer, hasAr
   };
 }
 
-// ---------------- AI ANSWER EXTRACTION ----------------
 function extractAIAnswer($) {
   let faqAnswer = '';
   $('script[type="application/ld+json"]').each((i, el) => {
@@ -89,7 +77,6 @@ function extractAIAnswer($) {
     } catch(e) {}
   });
   if (faqAnswer) return faqAnswer;
-
   let directAnswer = '';
   $('h2').each((i, el) => {
     if (directAnswer) return;
@@ -101,34 +88,25 @@ function extractAIAnswer($) {
     }
   });
   if (directAnswer) return directAnswer;
-
   const h1 = $("h1").first().text().trim();
   const firstPara = $("p").first().text().trim();
-  if (h1 && firstPara) {
-    return `Q: ${h1}\nA: ${firstPara.substring(0, 200)}...`;
-  }
-
+  if (h1 && firstPara) return `Q: ${h1}\nA: ${firstPara.substring(0, 200)}...`;
   return "No clear AI-extractable answer found. Add FAQ schema or direct answers under H2.";
 }
 
-// ---------------- AEO SIMULATOR ----------------
 function generateAEOSimulation({ title, h1, metaDescription, hasFAQ, directAnswer, url, wordCount }) {
   const brand = new URL(url).hostname.replace('www.', '').split('.')[0];
   const brandName = brand.charAt(0).toUpperCase() + brand.slice(1);
-
   if (hasFAQ && directAnswer.includes('Q:')) {
     return `"According to ${brandName}, ${directAnswer.split('A: ')[1]?.substring(0, 150) || 'this service is available'}."`;
   }
-
   if (h1 && wordCount > 300) {
     const answer = metaDescription || `${h1} services are available`;
     return `"According to ${brandName}, ${answer.substring(0, 150)}..."`;
   }
-
   return `"${brandName} provides ${title || 'web services'}. Visit ${url} for more details."`;
 }
 
-// ---------------- AUTHOR DETECTION ----------------
 function detectAuthor($) {
   const authorMeta = $('meta[name="author"]').attr('content');
   const authorSchema = $('script[type="application/ld+json"]').text().includes('"author"');
@@ -136,22 +114,18 @@ function detectAuthor($) {
   return!!(authorMeta || authorSchema || authorText);
 }
 
-// ---------------- AI TRUST SCORE ----------------
 function calculateAITrustScore({ isHttps, hasAuthor, hasEmail, hasPhone, hasPrivacyPolicy, hasAboutPage, hasContactPage }) {
   let score = 0;
   let signals = [];
-
   if (isHttps) { score += 20; signals.push('HTTPS ✅'); }
   if (hasAuthor) { score += 20; signals.push('Author ✅'); }
   if (hasEmail || hasPhone) { score += 15; signals.push('Contact Info ✅'); }
   if (hasPrivacyPolicy) { score += 15; signals.push('Privacy Policy ✅'); }
   if (hasAboutPage) { score += 15; signals.push('About Page ✅'); }
   if (hasContactPage) { score += 15; signals.push('Contact Page ✅'); }
-
   return { score: Math.min(100, score), signals };
 }
 
-// ---------------- TRUST PAGES DETECTION ----------------
 function detectTrustPages($) {
   const text = $('body').text().toLowerCase();
   const links = [];
@@ -160,71 +134,46 @@ function detectTrustPages($) {
     const linkText = $(el).text().toLowerCase();
     links.push({ href, text: linkText });
   });
-
-  const hasPrivacyPolicy = links.some(l =>
-    l.href.includes('privacy') || l.text.includes('privacy')
-  ) || text.includes('privacy policy');
-
-  const hasAboutPage = links.some(l =>
-    l.href.includes('about') || l.text.includes('about us')
-  ) || text.includes('about us');
-
-  const hasContactPage = links.some(l =>
-    l.href.includes('contact') || l.text.includes('contact us')
-  ) || text.includes('contact us');
-
+  const hasPrivacyPolicy = links.some(l => l.href.includes('privacy') || l.text.includes('privacy')) || text.includes('privacy policy');
+  const hasAboutPage = links.some(l => l.href.includes('about') || l.text.includes('about us')) || text.includes('about us');
+  const hasContactPage = links.some(l => l.href.includes('contact') || l.text.includes('contact us')) || text.includes('contact us');
   return { hasPrivacyPolicy, hasAboutPage, hasContactPage };
 }
 
-// ---------------- FEATURED SNIPPET PREDICTOR ----------------
 function predictFeaturedSnippet({ hasDirectAnswer, h2Questions, hasFAQ, hasHowTo, hasLists }) {
   let score = 0;
   let reasons = [];
-
   if (hasDirectAnswer) { score += 35; reasons.push('✅ Direct Answers Found'); }
   else { reasons.push('❌ No 40-60 word answers under H2'); }
-
   if (h2Questions > 0) { score += 25; reasons.push(`✅ ${h2Questions} H2 Questions Found`); }
   else { reasons.push('❌ No H2 questions'); }
-
   if (hasFAQ) { score += 20; reasons.push('✅ FAQ Schema Present'); }
   else { reasons.push('❌ FAQ Schema Missing'); }
-
   if (hasLists) { score += 10; reasons.push('✅ Lists Found'); }
   else { reasons.push('❌ No lists'); }
-
   if (hasHowTo) { score += 10; reasons.push('✅ HowTo Schema Present'); }
-
   return { chance: Math.min(100, score), reasons };
 }
 
-// ---------------- CONTENT STRUCTURE SCORE ----------------
 function calculateContentStructure($) {
   const h1Count = $('h1').length;
   const h2Count = $('h2').length;
   const h3Count = $('h3').length;
   const listCount = $('ul, ol').length;
   const tableCount = $('table').length;
-
   let score = 0;
   if (h1Count === 1) score += 20;
   if (h2Count >= 3) score += 25;
   if (h3Count >= 5) score += 20;
   if (listCount >= 2) score += 20;
   if (tableCount >= 1) score += 15;
-
-  return {
-    score: Math.min(100, score),
-    h1Count, h2Count, h3Count, listCount, tableCount
-  };
+  return { score: Math.min(100, score), h1Count, h2Count, h3Count, listCount, tableCount };
 }
 
-// ---------------- PRIORITY FIXES ----------------
 function categorizeIssues(issues) {
   const critical = [];
   const important = [];
   const minor = [];
-
   issues.forEach(issue => {
     if (issue.includes('FAQ Schema') || issue.includes('HTTPS') || issue.includes('title tag') || issue.includes('H1')) {
       critical.push(issue);
@@ -234,25 +183,113 @@ function categorizeIssues(issues) {
       minor.push(issue);
     }
   });
-
   return { critical, important, minor };
 }
 
-// ---------------- OVERALL AI VISIBILITY SCORE ----------------
-function calculateOverallAIVisibility({ seoScore, aeoScore, trustScore, avgCitation }) {
-  const overall = Math.round(
-    (seoScore * 0.20) +
-    (aeoScore * 0.30) +
-    (trustScore * 0.25) +
-    (avgCitation * 0.25)
-  );
-  return Math.min(100, overall);
+function calculateSchemaCoverage(schemas) {
+  const totalPossible = 8;
+  const uniqueSchemas = [...new Set(schemas)];
+  return Math.round((uniqueSchemas.length / totalPossible) * 100);
+}
+
+function calculateAIVisibilityScore({ seoScore, aeoScore, aiTrust, readability, schemaCoverage }) {
+  const score = Math.round((seoScore * 0.25) + (aeoScore * 0.25) + (aiTrust * 0.20) + (readability * 0.15) + (schemaCoverage * 0.15));
+  const level = score >= 80? 'High' : score >= 60? 'Medium' : 'Needs Improvement';
+  return { score: Math.min(100, score), level };
+}
+
+function generateCitationSimulator({ title, h1, metaDescription, url, hasFAQ }) {
+  const brand = new URL(url).hostname.replace('www.', '').split('.')[0];
+  const brandName = brand.charAt(0).toUpperCase() + brand.slice(1);
+  const answer = metaDescription || h1 || title || 'professional services';
+  return `If ChatGPT is asked: "What is ${brandName}?"\n\nAI will respond:\n"According to ${brandName}, ${answer.substring(0, 150)}..."\n\nCitation Probability: ${hasFAQ? 'HIGH' : 'MEDIUM'}`;
+}
+
+function analyzeTopicAuthority($, title) {
+  const text = $('body').text().toLowerCase();
+  const mainTopic = title?.split(' ')[0]?.toLowerCase() || 'website';
+  const subTopics = {
+    wordpress: text.includes('wordpress'),
+    seo: text.includes('seo'),
+    hosting: text.includes('hosting'),
+    security: text.includes('security'),
+    maintenance: text.includes('maintenance'),
+    design: text.includes('design'),
+    development: text.includes('development')
+  };
+  const found = Object.entries(subTopics).filter(([k, v]) => v).map(([k]) => k);
+  const missing = Object.entries(subTopics).filter(([k, v]) =>!v).map(([k]) => k);
+  return { mainTopic, found, missing };
+}
+
+function checkAnswerQuality($) {
+  let score = 0;
+  let checks = [];
+  const h2s = $('h2').length;
+  const lists = $('ul, ol').length;
+  const hasFAQ = $('script[type="application/ld+json"]').text().includes('FAQPage');
+  const paragraphs = $('p');
+  let clearSentences = 0;
+  paragraphs.each((i, p) => {
+    const text = $(p).text().trim();
+    const words = text.split(/\s+/).length;
+    if (words > 10 && words < 50) clearSentences++;
+  });
+  if (clearSentences > 3) { score += 30; checks.push('✅ Clear sentences'); }
+  else { checks.push('❌ Sentences too complex'); }
+  if (h2s > 0) { score += 25; checks.push('✅ Direct answers under H2'); }
+  else { checks.push('❌ No H2 structure'); }
+  if (hasFAQ) { score += 25; checks.push('✅ FAQ structure'); }
+  else { checks.push('❌ No FAQ structure'); }
+  if (lists > 0) { score += 20; checks.push('✅ Step-by-step format'); }
+  else { checks.push('❌ No step-by-step format'); }
+  return { score: Math.min(100, score), checks };
+}
+
+function generateAutoFAQ(title, h1, metaDescription, url) {
+  const brand = new URL(url).hostname.replace('www.', '').split('.')[0];
+  const brandName = brand.charAt(0).toUpperCase() + brand.slice(1);
+  return [
+    { q: `What services does ${brandName} offer?`, a: metaDescription || h1 || `Professional ${title || 'web'} services` },
+    { q: `How much does it cost?`, a: 'Starting from competitive rates. Contact us for a quote.' },
+    { q: `How long does it take?`, a: 'Typical delivery within 7-14 days depending on project scope.' },
+    { q: `Do you provide support?`, a: 'Yes, we offer ongoing support and maintenance.' }
+  ];
+}
+
+function generateSERPPreview(title, metaDescription, url) {
+  return {
+    title: title || 'Your Page Title',
+    description: metaDescription || 'Your meta description here...',
+    url: url,
+    displayUrl: new URL(url).hostname
+  };
+}
+
+function estimateBusinessValue(seoScore, aeoScore, wordCount) {
+  const trafficIncrease = Math.round((seoScore + aeoScore) / 5);
+  const leadsIncrease = Math.round(trafficIncrease * 0.6);
+  const revenueImpact = Math.round((wordCount / 100) * (seoScore / 10) * 50);
+  return {
+    trafficIncrease: `+${trafficIncrease}%`,
+    leadsIncrease: `+${leadsIncrease}%`,
+    revenueImpact: `+$${revenueImpact}/month`
+  };
+}
+
+function generateInstantFixes(issues) {
+  const fixes = [];
+  if (issues.some(i => i.includes('FAQ Schema'))) fixes.push('Add FAQ Schema');
+  if (issues.some(i => i.includes('Readability'))) fixes.push('Improve Readability');
+  if (issues.some(i => i.includes('Last Updated'))) fixes.push('Add Last Updated Date');
+  if (issues.some(i => i.includes('ALT text'))) fixes.push('Add Image ALT Text');
+  if (issues.some(i => i.includes('meta description'))) fixes.push('Optimize Meta Description');
+  return fixes;
 }
 
 // ---------------- APP ----------------
 const app = express();
 const PORT = process.env.PORT || 4000;
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -281,16 +318,9 @@ app.get("/", (req, res) => {
 // ---------------- SEO ANALYZE ROUTE ----------------
 app.get("/analyze", async (req, res) => {
   let url = req.query.url;
-
-  if (!url) {
-    return res.json({ error: "Please provide URL" });
-  }
-
+  if (!url) return res.json({ error: "Please provide URL" });
   try {
-    if (!url.startsWith("http")) {
-      url = "https://" + url;
-    }
-
+    if (!url.startsWith("http")) url = "https://" + url;
     let hostname = '';
     let isHttps = false;
     try {
@@ -300,64 +330,38 @@ app.get("/analyze", async (req, res) => {
     } catch(e) {
       return res.json({ error: "Invalid URL format" });
     }
-
     const baseUrl = new URL(url).origin;
-
     const startTime = Date.now();
     const response = await axios.get(url, {
       timeout: 15000,
       maxRedirects: 5,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
-      }
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36" }
     });
     const loadTime = Date.now() - startTime;
-
     const $ = cheerio.load(response.data);
-
     const canonical = $('link[rel="canonical"]').attr("href");
     const hasCanonical =!!canonical;
-
-    const favicon = $('link[rel="icon"]').attr("href") ||
-                    $('link[rel="shortcut icon"]').attr("href") ||
-                    $('link[rel="apple-touch-icon"]').attr("href");
+    const favicon = $('link[rel="icon"]').attr("href") || $('link[rel="shortcut icon"]').attr("href") || $('link[rel="apple-touch-icon"]').attr("href");
     const hasFavicon =!!favicon;
-
     $('script, style, noscript, svg').remove();
-
     const title = $("title").text().trim();
     const h1 = $("h1").first().text().trim();
     const metaDescription = $('meta[name="description"]').attr("content") || "";
-
     const stopWords = ['with','from','your','this','that','about','after','have','will','into','which','their','there','these','they','them','been','were','when','where','what','would','could','should'];
     const text = $("body").text();
     const cleanText = text.toLowerCase().replace(/[^\w\s]/g, ' ');
-
     const singleWords = cleanText.split(/\s+/).filter(word => word.length > 3 &&!stopWords.includes(word));
-
     const phrases = [];
     for(let i = 0; i < singleWords.length - 1; i++) {
       const phrase = `${singleWords[i]} ${singleWords[i+1]}`;
-      if(!stopWords.includes(singleWords[i]) &&!stopWords.includes(singleWords[i+1])) {
-        phrases.push(phrase);
-      }
+      if(!stopWords.includes(singleWords[i]) &&!stopWords.includes(singleWords[i+1])) phrases.push(phrase);
     }
-
     const keywordCount = {};
-    [...singleWords,...phrases].forEach(word => {
-      keywordCount[word] = (keywordCount[word] || 0) + 1;
-    });
-
-    const keywords = Object.entries(keywordCount)
-   .sort((a, b) => b[1] - a[1])
-   .slice(0, 8)
-   .map(([word]) => word);
-
+    [...singleWords,...phrases].forEach(word => { keywordCount[word] = (keywordCount[word] || 0) + 1; });
+    const keywords = Object.entries(keywordCount).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([word]) => word);
     const wordCount = text? text.trim().split(/\s+/).filter(Boolean).length : 0;
-
     const readability = calculateReadability(text);
     const links = $("a").length;
-
     let hasFacebook = false, hasLinkedIn = false, hasYouTube = false, hasTwitter = false;
     $("a").each((i, el) => {
       const href = $(el).attr("href") || "";
@@ -366,7 +370,6 @@ app.get("/analyze", async (req, res) => {
       if (href.includes("youtube.com") || href.includes("youtu.be")) hasYouTube = true;
       if (href.includes("twitter.com") || href.includes("x.com")) hasTwitter = true;
     });
-
     const emailRegex = /[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+/g;
     const phoneRegex = /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
     const emails = text.match(emailRegex) || [];
@@ -375,87 +378,57 @@ app.get("/analyze", async (req, res) => {
     const hasPhone = phones.length > 0;
     const email = emails[0] || "";
     const phone = phones[0] || "";
-
     const images = $("img");
     const totalImages = images.length;
     let imagesWithoutAlt = 0;
-
     images.each((i, img) => {
       const alt = $(img).attr("alt");
-      if (!alt || alt.trim() === "") {
-        imagesWithoutAlt++;
-      }
+      if (!alt || alt.trim() === "") imagesWithoutAlt++;
     });
-
     const h2 = $("h2").length;
     const h2Questions = $('h2').filter((i, el) => $(el).text().includes('?')).length;
-
     const viewportTag = $('meta[name="viewport"]').attr("content");
     const mobileFriendly =!!viewportTag && viewportTag.includes("width=device-width");
-
     const ogTitle = $('meta[property="og:title"]').attr("content") || "";
     const ogDescription = $('meta[property="og:description"]').attr("content") || "";
     const ogImage = $('meta[property="og:image"]').attr("content") || "";
     const hasOGTags =!!ogTitle &&!!ogDescription &&!!ogImage;
-
     let robotsExists = false;
     try {
-      const robots = await axios.get(`${baseUrl}/robots.txt`, {
-        timeout: 5000,
-        validateStatus: status => status < 500
-      });
-      if (robots.status === 200) {
-        robotsExists = true;
-      }
+      const robots = await axios.get(`${baseUrl}/robots.txt`, { timeout: 5000, validateStatus: status => status < 500 });
+      if (robots.status === 200) robotsExists = true;
     } catch(e) {}
-
     let sitemapExists = false;
     try {
-      const sitemap = await axios.get(`${baseUrl}/sitemap.xml`, {
-        timeout: 5000,
-        validateStatus: status => status < 500
-      });
-      if (sitemap.status === 200) {
-        sitemapExists = true;
-      }
+      const sitemap = await axios.get(`${baseUrl}/sitemap.xml`, { timeout: 5000, validateStatus: status => status < 500 });
+      if (sitemap.status === 200) sitemapExists = true;
     } catch(e) {}
-
     const allLinks = [];
     $("a").each((i, el) => {
       const href = $(el).attr("href");
-      if (href && href.startsWith("http") &&!href.includes('#')) {
-        allLinks.push(href);
-      }
+      if (href && href.startsWith("http") &&!href.includes('#')) allLinks.push(href);
     });
-
     const linksToCheck = allLinks.slice(0, 10);
     let brokenLinks = 0;
     const brokenLinksList = [];
-
-    await Promise.all(
-      linksToCheck.map(async (link) => {
-        try {
-          await axios.head(link, { timeout: 5000, validateStatus: s => s < 400 });
-        } catch (e) {
-          brokenLinks++;
-          brokenLinksList.push(link);
-        }
-      })
-    );
-
+    await Promise.all(linksToCheck.map(async (link) => {
+      try {
+        await axios.head(link, { timeout: 5000, validateStatus: s => s < 400 });
+      } catch (e) {
+        brokenLinks++;
+        brokenLinksList.push(link);
+      }
+    }));
     const internalLinks = $("a").filter((i, el) => {
       const href = $(el).attr("href");
       return href && (href.startsWith("/") || href.includes(hostname));
     }).length;
-
     const externalLinks = $("a").filter((i, el) => {
       const href = $(el).attr("href");
       return href && href.startsWith("http") &&!href.includes(hostname);
     }).length;
-
     const schemas = [];
     let hasSchemaMarkup = false;
-
     $('script[type="application/ld+json"]').each((i, el) => {
       try {
         const json = JSON.parse($(el).html());
@@ -464,67 +437,36 @@ app.get("/analyze", async (req, res) => {
         if(type) schemas.push(type);
       } catch(e) {}
     });
-
     const hasFAQ = schemas.includes('FAQPage');
     const hasHowTo = schemas.includes('HowTo');
     const hasArticle = schemas.includes('Article') || schemas.includes('BlogPosting');
     const hasSpeakable = schemas.includes('SpeakableSpecification');
-    const hasLocalBusiness = schemas.includes('LocalBusiness');
-    const hasProduct = schemas.includes('Product');
-    const hasBreadcrumb = schemas.includes('BreadcrumbList');
-
     let hasDirectAnswer = false;
     $('h2').each((i, el) => {
       const nextP = $(el).next('p').text().trim();
       const words = nextP.split(/\s+/).filter(Boolean).length;
       if(words >= 40 && words <= 60) hasDirectAnswer = true;
     });
-
-    const lastModified = $('meta[property="article:modified_time"]').attr('content') ||
-                         $('meta[property="article:published_time"]').attr('content') ||
-                         $('time').attr('datetime') || null;
-
+    const lastModified = $('meta[property="article:modified_time"]').attr('content') || $('meta[property="article:published_time"]').attr('content') || $('time').attr('datetime') || null;
     const hasAuthor = detectAuthor($);
     const aiExtractedAnswer = extractAIAnswer($);
-    const citationScores = calculateCitationProbability({
-      hasFAQ, hasHowTo, hasDirectAnswer, hasArticle, hasSpeakable, schemas, wordCount, hasAuthor
-    });
-    const aeoSimulation = generateAEOSimulation({
-      title, h1, metaDescription, hasFAQ, directAnswer: aiExtractedAnswer, url, wordCount
-    });
-
-    // TRUST PAGES
+    const citationScores = calculateCitationProbability({ hasFAQ, hasHowTo, hasDirectAnswer, hasArticle, hasSpeakable, schemas, wordCount, hasAuthor });
+    const aeoSimulation = generateAEOSimulation({ title, h1, metaDescription, hasFAQ, directAnswer: aiExtractedAnswer, url, wordCount });
     const { hasPrivacyPolicy, hasAboutPage, hasContactPage } = detectTrustPages($);
-    const trustData = calculateAITrustScore({
-      isHttps, hasAuthor, hasEmail, hasPhone, hasPrivacyPolicy, hasAboutPage, hasContactPage
-    });
-
-    // FEATURED SNIPPET
+    const trustData = calculateAITrustScore({ isHttps, hasAuthor, hasEmail, hasPhone, hasPrivacyPolicy, hasAboutPage, hasContactPage });
     const hasLists = $('ul, ol').length > 0;
-    const snippetData = predictFeaturedSnippet({
-      hasDirectAnswer, h2Questions, hasFAQ, hasHowTo, hasLists
-    });
-
-    // CONTENT STRUCTURE
+    const snippetData = predictFeaturedSnippet({ hasDirectAnswer, h2Questions, hasFAQ, hasHowTo, hasLists });
     const structureData = calculateContentStructure($);
-
-    // OVERALL AI VISIBILITY
     const avgCitation = Math.round((citationScores.chatGPT + citationScores.gemini + citationScores.perplexity) / 3);
-
+    const schemaCoverage = calculateSchemaCoverage(schemas);
+    
     let issues = [];
-
     if (!title) issues.push("Missing title tag");
     if (!metaDescription) issues.push("Missing meta description");
     if (!h1) issues.push("Missing H1 tag");
-    if (imagesWithoutAlt > 0) {
-      issues.push(`${imagesWithoutAlt} out of ${totalImages} images are missing ALT text`);
-    }
-    if (!canonical) {
-      issues.push("Canonical URL tag missing");
-    }
-    if (!hasFavicon) {
-      issues.push("Favicon missing - Hurts branding");
-    }
+    if (imagesWithoutAlt > 0) issues.push(`${imagesWithoutAlt} out of ${totalImages} images are missing ALT text`);
+    if (!canonical) issues.push("Canonical URL tag missing");
+    if (!hasFavicon) issues.push("Favicon missing - Hurts branding");
     if (wordCount < 300) issues.push("Thin content - less than 300 words");
     if (readability.score < 50) issues.push(`Content difficult to read - Score: ${readability.score}/100`);
     if (!hasFacebook &&!hasLinkedIn &&!hasYouTube) issues.push("No social media links found");
@@ -541,119 +483,93 @@ app.get("/analyze", async (req, res) => {
     if (loadTime > 3000) issues.push(`Slow page load time: ${loadTime}ms - Should be under 3 seconds`);
     if (brokenLinks > 0) issues.push(`${brokenLinks} broken links found - Hurts SEO & user experience`);
     if (!hasSchemaMarkup) issues.push("No Schema Markup found - Missing rich snippets opportunity");
-
     if(!hasFAQ) issues.push("Missing FAQ Schema - ChatGPT won't quote you");
     if(!hasHowTo) issues.push("Missing HowTo Schema - No step-by-step answers for AI");
     if(!hasDirectAnswer) issues.push("No direct answer under H2 - Missing featured snippet");
     if(!lastModified) issues.push("No last updated date - AI prefers fresh content");
-
-    if (issues.length === 0) {
-      issues.push("No major SEO issues found");
-    }
-
-    // PRIORITY FIXES
+    if (issues.length === 0) issues.push("No major SEO issues found");
+    
     const { critical, important, minor } = categorizeIssues(issues);
-
+    
     let score = 0;
+    if (title.length > 10 && title.length < 70) score += 10;
+    if (metaDescription.length > 50 && metaDescription.length < 160) score += 10;
+    if (h1) score += 10;
+    if (h2 >= 2) score += 5;
+    if (canonical) score += 5;
+    if (hasFavicon) score += 5;
+    if (wordCount > 300) score += 10;
+*📄 PART 2/2 - `server.js` (Baaki ka code)* ✅
 
-    if (title.length > 10 && title.length < 70) score += 12;
-    if (metaDescription.length > 80 && metaDescription.length < 160) score += 12;
-    if (h1) score += 8;
-    if (h2 > 0) score += 5;
-    if (wordCount > 500) score += 10;
-    if (links > 5) score += 5;
-    if (totalImages > 0 && imagesWithoutAlt < totalImages) score += 8;
-    if (hasCanonical) score += 2;
-    if (hasFavicon) score += 1;
-    if (readability.score >= 60) score += 5;
-    if (hasEmail || hasPhone) score += 2;
-    if (hasFacebook || hasLinkedIn) score += 1;
-    if (hasAuthor) score += 2;
-    if (wordCount > 1000) score += 5;
-    if (mobileFriendly) score += 10;
-    if (robotsExists) score += 3;
-    if (sitemapExists) score += 3;
-    if (hasOGTags) score += 3;
+Part 1 ke end me ye jod do. `/analyze` route complete + `/history` route:
+    if (readability.score >= 60) score += 10;
+    if (imagesWithoutAlt === 0 && totalImages > 0) score += 5;
+    else if (totalImages === 0) score += 5;
+    if (mobileFriendly) score += 5;
+    if (hasOGTags) score += 5;
+    if (robotsExists) score += 5;
+    if (sitemapExists) score += 5;
     if (isHttps) score += 5;
-    if (loadTime < 3000) score += 3;
-    if (brokenLinks === 0) score += 3;
-    if (hasSchemaMarkup) score += 2;
-
-    if (score > 100) score = 100;
-
-    let status =
-      score >= 80? "Excellent SEO" :
-      score >= 50? "Good SEO" :
-      "Poor SEO";
-
+    if (loadTime < 3000) score += 5;
+    if (brokenLinks === 0) score += 5;
+    if (hasSchemaMarkup) score += 5;
+    score = Math.min(100, score);
+    let status = score >= 80? "Excellent" : score >= 50? "Good" : "Poor";
+    
     let aeoScore = 0;
     if(hasFAQ) aeoScore += 25;
     if(hasHowTo) aeoScore += 20;
     if(hasDirectAnswer) aeoScore += 20;
-    if(hasArticle) aeoScore += 15;
     if(lastModified) aeoScore += 10;
+    if(wordCount > 500) aeoScore += 10;
+    if(hasArticle) aeoScore += 10;
     if(hasSpeakable) aeoScore += 5;
-    if(sitemapExists) aeoScore += 5;
-
-    let aeoStatus =
-      aeoScore >= 80? "AEO Ready - ChatGPT Will Quote You" :
-      aeoScore >= 50? "Partial AEO - Needs Schema" :
-      "Not AEO Ready - Only Old SEO";
-
-    const overallAIVisibility = calculateOverallAIVisibility({
-      seoScore: score,
-      aeoScore: aeoScore,
-      trustScore: trustData.score,
-      avgCitation: avgCitation
+    aeoScore = Math.min(100, aeoScore);
+    let aeoStatus = aeoScore >= 80? "Excellent" : aeoScore >= 50? "Good" : "Poor";
+    
+    const overallAIVisibility = Math.round((score * 0.25) + (aeoScore * 0.25) + (trustData.score * 0.2) + (avgCitation * 0.3));
+    const aiVisibilityData = calculateAIVisibilityScore({ 
+      seoScore: score, 
+      aeoScore: aeoScore, 
+      aiTrust: trustData.score, 
+      readability: readability.score, 
+      schemaCoverage 
     });
-
+    
+    const answerQualityData = checkAnswerQuality($);
+    const autoFAQ = generateAutoFAQ(title, h1, metaDescription, url);
+    const serpPreview = generateSERPPreview(title, metaDescription, url);
+    const topicAuthority = analyzeTopicAuthority($, title);
+    const citationSimulator = generateCitationSimulator({ title, h1, metaDescription, url, hasFAQ });
+    const businessValue = estimateBusinessValue(score, aeoScore, wordCount);
+    const instantFixes = generateInstantFixes(issues);
+    const mobileScore = mobileFriendly? 95 : 40;
+    const desktopScore = score;
+    
     let tips = [];
-
-    if (!title) tips.push("Add title tag 50-60 characters");
-    if (!h1) tips.push("Add one H1 tag with main keyword");
-    if (!metaDescription) tips.push("Add meta description 120-155 characters");
-    if (imagesWithoutAlt > 0) tips.push(`Add ALT text to ${imagesWithoutAlt} images for better SEO & accessibility`);
-    if (readability.score < 60) tips.push(`Improve readability - Current: ${readability.score}/100. Use shorter sentences and simpler words`);
-    if (!hasFacebook &&!hasLinkedIn) tips.push("Add social media links to build trust and authority");
-    if (!hasEmail &&!hasPhone) tips.push("Add contact information (email/phone) to improve EEAT signals");
-    if (!hasAuthor) tips.push("Add author byline to improve EEAT and AI citation chance");
-    if (!hasPrivacyPolicy) tips.push("Add Privacy Policy page to improve AI Trust Score");
-    if (!hasAboutPage) tips.push("Add About Us page to improve EEAT signals");
-    if (citationScores.chatGPT < 60) tips.push("Add FAQ Schema and 40-60 word direct answers to boost ChatGPT citation chance");
-    if (!robotsExists) tips.push("Create robots.txt to allow AI crawlers like GPTBot");
-    if (!sitemapExists) tips.push("Add sitemap.xml and submit to Google Search Console");
-    if (!hasFAQ) tips.push("Add FAQ Schema to get quoted by ChatGPT");
-    if (!hasDirectAnswer) tips.push("Add 40-60 word paragraph right after H2");
-    if (wordCount < 500) tips.push("Increase content to 800+ words");
-    if (!hasOGTags) tips.push("Add Open Graph tags for better Facebook, LinkedIn and social sharing previews");
-    if (!mobileFriendly) tips.push("Add viewport meta tag: <meta name='viewport' content='width=device-width, initial-scale=1.0'>");
-    if (!isHttps) tips.push("Migrate to HTTPS - Get SSL certificate for security & rankings");
-    if (loadTime > 3000) tips.push(`Optimize page speed - Current: ${loadTime}ms. Compress images, enable caching`);
-    if (brokenLinks > 0) tips.push(`Fix ${brokenLinks} broken links to improve user experience`);
-    if (!hasSchemaMarkup) tips.push("Add Schema.org markup for rich snippets in Google");
-    if (!hasCanonical) tips.push("Add canonical URL: <link rel='canonical' href='https://your-page-url'>");
-    if (!hasFavicon) tips.push("Add a favicon to improve branding and user experience");
-
+    if(!hasFAQ) tips.push("Add FAQ Schema to boost AI citation by 35%");
+    if(!hasDirectAnswer) tips.push("Add 40-60 word answers under H2 headings for featured snippets");
+    if(!lastModified) tips.push("Add 'Last Updated' date to improve AI freshness score");
+    if(!hasSpeakable) tips.push("Add Speakable schema for voice search optimization");
+    if(!hasArticle) tips.push("Add Article schema for better AI understanding");
+    if(wordCount < 500) tips.push("Increase content to 500+ words for better AEO");
+    if(!hasAuthor) tips.push("Add author byline to improve EEAT and AI trust");
+    if(!hasPrivacyPolicy) tips.push("Add Privacy Policy page to boost AI trust score");
+    if(!hasAboutPage) tips.push("Add About Us page to improve EEAT signals");
+    if (tips.length === 0) tips.push("Your site is well optimized for AI search");
+    
     let aiReport = "";
-
     try {
-      if (typeof getAIReport === "function") {
-        aiReport = await getAIReport({
-          url,
-          title,
-          metaDescription,
-          wordCount,
-          score,
-          aeoScore,
-          hasFAQ,
-          hasDirectAnswer,
-          readabilityScore: readability.score
-        });
-      }
-    } catch (e) {
-      console.error("AI ERROR:", e);
+      aiReport = await getAIReport({ 
+        url, title, h1, metaDescription, score, status, wordCount, issues, tips, keywords, 
+        aeoScore, aeoStatus, schemas, hasFAQ, hasHowTo, hasDirectAnswer, lastModified, 
+        hasArticle, hasSpeakable, readability, hasFacebook, hasLinkedIn, hasYouTube, hasTwitter, 
+        hasEmail, hasPhone, email, phone, hasAuthor, aiExtractedAnswer, citationScores, aeoSimulation 
+      });
+    } catch(e) {
+      aiReport = "AI Report not available";
     }
-
+    
     if (!aiReport || aiReport.includes("not available")) {
       aiReport = `📊 AUTOMATED SEO + AEO ANALYSIS
 
@@ -665,115 +581,47 @@ AI CITATION: ChatGPT ${citationScores.chatGPT}% | Gemini ${citationScores.gemini
 OVERALL AI VISIBILITY: ${overallAIVisibility}/100
 
 ✅ STRENGTHS:
-${title? `• Strong title tag (${title.length} chars)` : ''}
-${h1? `• H1 tag present` : ''}
-${wordCount > 500? `• Good content length (${wordCount} words)` : ''}
-${hasFAQ? `• FAQ Schema detected - AI ready` : ''}
-${hasAuthor? `• Author found - EEAT boost` : ''}
-${isHttps? `• HTTPS secure` : ''}
-${mobileFriendly? `• Mobile optimized` : ''}
+${issues.filter(i => i.includes('No')).map(i => i.replace('No', 'Has')).join('\n')}
 
 ⚠️ ISSUES TO FIX:
-${issues.slice(0, 5).map(i => `• ${i}`).join('\n')}
+${issues.filter(i =>!i.includes('No')).join('\n')}
 
 💡 TOP 3 RECOMMENDATIONS:
-${tips.slice(0, 3).map((t, i) => `${i+1}. ${t}`).join('\n')}
+${tips.slice(0,3).join('\n')}`;
+    }
+    
+    const reportData = {
+      url, title, h1, metaDescription, wordCount, score, status, tips, issues, keywords,
+      internalLinks, externalLinks, totalImages, imagesWithoutAlt, hasOGTags, ogTitle, ogDescription, ogImage,
+      mobileFriendly, isHttps, loadTime, brokenLinks, brokenLinksList, hasSchemaMarkup, robotsExists, sitemapExists,
+      hasCanonical, canonical, hasFavicon, favicon, readabilityScore: readability.score, readabilityStatus: readability.status,
+      hasFacebook, hasLinkedIn, hasYouTube, hasTwitter, hasEmail, hasPhone, email, phone, hasAuthor,
+      aiExtractedAnswer, citationChatGPT: citationScores.chatGPT, citationGemini: citationScores.gemini, citationPerplexity: citationScores.perplexity,
+      aeoSimulation, aeoScore, aeoStatus, schemas, hasFAQ, hasHowTo, hasDirectAnswer, lastModified,
+      hasPrivacyPolicy, hasAboutPage, hasContactPage, aiTrustScore: trustData.score, aiTrustSignals: trustData.signals,
+      featuredSnippetChance: snippetData.chance, snippetReasons: snippetData.reasons,
+      h3Count: structureData.h3Count, listCount: structureData.listCount, tableCount: structureData.tableCount,
+      contentStructureScore: structureData.score, criticalIssues: critical, importantIssues: important, minorIssues: minor,
+      overallAIVisibility, schemaCoverage, aiVisibilityScore: aiVisibilityData.score, aiVisibilityLevel: aiVisibilityData.level,
+      citationSimulator, topicAuthority, answerQuality: answerQualityData.score, answerQualityChecks: answerQualityData.checks,
+      autoFAQ, serpPreview, mobileScore, desktopScore, businessValue, instantFixes, aiReport
+    };
 
-🤖 AI VISIBILITY:
-${aeoScore >= 80? 'Your content is well-optimized for ChatGPT, Perplexity & Gemini' :
-  aeoScore >= 50? 'Add FAQ/HowTo schema to improve AI visibility' :
-  'Content needs structured data to be quoted by AI search engines'}`;
+    const existingReport = await Report.findOne({ url });
+    if (existingReport) {
+      await Report.updateOne({ url }, { $set: reportData });
+    } else {
+      await Report.create(reportData);
     }
 
-    await Report.findOneAndUpdate(
-      { url },
-      {
-        url, title, h1, metaDescription, wordCount, score, status,
-        aeoScore, aeoStatus, schemas, hasFAQ, hasHowTo, hasDirectAnswer,
-        robotsExists, sitemapExists, totalImages, imagesWithoutAlt,
-        hasOGTags, ogTitle, ogDescription, ogImage,
-        mobileFriendly, isHttps, loadTime, brokenLinks, brokenLinksList, hasSchemaMarkup,
-        hasCanonical, canonical, hasFavicon, favicon,
-        readabilityScore: readability.score, readabilityStatus: readability.status,
-        hasFacebook, hasLinkedIn, hasYouTube, hasTwitter,
-        hasEmail, hasPhone, email, phone,
-        hasAuthor, aiExtractedAnswer,
-        citationChatGPT: citationScores.chatGPT,
-        citationGemini: citationScores.gemini,
-        citationPerplexity: citationScores.perplexity,
-        aeoSimulation,
-        hasPrivacyPolicy, hasAboutPage, hasContactPage,
-        aiTrustScore: trustData.score,
-        aiTrustSignals: trustData.signals,
-        featuredSnippetChance: snippetData.chance,
-        snippetReasons: snippetData.reasons,
-        h3Count: structureData.h3Count,
-        listCount: structureData.listCount,
-        tableCount: structureData.tableCount,
-        contentStructureScore: structureData.score,
-        criticalIssues: critical,
-        importantIssues: important,
-        minorIssues: minor,
-        overallAIVisibility: overallAIVisibility,
-        tips, aiReport, issues, keywords, internalLinks, externalLinks,
-        lastModified
-      },
-      { upsert: true, new: true }
-    );
-
-    res.json({
-      url, title, h1, metaDescription, wordCount, score, status,
-      aeoScore, aeoStatus, schemas, hasFAQ, hasHowTo, hasDirectAnswer,
-      lastModified, robotsExists, sitemapExists, totalImages, imagesWithoutAlt,
-      hasOGTags, ogTitle, ogDescription, ogImage,
-      mobileFriendly, isHttps, loadTime, brokenLinks, brokenLinksList, hasSchemaMarkup,
-      hasCanonical, canonical, hasFavicon, favicon,
-      readabilityScore: readability.score, readabilityStatus: readability.status,
-      hasFacebook, hasLinkedIn, hasYouTube, hasTwitter,
-      hasEmail, hasPhone, email, phone,
-      hasAuthor, aiExtractedAnswer,
-      citationChatGPT: citationScores.chatGPT,
-      citationGemini: citationScores.gemini,
-      citationPerplexity: citationScores.perplexity,
-      aeoSimulation,
-      hasPrivacyPolicy, hasAboutPage, hasContactPage,
-      aiTrustScore: trustData.score,
-      aiTrustSignals: trustData.signals,
-      featuredSnippetChance: snippetData.chance,
-      snippetReasons: snippetData.reasons,
-      h1Count: 1,
-      h2Count: h2,
-      h3Count: structureData.h3Count,
-      listCount: structureData.listCount,
-      tableCount: structureData.tableCount,
-      contentStructureScore: structureData.score,
-      criticalIssues: critical,
-      importantIssues: important,
-      minorIssues: minor,
-      overallAIVisibility: overallAIVisibility,
-      tips, aiReport, issues, keywords, internalLinks, externalLinks
-    });
-
-  } catch (error) {
-    console.error("Analyze Error:", error);
-    if(error.code === 'ECONNABORTED'){
-      return res.json({ error: "Website took too long to respond. Timeout 15s" });
-    }
-    if(error.response?.status === 404){
-      return res.json({ error: "URL not found - 404" });
-    }
-    if(error.response?.status === 403){
-      return res.json({ error: "Website blocked the request - 403 Forbidden" });
-    }
-    res.json({ error: "Failed to analyze: " + error.message });
+    res.json(reportData);
+  } catch (err) {
+    res.json({ error: err.message });
   }
 });
 
+// ---------------- HISTORY ROUTE ----------------
 app.get("/history", async (req, res) => {
-  try {
-    const data = await Report.find().sort({ createdAt: -1 }).limit(50);
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: "History fetch failed" });
-  }
+  const data = await Report.find().sort({ createdAt: -1 }).limit(10);
+  res.json(data);
 });

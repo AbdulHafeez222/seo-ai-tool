@@ -131,17 +131,17 @@ h3 {
 }
 .dark .card {
   background: #1e293b;
-  color: #ffffff;
+  color: #f1f5f9;
   border: 1px solid #334155;
 }
 .dark .ai-box {
-  background: #0f172a;
-  color: #e2e8f0;
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
   border: 1px solid #334155;
 }
 .dark input {
   background: #1e293b;
-  color: white;
+  color: #f1f5f9;
   border: 1px solid #334155;
 }
 .dark .centerScore span {
@@ -168,6 +168,7 @@ td {
 }
 .dark td {
   border-bottom-color: #334155;
+  color: #e2e8f0;
 }
 details summary {
   cursor: pointer;
@@ -199,6 +200,77 @@ details summary {
 .dark .metric-box {
   background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 100%);
 }
+
+/* ========== DARK MODE FIXES ========== */
+.dark #aiSimulationText {
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
+  border-left: 3px solid #667eea !important;
+}
+.dark #aeoSignalsList div {
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
+  border: 1px solid #334155;
+}
+.dark #citationReasonsList {
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
+}
+.dark #fixSuggestionsList div {
+  background: #451a03 !important;
+  color: #f1f5f9 !important;
+  border-left: 4px solid #f59e0b !important;
+}
+.dark #fixSuggestionsList pre {
+  background: #020617 !important;
+  color: #e2e8f0 !important;
+}
+.dark .ai-box[style*="background: white"] {
+  background: #0f172a !important;
+  border: 1px solid #334155 !important;
+  color: #e2e8f0 !important;
+}
+.dark .ai-box[style*="background: white"] div {
+  color: #e2e8f0 !important;
+}
+.dark .ai-box[style*="background: white"] div[style*="color: #1a0dab"] {
+  color: #60a5fa !important;
+}
+.dark .ai-box[style*="background: white"] div[style*="color: #006621"] {
+  color: #4ade80 !important;
+}
+.dark .ai-box[style*="background: white"] div[style*="color: #545454"] {
+  color: #94a3b8 !important;
+}
+.dark .ai-box[style*="background: #fee2e2"] {
+  background: #7f1d1d !important;
+  border-left: 4px solid #dc2626 !important;
+  color: #fecaca !important;
+}
+.dark .ai-box[style*="background: #ffedd5"] {
+  background: #7c2d12 !important;
+  border-left: 4px solid #f97316 !important;
+  color: #fed7aa !important;
+}
+.dark .ai-box[style*="background: #fef3c7"] {
+  background: #78350f !important;
+  border-left: 4px solid #f59e0b !important;
+  color: #fde68a !important;
+}
+.dark .ai-box[style*="background: #dbeafe"] {
+  background: #1e3a8a !important;
+  border-left: 4px solid #3b82f6 !important;
+  color: #bfdbfe !important;
+}
+.dark p {
+  color: #cbd5e1;
+}
+.dark small {
+  color: #94a3b8 !important;
+}
+.dark .score-display div:last-child {
+  color: #94a3b8 !important;
+}
 </style>
 </head>
 <body>
@@ -224,9 +296,9 @@ details summary {
   </div>
 
   <!-- 🚀 AI Search Simulation - USP FEATURE -->
-  <div id="aiSimulationCard" class="card" style="display:none; border-left: 5px solid #ff6b6b;">
+  <div id="aiSimulationCard" class="card" style="display:none; border-left: 5px solid #ff6b;">
     <h3>🤖 AI Search Simulation</h3>
-    <p style="color: #666; font-size: 14px; margin-bottom: 15px;">ChatGPT/Gemini tumhari site ko kaise quote karenge:</p>
+    <p style="font-size: 14px; margin-bottom: 15px; opacity: 0.8;">ChatGPT/Gemini tumhari site ko kaise quote karenge:</p>
     <div id="aiSimulationText" style="background: #f8f9fa; padding: 15px; border-radius: 8px; font-style: italic; border-left: 3px solid #667eea;">
       Loading...
     </div>
@@ -245,7 +317,7 @@ details summary {
   <!-- 🚀 Auto SEO Fix Suggestions -->
   <div id="fixSuggestionsCard" class="card" style="display:none;">
     <h3>🔧 Auto SEO Fix Suggestions</h3>
-    <p style="color: #666; font-size: 14px;">Copy-paste ready code fixes:</p>
+    <p style="font-size: 14px; opacity: 0.8;">Copy-paste ready code fixes:</p>
     <div id="fixSuggestionsList"></div>
   </div>
 
@@ -265,6 +337,7 @@ details summary {
         <div class="metric-value" id="realPerplexity">0%</div>
         <div class="metric-label">Perplexity</div>
       </div>
+    </div>
     <div id="citationReasonsList" style="margin-top: 15px; font-size: 13px; padding: 10px; background: #f0f0f0; border-radius: 5px;"></div>
   </div>
   
@@ -526,7 +599,7 @@ async function scan() {
         <p><b>Internal Links:</b> ${data.internalLinks} | <b>External Links:</b> ${data.externalLinks}</p>
         <p><b>Mobile Friendly:</b> ${data.mobileFriendly? '<span class="badge badge-green">✅ Optimized</span>' : '<span class="badge badge-red">❌ Not Optimized</span>'}</p>
         <p><b>HTTPS:</b> ${data.isHttps? '<span class="badge badge-green">✅ Secure</span>' : '<span class="badge badge-red">❌ Not Secure</span>'}</p>
-        <p><b>Load Time:</b> ${data.loadTime}ms ${data.loadTime < 3000? '<span class="badge badge-green">✅ Fast</span>' : '<span class="badge badge-red">⚠️ Slow</span>'}</p>
+               <p><b>Load Time:</b> ${data.loadTime}ms ${data.loadTime < 3000? '<span class="badge badge-green">✅ Fast</span>' : '<span class="badge badge-red">⚠️ Slow</span>'}</p>
         <p><b>Broken Links:</b> ${data.brokenLinks === 0? '<span class="badge badge-green">✅ None</span>' : `<span class="badge badge-red">❌ ${data.brokenLinks} Found</span>`}</p>
         <p><b>Schema Markup:</b> ${data.hasSchemaMarkup? '<span class="badge badge-green">✅ Present</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
         <p><b>Robots.txt:</b> ${data.robotsExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
@@ -563,8 +636,9 @@ async function scan() {
         <ul>${(data.keywords || []).map(k => `<li>${k}</li>`).join("") || '<li>No keywords found</li>'}</ul>
         
         <h3>💡 SEO Tips</h3>
-         <ul>${(data.tips || []).map(t => `<li>${t}</li>`).join("")}</ul>
-          <h3>🚨 Priority Fixes</h3>
+        <ul>${(data.tips || []).map(t => `<li>${t}</li>`).join("")}</ul>
+        
+        <h3>🚨 Priority Fixes</h3>
         ${data.criticalIssues && data.criticalIssues.length > 0 ? `
         <div class="ai-box" style="background: #fee2e2; border-left: 4px solid #dc2626;">
           <b style="color: #991b1b;">🔴 Critical:</b>

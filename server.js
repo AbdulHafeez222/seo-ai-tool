@@ -16,9 +16,9 @@ app.use(express.static("."));
 // ========== HELPER FUNCTIONS ==========
 function extractDomain(url) {
   try {
-    return new URL(url).hostname.replace('www.', '');
+    return new URL(url).hostname.replace("www.", "");
   } catch {
-    return '';
+    return "";
   }
 }
 
@@ -681,13 +681,37 @@ async function analyzeSingleUrl(url) {
 }
 
 // ========== API ENDPOINTS ==========
+const scanHistory = [];
 app.get("/analyze", async (req, res) => {
   const url = req.query.url;
-  if (!url) return res.status(400).json({ error: "URL required" });
+  const competitor = req.query.competitor;
+
+  if (!url || !competitor) {
+    return res.status(400).json({ error: "Both URL and competitor required" });
+  }
 
   try {
-    const data = await analyzeSingleUrl(url);
-    res.json(data);
+    const [userData, compData] = await Promise.all([
+      analyzeSingleUrl(url.startsWith('http') ? url : 'https://' + url),
+      analyzeSingleUrl(competitor.startsWith('http') ? competitor : 'https://' + competitor)
+    ]);
+
+    const yourKeywords = new Set(userData.keywords || []);
+    const compKeywords = compData.keywords || [];
+
+    const missing = compKeywords.filter(k => !yourKeywords.has(k));
+    const shared = compKeywords.filter(k => yourKeywords.has(k));
+
+    res.json({
+      yourUrl: userData.url,
+      competitorUrl: compData.url,
+      topCompetitorKeywords: compKeywords.slice(0, 15),
+      yourKeywords: userData.keywords.slice(0, 10),
+      missingKeywords: missing.slice(0, 10),
+      sharedKeywords: shared.slice(0, 5),
+      opportunity: `${missing.length} keywords you can target`
+    });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

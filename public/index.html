@@ -418,7 +418,7 @@ async function scan() {
   });
   
   try {
-    const res = await fetch(`${API_BASE}/analyze?url=${encodeURIComponent(url)}`);
+    const res = await fetch(`/scan?url=${encodeURIComponent(url)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
     
@@ -729,7 +729,7 @@ async function scan() {
 
 async function loadHistory() {
   try {
-    const res = await fetch(`${API_BASE}/history`);
+const res = await fetch(`/history`);
     const data = await res.json();
     document.getElementById("result").innerHTML = `
       <h3>📊 Scan History</h3>
@@ -825,8 +825,7 @@ async function generateRoadmap() {
   if (!url) return alert("Enter URL first");
 
   document.getElementById("loading").style.display = "block";
-  try {
-    const res = await fetch(`${API_BASE}/roadmap?url=${encodeURIComponent(url)}`);
+  try {const res = await fetch(`/roadmap?url=${encodeURIComponent(url)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
 
@@ -869,7 +868,7 @@ async function gapAnalysis() {
 
   document.getElementById("loading").style.display = "block";
   try {
-    const res = await fetch(`${API_BASE}/gap-analysis?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
+    const res = await fetch(`/gap-analysis?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
 
@@ -895,7 +894,7 @@ async function keywordTheft() {
 
   document.getElementById("loading").style.display = "block";
   try {
-    const res = await fetch(`${API_BASE}/keyword-theft?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
+    const res = await fetch(`/keyword-theft?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
 
@@ -931,7 +930,7 @@ async function contentBrief() {
 
   document.getElementById("loading").style.display = "block";
   try {
-    const res = await fetch(`${API_BASE}/content-brief?keyword=${encodeURIComponent(keyword)}`);
+   const res = await fetch(`/content-brief?keyword=${encodeURIComponent(keyword)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
 

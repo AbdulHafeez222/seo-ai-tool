@@ -753,12 +753,8 @@ app.use((err, req, res, next) => {
     fallback: true
   });
 });
-
-// ONLY ONE LISTEN - AT THE VERY END
-app.listen(PORT, () => {
-  console.log(`🚀 AI Visibility Platform running on port ${PORT}`);
-  console.log(`📊 Features: Rule-based SEO/AEO Analysis | AI: WAITING MODE`);
-});  const metaDates = {
+function extractDates($) {
+  const metaDates = {
     published: $('meta[property="article:published_time"]').attr('content') ||
                $('meta[name="date"]').attr('content') ||
                $('time[datetime]').attr('datetime'),
@@ -767,13 +763,14 @@ app.listen(PORT, () => {
     updated: $('.updated,.last-updated, [class*="update"]').first().text()
   };
 
-  return {
+
     published: metaDates.published? new Date(metaDates.published) : null,
     modified: metaDates.modified? new Date(metaDates.modified) : null,
     raw: metaDates
   };
 }
 
+  return {
 function analyzeInternalLinks($, baseUrl) {
   const links = [];
   const baseDomain = extractDomain(baseUrl);

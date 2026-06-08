@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>SEO + AEO AI Tool</title>
+  <title>SEO + AEO Tool - Rule Based</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -46,6 +46,10 @@ button {
 }
 button:hover {
   background: #1d4ed8;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .card {
   text-align: left;
@@ -200,8 +204,6 @@ details summary {
 .dark .metric-box {
   background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 100%);
 }
-
-/* ========== DARK MODE FIXES ========== */
 .dark #aiSimulationText {
   background: #0f172a !important;
   color: #e2e8f0 !important;
@@ -276,6 +278,9 @@ details summary {
 <body>
 <div class="box">
   <h2>🚀 AI Visibility Intelligence Platform</h2>
+  <div style="background:#fef3c7;padding:10px;border-radius:8px;margin:10px 0;font-size:13px;">
+    ⚠️ AI temporarily disabled - Running in Rule-Based Mode
+  </div>
   <button onclick="toggleDarkMode()">🌙 Dark Mode</button>
   <input id="url" placeholder="Enter website URL" value="hafeezdigitalstudio.com">
   <br>
@@ -291,8 +296,8 @@ details summary {
   <button onclick="generateRoadmap()">🗺️ AI Roadmap</button>
   <button onclick="gapAnalysis()">🔍 Gap Analysis</button>
   <button onclick="keywordTheft()">💎 Keyword Theft</button>
-  <button onclick="contentBrief()">📝 Content Brief</button>
-  <div class="loading" id="loading">⏳ Scanning... Please wait</div>
+  <button onclick="contentBrief()" disabled>📝 Content Brief (AI Off)</button>
+  <div class="loading" id="loading">⏳ Analyzing... 2-3 sec</div>
   
   <div class="chartContainer">
     <div class="chartBox">
@@ -305,16 +310,14 @@ details summary {
     </div>
   </div>
 
-  <!-- AI Search Simulation -->
   <div id="aiSimulationCard" class="card" style="display:none; border-left: 5px solid #ff6b;">
     <h3>🤖 AI Search Simulation</h3>
-    <p style="font-size: 14px; margin-bottom: 15px; opacity: 0.8;">ChatGPT/Gemini tumhari site ko kaise quote karenge:</p>
+    <p style="font-size: 14px; margin-bottom: 15px; opacity: 0.8;">⚠️ AI temporarily disabled - Showing rule-based preview</p>
     <div id="aiSimulationText" style="background: #f8f9fa; padding: 15px; border-radius: 8px; font-style: italic; border-left: 3px solid #667eea;">
       Loading...
     </div>
   </div>
 
-  <!-- Real AEO Readiness Score -->
   <div id="aeoReadinessCard" class="card" style="display:none;">
     <h3>🎯 Real AEO Readiness Score</h3>
     <div class="score-display" style="text-align: center; margin: 15px 0;">
@@ -324,14 +327,12 @@ details summary {
     <div id="aeoSignalsList" style="margin-top: 15px;"></div>
   </div>
 
-  <!-- Auto SEO Fix Suggestions -->
   <div id="fixSuggestionsCard" class="card" style="display:none;">
     <h3>🔧 Auto SEO Fix Suggestions</h3>
     <p style="font-size: 14px; opacity: 0.8;">Copy-paste ready code fixes:</p>
     <div id="fixSuggestionsList"></div>
   </div>
 
-  <!-- Real AI Citation Scores -->
   <div id="realCitationCard" class="card" style="display:none;">
     <h3>📊 True AI Citation Probability</h3>
     <div class="grid-3">
@@ -351,14 +352,12 @@ details summary {
     <div id="citationReasonsList" style="margin-top: 15px; font-size: 13px; padding: 10px; background: #f0f0f0; border-radius: 5px;"></div>
   </div>
 
-  <!-- Competitor Comparison Card -->
   <div id="competitorCard" class="card" style="display:none;">
     <h3>⚔️ Competitor Comparison</h3>
     <canvas id="comparisonChart" style="max-height: 300px;"></canvas>
     <div id="comparisonDetails"></div>
   </div>
 
-  <!-- Gap Analysis Card -->
   <div id="gapCard" class="card" style="display:none;">
     <h3>🔍 AI Citation Gap Finder</h3>
     <div class="grid-3">
@@ -377,7 +376,6 @@ details summary {
     </div>
   </div>
 
-  <!-- Roadmap Card -->
   <div id="roadmapCard" class="card" style="display:none;">
     <h3>🗺️ AI Visibility Roadmap</h3>
     <div style="text-align: center; margin: 15px 0;">
@@ -389,13 +387,11 @@ details summary {
     <div id="roadmapSteps"></div>
   </div>
 
-  <!-- Keyword Theft Card -->
   <div id="keywordTheftCard" class="card" style="display:none;">
     <h3>💎 Competitor Keyword Theft</h3>
     <div id="keywordTheftResults"></div>
   </div>
 
-  <!-- Content Brief Card -->
   <div id="briefCard" class="card" style="display:none;">
     <h3>📝 AI Content Brief Generator</h3>
     <div id="briefResults"></div>
@@ -431,7 +427,6 @@ async function scan() {
       return;
     }
 
-    // SEO Chart
     let seoColor = data.score >= 80 ? "#16a34a" : data.score >= 50 ? "#f97316" : "#dc2626";
     if (seoChart) seoChart.destroy();
     seoChart = new Chart(document.getElementById("seoChart"), {
@@ -455,7 +450,6 @@ async function scan() {
     document.getElementById("seoScore").innerHTML = `${data.score}<span>SEO ${seoGrade}</span>`;
     document.getElementById("seoScore").style.color = seoColor;
 
-    // AEO Chart
     let aeoColor = data.aeoScore >= 80 ? "#16a34a" : data.aeoScore >= 50 ? "#f97316" : "#dc2626";
     if (aeoChart) aeoChart.destroy();
     aeoChart = new Chart(document.getElementById("aeoChart"), {
@@ -479,10 +473,9 @@ async function scan() {
     document.getElementById("aeoScore").innerHTML = `${data.aeoScore}<span>AEO ${aeoGrade}</span>`;
     document.getElementById("aeoScore").style.color = aeoColor;
 
-    // NEW UPGRADE FIELDS DISPLAY
     if (data.aiSearchSimulation) {
       document.getElementById('aiSimulationCard').style.display = 'block';
-      document.getElementById('aiSimulationText').textContent = data.aiSearchSimulation;
+      document.getElementById('aiSimulationText').textContent = data.aiSearchSimulation.answer || data.aiSearchSimulation;
     }
 
     if (data.aeoReadiness) {
@@ -654,7 +647,7 @@ async function scan() {
         
         <h3>🔍 SEO Status</h3>
         <p><b>SEO Score:</b> ${data.score}/100 <span class="badge badge-${data.score >= 80 ? 'green' : data.score >= 50 ? 'orange' : 'red'}">${data.status}</span></p>
-                <p><b>Images:</b> ${data.totalImages} total, ${data.imagesWithoutAlt} missing ALT text ${data.imagesWithoutAlt > 0 ? '<span class="badge badge-red">⚠️ Fix Needed</span>' : '<span class="badge badge-green">✅ Perfect</span>'}</p>
+        <p><b>Images:</b> ${data.totalImages} total, ${data.imagesWithoutAlt} missing ALT text ${data.imagesWithoutAlt > 0 ? '<span class="badge badge-red">⚠️ Fix Needed</span>' : '<span class="badge badge-green">✅ Perfect</span>'}</p>
         <p><b>Internal Links:</b> ${data.internalLinks} | <b>External Links:</b> ${data.externalLinks}</p>
         <p><b>Mobile Friendly:</b> ${data.mobileFriendly? '<span class="badge badge-green">✅ Optimized</span>' : '<span class="badge badge-red">❌ Not Optimized</span>'}</p>
         <p><b>HTTPS:</b> ${data.isHttps? '<span class="badge badge-green">✅ Secure</span>' : '<span class="badge badge-red">❌ Not Secure</span>'}</p>
@@ -719,10 +712,10 @@ async function scan() {
         </div>
         ` : ''}
         
-        <h3>⚡ Instant Fix Suggestions</h3>
-        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-          ${data.instantFixes?.map(f => `<button style="background:#10b981;font-size:12px;padding:8px 12px;">${f}</button>`).join('') || 'No fixes needed'}
-        </div>
+    <h3>⚡ Instant Fix Suggestions</h3>
+<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+  ${data.instantFixes?.map(f => `<button style="background:#10b981;font-size:12px;padding:8px 12px;">${f}</button>`).join('') || 'No fixes needed'}
+</div>
         
         <h3>🤖 AI Report</h3>
         <div class="ai-box" style="white-space: pre-wrap;">${data.aiReport || "No AI Report"}</div>
@@ -743,14 +736,14 @@ async function loadHistory() {
       ${data.map(item => `
         <div class="card">
           <p><b>URL:</b> ${item.url}</p>
-          <p><b>AI Visibility:</b> ${item.aiVisibilityScore || 0}/100 (${item.aiVisibilityLevel})</p>
-          <p><b>SEO Score:</b> ${item.score} | <b>AEO Score:</b> ${item.aeoScore || 0} | <b>Trust:</b> ${item.aiTrustScore || 0}/100</p>
+          <p><b>AI Visibility:</b> ${item.aiVisibilityScore || 0}/100</p>
+          <p><b>SEO Score:</b> ${item.seoScore} | <b>AEO Score:</b> ${item.aeoScore || 0} | <b>Trust:</b> ${item.aiTrustScore || 0}/100</p>
           <p><b>Overall AI Visibility:</b> ${item.overallAIVisibility || 0}/100 | <b>Readability:</b> ${item.readabilityScore || 0}/100</p>
           <p><b>AI Citation:</b> ChatGPT ${item.citationChatGPT || 0}% | Gemini ${item.citationGemini || 0}% | Perplexity ${item.citationPerplexity || 0}%</p>
           <p><b>Featured Snippet:</b> ${item.featuredSnippetChance || 0}% | <b>Structure:</b> ${item.contentStructureScore || 0}/100</p>
           <p><b>Answer Quality:</b> ${item.answerQuality || 0}/100 | <b>Mobile:</b> ${item.mobileScore || 0} | <b>Desktop:</b> ${item.desktopScore || 0}</p>
           <p><b>AEO Readiness:</b> ${item.aeoReadiness || 0}/100</p>
-          <p><b>Scanned:</b> ${new Date(item.createdAt).toLocaleString()}</p>
+          <p><b>Scanned:</b> ${new Date(item.timestamp).toLocaleString()}</p>
         </div>
       `).join("")}
     `;
@@ -774,16 +767,6 @@ function downloadPDF() {
 
 function toggleDarkMode() {
   document.body.classList.toggle("dark");
-}
-
-function getBrandName(url) {
-  try {
-    const domain = new URL(url).hostname.replace('www.', '');
-    const brand = domain.split('.')[0];
-    return brand.charAt(0).toUpperCase() + brand.slice(1);
-  } catch {
-    return 'Unknown';
-  }
 }
 
 async function compareCompetitor() {
@@ -829,7 +812,7 @@ async function compareCompetitor() {
           </tr>
         `).join('')}
       </table>
-      <p style="margin-top: 10px;"><b>Winner:</b> ${getBrandName(data.winner.url)} (${data.winner.aiVisibilityScore}/100)</p>
+      <p style="margin-top: 10px;"><b>Winner:</b> ${data.winner.brand} (${data.winner.aiVisibilityScore}/100)</p>
     `;
   } catch (err) {
     document.getElementById("loading").style.display = "none";
@@ -862,6 +845,7 @@ async function generateRoadmap() {
             <div style="color: #16a34a; font-weight: 600;">${r.impact}</div>
             <div style="opacity: 0.7;">${r.effort}</div>
           </div>
+        </div>
         <p style="margin: 8px 0 0 0; font-size: 13px; opacity: 0.9;">${r.why}</p>
         <details style="margin-top: 8px;">
           <summary style="cursor: pointer; font-size: 12px; color: #2563eb;">Show Code</summary>
@@ -930,6 +914,7 @@ async function keywordTheft() {
           <h4>✅ Shared Keywords:</h4>
           ${data.sharedKeywords.map(k => `<span class="badge badge-green" style="margin: 2px;">${k}</span>`).join('')}
         </div>
+      </div>
       <p style="margin-top: 15px; text-align: center; font-weight: 600; color: #16a34a;">
         ${data.opportunity}
       </p>
@@ -958,6 +943,7 @@ async function contentBrief() {
       <h4>FAQs:</h4>
       ${data.faqs.map(f => `<p><b>Q: ${f.q}</b><br>A: ${f.a}</p>`).join('')}
       <p><b>Recommended Schema:</b> ${data.schemaType}</p>
+      ${data.note ? `<p style="color:#f59e0b;font-size:13px;"><b>Note:</b> ${data.note}</p>` : ''}
       <button onclick="navigator.clipboard.writeText(JSON.stringify(${JSON.stringify(data).replace(/"/g, '&quot;')}, null, 2))" style="margin-top: 10px;">
         📋 Copy Brief as JSON
       </button>

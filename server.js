@@ -763,14 +763,12 @@ function extractDates($) {
     updated: $('.updated,.last-updated, [class*="update"]').first().text()
   };
 
-
+  return {
     published: metaDates.published? new Date(metaDates.published) : null,
     modified: metaDates.modified? new Date(metaDates.modified) : null,
     raw: metaDates
   };
 }
-
-  return {
 function analyzeInternalLinks($, baseUrl) {
   const links = [];
   const baseDomain = extractDomain(baseUrl);

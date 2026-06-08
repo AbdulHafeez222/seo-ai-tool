@@ -775,8 +775,8 @@ async function compareCompetitor() {
   if (!url || !comp) return alert("Enter both URLs");
 
   document.getElementById("loading").style.display = "block";
-  try {
-    const res = await fetch(`${API_BASE}/compare?urls=${encodeURIComponent(url)},${encodeURIComponent(comp)}`);
+  try{ 
+  const res = await fetch(`${API_BASE}/scan?url=${encodeURIComponent(url)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
 

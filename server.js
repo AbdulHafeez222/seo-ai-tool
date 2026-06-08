@@ -681,7 +681,6 @@ async function analyzeSingleUrl(url) {
 }
 
 // ========== API ENDPOINTS ==========
-const scanHistory = [];
 app.get("/analyze", async (req, res) => {
   const url = req.query.url;
   const competitor = req.query.competitor;

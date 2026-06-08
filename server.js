@@ -578,7 +578,7 @@ if (!hasAuthor) {
   aiReport += `• Add author information to improve EEAT\n`;
 }
 
-if (!hasLastModified) {
+if (!lastModified) {
   aiReport += `• Add Last Updated date\n`;
 }
 

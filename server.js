@@ -5,6 +5,7 @@ import { getAISearchSimulation } from "./aiService.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+const scanHistory = [];
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
 app.use(cors());
@@ -980,7 +981,7 @@ app.get("/keyword-theft", async (req, res) => {
 });
 
 // History endpoint (in-memory for now)
-const scanHistory = [];
+
 
 app.get("/history", (req, res) => {
   res.json(scanHistory.slice(-20).reverse());

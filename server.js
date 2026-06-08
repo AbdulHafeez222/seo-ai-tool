@@ -805,21 +805,6 @@ function analyzeInternalLinks($, baseUrl) {
   };
 }
 
-function extractKeywordsFromContent(text, topN = 10) {
-  const words = text.toLowerCase()
-  .replace(/[^\w\s]/g, ' ')
-  .split(/\s+/)
-  .filter(w => w.length > 4 &&!['about', 'https', 'website', 'click', 'here'].includes(w));
-
-  const freq = {};
-  words.forEach(w => freq[w] = (freq[w] || 0) + 1);
-
-  return Object.entries(freq)
-  .sort((a, b) => b[1] - a[1])
-  .slice(0, topN)
-  .map(([word]) => word);
-}
-
 function calculateEEATScore($, data) {
   let score = 0;
   const signals = [];

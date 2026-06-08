@@ -776,7 +776,7 @@ async function compareCompetitor() {
 
   document.getElementById("loading").style.display = "block";
   try{ 
-  const res = await fetch(`${API_BASE}/scan?url=${encodeURIComponent(url)}`);
+ const res = await fetch(`/scan?url=${encodeURIComponent(url)}`)
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
 

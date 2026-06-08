@@ -11,7 +11,7 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 app.use(cors());
 app.use(express.json());
 app.use(express.static("."));
-
+app.use(express.static("public"));
 
 
 // ========== HELPER FUNCTIONS ==========

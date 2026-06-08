@@ -59,7 +59,9 @@ function extractKeywordsFromContent(text, topN = 10) {
   const words = text.toLowerCase()
    .replace(/[^\w\s]/g, ' ')
    .split(/\s+/)
-   .filter(w => w.length > 4 &&!['about', 'https', 'website', 'click', 'here', 'their', 'there', 'which', 'would'].includes(w));
+   .filter(w => w.length > 4 && 
+     !['about', 'https', 'website', 'click', 'here', 'their', 'there', 'which', 'would',
+       'function', 'return', 'const', 'document', 'window', 'typeof', 'undefined'].includes(w)); // Ye line add karo
 
   const freq = {};
   words.forEach(w => freq[w] = (freq[w] || 0) + 1);
@@ -69,7 +71,6 @@ function extractKeywordsFromContent(text, topN = 10) {
    .slice(0, topN)
    .map(([word]) => word);
 }
-
 // ========== MAIN ANALYZE - CRASH PROOF ==========
 async function analyzeSingleUrl(url) {
   // STEP 1: SAFE DEFAULTS - NEVER UNDEFINED
@@ -134,12 +135,13 @@ async function analyzeSingleUrl(url) {
     if (!html) throw new Error("Empty HTML response");
 
     $ = cheerio.load(html);
-
+$('script, style, nav, footer, header, noscript, svg').remove();
     // STEP 3: SAFE EXTRACTION - EVERYTHING IN TRY-CATCH
     try { title = $("title").text().trim(); } catch {}
     try { h1 = $("h1").first().text().trim(); } catch {}
     try { metaDescription = $('meta[name="description"]').attr("content") || ""; } catch {}
-    try { bodyText = $("body").text().replace(/\s+/g, " ").trim(); } catch {}
+try { bodyText = $("p, li, h2, h3, h4, td").text().replace(/\s+/g, " ").trim(); 
+} catch {}
     try { wordCount = bodyText.split(/\s+/).filter(Boolean).length; } catch {}
 
     const brandName = getBrandName(url);
@@ -399,7 +401,6 @@ async function analyzeSingleUrl(url) {
     h3Count: h3Count || 0,
     listCount: listCount || 0,
     tableCount: tableCount || 0,
-    overallAIVisibility: Math.round((seoScore * 0.2) + (aeoScore * 0.2) + (aiTrustScore * 0.2) + (citationChatGPT * 0.4)),
     citationChatGPT: citationChatGPT || 0,
     citationGemini: citationGemini || 0,
     citationPerplexity: citationPerplexity || 0,

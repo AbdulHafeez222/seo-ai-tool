@@ -470,6 +470,7 @@ async function analyzeSingleUrl(url) {
     (seoScore * 0.2) +
     (aeoScore * 0.2) +
     (aiTrustScore * 0.2) +
+    
     (Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3) * 0.4)
   );
 
@@ -559,6 +560,43 @@ async function analyzeSingleUrl(url) {
   if (hasFAQ) aiReport += `• FAQ schema for AI citations\n`;
   if (hasAuthor) aiReport += `• Author attribution (EEAT)\n`;
   if (mobileViewport) aiReport += `• Mobile friendly\n`;
+  aiReport += `\nRecommendations:\n`;
+
+if (!hasFAQ) {
+  aiReport += `• Add FAQ Schema to increase ChatGPT citations\n`;
+}
+
+if (!hasHowTo) {
+  aiReport += `• Add HowTo Schema for AI answer extraction\n`;
+}
+
+if (!hasSchemaMarkup) {
+  aiReport += `• Add Schema.org markup\n`;
+}
+
+if (!hasAuthor) {
+  aiReport += `• Add author information to improve EEAT\n`;
+}
+
+if (!hasLastModified) {
+  aiReport += `• Add Last Updated date\n`;
+}
+
+if (readabilityScore < 60) {
+  aiReport += `• Improve readability with shorter sentences\n`;
+}
+
+if (!privacyPolicyFound) {
+  aiReport += `• Add Privacy Policy page\n`;
+}
+
+if (!aboutPageFound) {
+  aiReport += `• Add About Us page\n`;
+}
+
+if (!contactPageFound) {
+  aiReport += `• Add Contact page\n`;
+}
 
   // Citation Simulator
   const citationSimulator = hasFAQ

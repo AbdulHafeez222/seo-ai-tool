@@ -660,64 +660,28 @@ async function analyzeSingleUrl(url) {
 // ========== API ENDPOINTS ==========
 app.get("/analyze", async (req, res) => {
   const url = req.query.url;
-  const competitor = req.query.competitor;
-
-  if (!url ||!competitor) {
-    return res.status(400).json({ error: "Both URL and competitor required" });
-  }
+  if (!url) return res.status(400).json({ error: "URL required" });
 
   try {
-    const [userData, compData] = await Promise.all([
-      analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url),
-      analyzeSingleUrl(competitor.startsWith('http')? competitor : 'https://' + competitor)
-    ]);
-
-    const yourKeywords = new Set(userData.keywords || []);
-    const compKeywords = compData.keywords || [];
-
-    const missing = compKeywords.filter(k =>!yourKeywords.has(k));
-    const shared = compKeywords.filter(k => yourKeywords.has(k));
-
-    res.json({
-      yourUrl: userData.url,
-      competitorUrl: compData.url,
-      topCompetitorKeywords: compKeywords.slice(0, 15),
-      yourKeywords: userData.keywords.slice(0, 10),
-      missingKeywords: missing.slice(0, 10),
-      sharedKeywords: shared.slice(0, 5),
-      opportunity: `${missing.length} keywords you can target`
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/compare", async (req, res) => {
-  const urls = req.query.urls? req.query.urls.split(',') : [];
-  if (urls.length < 2) return res.status(400).json({ error: "At least 2 URLs required" });
-
-  try {
-    const results = await Promise.all(
-      urls.map(u => analyzeSingleUrl(u.startsWith('http')? u : 'https://' + u))
-    );
-
-    const comparison = {
-      sites: results.map(r => ({
-        url: r.url,
-        brand: getBrandName(r.url),
-        aiVisibilityScore: r.aiVisibilityScore,
-        seoScore: r.score,
-        aeoScore: r.aeoScore,
-        eeatScore: r.aiTrustScore,
-        freshnessScore: r.freshnessScore || 0
-      })),
-      winner: results.reduce((prev, curr) =>
-        curr.aiVisibilityScore > prev.aiVisibilityScore? curr : prev
-      )
+    const data = await analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url);
+    
+    // AI WAITING MODE
+    data.aiSearchSimulation = {
+      query: "Processing with AI...",
+      answer: "AI analysis queued. Showing rule-based results. Full AI insights will be available soon.",
+      sources: ["Rule-based Engine"],
+      status: "waiting"
     };
 
-    res.json(comparison);
+    scanHistory.push({
+      url: data.url,
+      timestamp: new Date().toISOString(),
+      seoScore: data.score,
+      aeoScore: data.aeoScore,
+      aiVisibilityScore: data.aiVisibilityScore
+    });
+
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -897,27 +861,32 @@ app.get("/roadmap", async (req, res) => {
 app.get("/content-brief", async (req, res) => {
   const keyword = req.query.keyword;
   if (!keyword) return res.status(400).json({ error: "Keyword required" });
-
-  // ❌ AI DISABLED - RETURN STATIC BRIEF
+    // AI WAITING MODE - ye line add karo
+    data.aiSearchSimulation = {
+      query: "Processing with AI...",
+      answer: "AI analysis queued. Showing rule-based results. Full AI insights will be available soon.",
+      sources: ["Rule-based Engine"],
+      status: "waiting"
+    };
+  
   res.json({
     h1: `Complete Guide: ${keyword}`,
     h2s: [
       `What is ${keyword}?`,
-      `Why ${keyword} Matters in 2024`,
+      `Why ${keyword} Matters in 2026`,
       `How to Implement ${keyword}`,
       `${keyword} Best Practices`,
       `Common ${keyword} Mistakes to Avoid`
     ],
     faqs: [
-      { q: `What is ${keyword}?`, a: `${keyword} is...` },
+      { q: `What is ${keyword}?`, a: `${keyword} refers to...` },
       { q: `How does ${keyword} work?`, a: `${keyword} works by...` },
       { q: `Why is ${keyword} important?`, a: `${keyword} is important because...` }
     ],
     schemaType: "Article",
-    note: "AI temporarily disabled. Enable API for dynamic briefs."
+    note: "AI analysis in queue. Showing scripted brief. Enable API for dynamic briefs.",
+    status: "waiting"
   });
-});
-
 app.get("/keyword-theft", async (req, res) => {
   const { url, competitor } = req.query;
   if (!url ||!competitor) return res.status(400).json({ error: "Both URL and competitor required" });

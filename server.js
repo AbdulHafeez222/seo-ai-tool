@@ -182,19 +182,38 @@ try { h1Text = $("h1").first().text(); } catch {}
 try { h2Texts = $("h2").map((i,el)=>$(el).text()).get().join(' '); } catch {}
 const headings = h1Text + ' ' + h2Texts;
 
-// Keyword Difficulty + Opportunity Score functions
-function getKeywordDifficulty(keyword) {
-  const words = keyword.split(' ').length;
-  if (words >= 4) return 'Low';      // Long tail = easy
-  if (words === 3) return 'Medium';  // 3 words = medium  
-  return 'High';                     // 1-2 words = hard
-}
+// 1. FAQ Questions nikaalo
+const faqQuestions = [];
+$('script[type="application/ld+json"]').each((i, el) => {
+  try {
+    const json = JSON.parse($(el).html());
+    if (json['@type'] === 'FAQPage') {
+      json.mainEntity?.forEach(q => {
+        if (q.name) faqQuestions.push(q.name);
+      });
+    }
+  } catch {}
+});
 
-function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
-  if (!hasFAQ && !hasSchema) return 'High';
-  if (keyword.length > 15) return 'High'; // Long tail
-  return 'Medium';
-}
+// 2. Schema markup check karo  
+const schemas = [];
+$('script[type="application/ld+json"]').each((i, el) => {
+  try {
+    const json = JSON.parse($(el).html());
+    if (json['@type']) schemas.push(json['@type']);
+  } catch {}
+});
+
+// 3. AB ye chalega
+hasFAQ = faqQuestions.length > 0;
+hasSchemaMarkup = schemas.length > 0;
+
+const keywords = extractKeywordsFromContent(bodyText, headings, 15);
+const keywordInsights = keywords.slice(0, 5).map(k => ({
+  keyword: k,
+  difficulty: getKeywordDifficulty(k),
+  opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
+}));
     const brandName = getBrandName(url);
 
     try {

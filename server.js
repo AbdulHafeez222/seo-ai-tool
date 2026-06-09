@@ -54,14 +54,24 @@ function getBrandName(url) {
   return brand.charAt(0).toUpperCase() + brand.slice(1);
 }
 
-function extractKeywordsFromContent(text, topN = 10) {
+ffunction extractKeywordsFromContent(text, headings = "", topN = 10) {
   if (!text) return [];
-  const words = text.toLowerCase()
+  
+  // STEP 1: Badi Stop Words list - JS keywords block
+  const stopWords = [
+    'about', 'https', 'website', 'click', 'here', 'their', 'there', 'which', 'would',
+    'function', 'return', 'const', 'document', 'window', 'typeof', 'undefined', 'null',
+    'true', 'false', 'this', 'that', 'with', 'from', 'have', 'your', 'will', 'been',
+    'foreach', 'classlist', 'addeventlistener', 'javascript', 'button', 'var', 'let'
+  ];
+  
+  const headingText = headings.toLowerCase();
+  const combinedText = headingText + ' ' + headingText + ' ' + headingText + ' ' + text.toLowerCase();
+  
+  const words = combinedText
    .replace(/[^\w\s]/g, ' ')
    .split(/\s+/)
-   .filter(w => w.length > 4 && 
-     !['about', 'https', 'website', 'click', 'here', 'their', 'there', 'which', 'would',
-       'function', 'return', 'const', 'document', 'window', 'typeof', 'undefined'].includes(w)); // Ye line add karo
+   .filter(w => w.length > 4 && !stopWords.includes(w));
 
   const freq = {};
   words.forEach(w => freq[w] = (freq[w] || 0) + 1);
@@ -144,6 +154,25 @@ try { bodyText = $("p, li, h2, h3, h4, td").text().replace(/\s+/g, " ").trim();
 } catch {}
     try { wordCount = bodyText.split(/\s+/).filter(Boolean).length; } catch {}
 
+let h1Text = "";
+let h2Texts = "";
+try { h1Text = $("h1").first().text(); } catch {}
+try { h2Texts = $("h2").map((i,el)=>$(el).text()).get().join(' '); } catch {}
+const headings = h1Text + ' ' + h2Texts;
+
+// Keyword Difficulty + Opportunity Score functions
+function getKeywordDifficulty(keyword) {
+  const words = keyword.split(' ').length;
+  if (words >= 4) return 'Low';      // Long tail = easy
+  if (words === 3) return 'Medium';  // 3 words = medium  
+  return 'High';                     // 1-2 words = hard
+}
+
+function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
+  if (!hasFAQ && !hasSchema) return 'High';
+  if (keyword.length > 15) return 'High'; // Long tail
+  return 'Medium';
+}
     const brandName = getBrandName(url);
 
     try {
@@ -321,7 +350,11 @@ try { bodyText = $("p, li, h2, h3, h4, td").text().replace(/\s+/g, " ").trim();
   const citationPerplexity = Math.min(95, Math.round((aiTrustScore * 0.4) + (eeatScore * 0.3) + (hasDirectAnswer? 20 : 0)));
 
   const keywords = extractKeywordsFromContent(bodyText, 15);
-
+  const keywordInsights = keywords.slice(0, 5).map(k => ({
+  keyword: k,
+  difficulty: getKeywordDifficulty(k),
+  opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
+}));
   const tips = [];
   if (!hasFAQ) tips.push("Add FAQ Schema to increase ChatGPT citations");
   if (!hasHowTo) tips.push("Add HowTo Schema for AI answer extraction");
@@ -378,6 +411,7 @@ try { bodyText = $("p, li, h2, h3, h4, td").text().replace(/\s+/g, " ").trim();
     hasDirectAnswer: hasDirectAnswer || false,
     schemas: schemas || [],
     keywords: keywords || [],
+    keywordInsights: keywordInsights || [], 
     tips: tips || [],
     criticalIssues: criticalIssues || [],
     importantIssues: importantIssues || [],

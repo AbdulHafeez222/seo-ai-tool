@@ -54,6 +54,26 @@ function getBrandName(url) {
   return brand.charAt(0).toUpperCase() + brand.slice(1);
 }
 
+function getKeywordDifficulty(keyword) {
+  const len = keyword.length;
+  if (len < 10) return "High";
+  if (len < 18) return "Medium";
+  return "Low";
+}
+
+
+function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
+  let score = 0;
+  if (hasFAQ) score++;
+  if (hasSchema) score++;
+  if (keyword.split(' ').length > 2) score++; // Long tail = high opp
+  
+  if (score >= 2) return "High";
+  if (score === 1) return "Medium";
+  return "Low";
+}
+
+
 function extractKeywordsFromContent(text, headings = "", topN = 10) {
   if (!text) return [];
 
@@ -350,14 +370,26 @@ function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
   const citationChatGPT = Math.min(95, Math.round((aeoScore * 0.4) + (aiTrustScore * 0.3) + (hasFAQ? 20 : 0) + (hasDirectAnswer? 10 : 0)));
   const citationGemini = Math.min(95, Math.round((aeoScore * 0.4) + (seoScore * 0.3) + (hasSchemaMarkup? 20 : 0) + (hasAuthor? 10 : 0)));
   const citationPerplexity = Math.min(95, Math.round((aiTrustScore * 0.4) + (eeatScore * 0.3) + (hasDirectAnswer? 20 : 0)));
+// 1. Headings nikaalo PEHLE
+const h1Text = $('h1').first().text().trim() || '';
+const h2Texts = $('h2').map((i, el) => $(el).text()).get().join(' ');
+let headings = h1Text + ' ' + h2Texts; // Ye zaroori hai
 
-  const keywords = extractKeywordsFromContent(bodyText, 15);
-  const keywordInsights = keywords.slice(0, 5).map(k => ({
+// 2. Keywords nikaalo headings ke saath
+const keywords = extractKeywordsFromContent(bodyText, headings, 15);
+
+// 3. hasFAQ aur hasSchemaMarkup pehle se defined hone chahiye
+hasFAQ = faqQuestions.length > 0;
+hasSchemaMarkup = schemas.length > 0;
+
+// 4. AB keywordInsights banao
+const keywordInsights = keywords.slice(0, 5).map(k => ({
   keyword: k,
   difficulty: getKeywordDifficulty(k),
   opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
 }));
-  const tips = [];
+
+const tips = [];
   if (!hasFAQ) tips.push("Add FAQ Schema to increase ChatGPT citations");
   if (!hasHowTo) tips.push("Add HowTo Schema for AI answer extraction");
   if (!hasAuthor) tips.push("Add author information to improve EEAT");

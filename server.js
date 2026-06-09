@@ -178,7 +178,7 @@ async function analyzeSingleUrl(url) {
     try { h2Texts = $("h2").map((i,el)=>$(el).text()).get().join(' '); } catch {}
     const headings = h1Text + ' ' + h2Texts;
 
-    const faqQuestions = [];
+    faqQuestions = [];
     $('script[type="application/ld+json"]').each((i, el) => {
       try {
         const json = JSON.parse($(el).html());
@@ -736,8 +736,6 @@ app.get("/keyword-theft", async (req, res) => {
       analyzeSingleUrl(competitor.startsWith('http')? competitor : 'https://' + competitor)
     ]);
 
-    const yourKeywords = new Set(userData.keywords);
-    const compKeywords = compData.keywords || [];
 
     const missing = compKeywords.filter(k =>!yourKeywords.has(k));
     const shared = compKeywords.filter(k => yourKeywords.has(k));

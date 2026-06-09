@@ -100,15 +100,13 @@ function extractKeywordsFromContent(text, headings = "", topN = 10) {
 }
 
 // ========== MAIN ANALYZE - CRASH PROOF ==========
-Bhai abhi bhi 2 error hain kyunki variables `try` block ke andar banaye aur bahar use kar rahe ho. JS me scope ka issue hai.
 
-### *Problem*
 try {
   const keywords = extractKeywordsFromContent(...) // ye try ke andar hai
 } catch {}
 
 return { keywords: keywords } // yahan undefined error aayega
-### *Fix: Variables Upar Declare Karo*
+
 
 `server.js` me `analyzeSingleUrl` function ke andar ye changes karo:
 
@@ -116,9 +114,7 @@ return { keywords: keywords } // yahan undefined error aayega
 async function analyzeSingleUrl(url) {
   let html = "";
   let $ = null;
-  //... baaki saare let variables
 
-  // ⬇️ YE 2 LINES ADD KARO ⬇️
   let keywords = [];
   let keywordInsights = [];
 
@@ -132,9 +128,9 @@ const keywordInsights = keywords.slice(0, 5).map(k => ({
 Isse replace karo:
 keywords = extractKeywordsFromContent(bodyText, headings, 15);
 keywordInsights = keywords.slice(0, 5).map(k => ({
-### *Full Fixed `analyzeSingleUrl` Function*
 
-Copy-paste kardo poora function:
+
+
 async function analyzeSingleUrl(url) {
   let html = "";
   let $ = null;

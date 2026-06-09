@@ -342,7 +342,7 @@ async function analyzeSingleUrl(url) {
   const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
   const overall = Math.round((seoScore + aeoScore + aiTrustScore + citationProbability) / 4);
   const aiVisibilityLevel = overall >= 80? "Excellent - AI Search Ready" : overall >= 60? "Good - Needs Minor Fixes" : overall >= 40? "Fair - Major Improvements Needed" : "Poor - Not AI Ready";
-  const aiVisibilityScore = overall;
+  const = overall;
   const tips = [];
   if (!hasFAQ) tips.push("Add FAQ Schema to increase ChatGPT citations");
   if (!hasHowTo) tips.push("Add HowTo Schema for AI answer extraction");
@@ -391,7 +391,7 @@ if (h1) {
     status: seoStatus || "Unknown",
     overall: overall || 0, // <-- ADD
     citationProbability: citationProbability || 0, // <-- ADD  
- aiVisibilityScore: overall || 0,
+   overall,
 overallAIVisibilityScore: overall || 0,
 aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
     totalImages: totalImages || 0,
@@ -476,7 +476,7 @@ aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
       leadsIncrease: `+${Math.round((100 - aeoScore) * 0.3)}% potential`,
       revenueImpact: `$${Math.round((100 - seoScore) * 50)}-${Math.round((100 - seoScore) * 100)}/month`
     },
- aiVisibilityScore: overall || 0,
+ overall
 overallAIVisibilityScore: overall || 0,
 aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
     schemaCoverage: Math.min(100, schemas.length * 20),

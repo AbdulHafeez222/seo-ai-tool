@@ -367,7 +367,7 @@ async function analyzeSingleUrl(url) {
     overall: overall || 0, // <-- ADD
     citationProbability: citationProbability || 0, // <-- ADD  
     aiVisibilityScore: overall || 0,
-    aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready"
+    aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
     totalImages: totalImages || 0,
     imagesWithoutAlt: imagesWithoutAlt || 0,
     internalLinks: internalLinks || 0,

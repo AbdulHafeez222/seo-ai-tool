@@ -18,7 +18,7 @@ async function safeFetch(url, options = {}) {
     const timeout = setTimeout(() => controller.abort(), options.timeout || 10000);
 
     const res = await fetch(url, {
-     ...options,
+    ...options,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; SEO-AEO-Bot/1.0)",...options.headers },
       signal: controller.signal
     });
@@ -78,17 +78,17 @@ function extractKeywordsFromContent(text, headings = "", topN = 10) {
   const combinedText = headingText + ' ' + headingText + ' ' + headingText + ' ' + text.toLowerCase();
 
   const words = combinedText
-   .replace(/[^\w\s]/g, ' ')
-   .split(/\s+/)
-   .filter(w => w.length > 4 &&!stopWords.includes(w));
+  .replace(/[^\w\s]/g, ' ')
+  .split(/\s+/)
+  .filter(w => w.length > 4 &&!stopWords.includes(w));
 
   const freq = {};
   words.forEach(w => freq[w] = (freq[w] || 0) + 1);
 
   return Object.entries(freq)
-   .sort((a, b) => b[1] - a[1])
-   .slice(0, topN)
-   .map(([word]) => word);
+  .sort((a, b) => b[1] - a[1])
+  .slice(0, topN)
+  .map(([word]) => word);
 }
 
 async function analyzeSingleUrl(url) {
@@ -335,11 +335,11 @@ async function analyzeSingleUrl(url) {
 
   const aiVisibilityLevel =
     overall >= 80
-     ? "Excellent - AI Search Ready"
+    ? "Excellent - AI Search Ready"
       : overall >= 60
-     ? "Good - Needs Minor Fixes"
+    ? "Good - Needs Minor Fixes"
       : overall >= 40
-     ? "Fair - Major Improvements Needed"
+    ? "Fair - Major Improvements Needed"
       : "Poor - Not AI Ready";
 
   const aiTrustSignals = [];
@@ -357,6 +357,15 @@ async function analyzeSingleUrl(url) {
     });
   }
 
+  // Calculate answerQuality based on content signals
+  const answerQuality = Math.min(100, Math.round(
+    (hasDirectAnswer? 30 : 0) +
+    (hasFAQ? 25 : 0) +
+    (listCount > 0? 15 : 0) +
+    (h2Count >= 3? 15 : 0) +
+    (readabilityScore * 0.15)
+  )) || 50;
+
   return {
     url: url || "",
     title: title || "No title",
@@ -368,11 +377,11 @@ async function analyzeSingleUrl(url) {
     score: seoScore || 0,
     status: seoStatus || "Unknown",
 
-    overall: overall,
-    overallAIVisibilityScore: overall,
-    aiVisibilityScore: overall,
-    aiVisibilityLevel: aiVisibilityLevel,
-    citationProbability: citationProbability || 0,
+    overall: Number(overall) || 0,
+    overallAIVisibilityScore: Number(overall) || 0,
+    aiVisibilityScore: Number(overall) || 0,
+    aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
+    citationProbability: Number(citationProbability) || 0,
 
     totalImages: totalImages || 0,
     imagesWithoutAlt: imagesWithoutAlt || 0,
@@ -413,6 +422,10 @@ async function analyzeSingleUrl(url) {
     readabilityScore: readabilityScore || 50,
     aiTrustScore: aiTrustScore || 0,
 
+    // FIX 3: Answer Quality - both names for compatibility
+    answerQuality: Number(answerQuality) || 50,
+    answerQualityScore: Number(answerQuality) || 50,
+
     featuredSnippetChance: Math.round(
       (hasDirectAnswer? 40 : 0) +
       (hasFAQ? 30 : 0) +
@@ -427,9 +440,9 @@ async function analyzeSingleUrl(url) {
       (listCount >= 2? 20 : 0) +
       (tableCount >= 1? 20 : 0),
 
-    citationChatGPT: citationChatGPT || 0,
-    citationGemini: citationGemini || 0,
-    citationPerplexity: citationPerplexity || 0,
+    citationChatGPT: Number(citationChatGPT) || 0,
+    citationGemini: Number(citationGemini) || 0,
+    citationPerplexity: Number(citationPerplexity) || 0,
 
     aiExtractedAnswer: bodyText.substring(0, 300) || "No clear answer found",
 
@@ -464,6 +477,13 @@ async function analyzeSingleUrl(url) {
     realCitationGemini: citationGemini,
     realCitationPerplexity: citationPerplexity,
 
+    // FIX 2: SERP Preview with null safety
+    serpPreview: {
+      title: title || "No title",
+      displayUrl: url? url.replace(/^https?:\/\//, '').replace(/\/$/, '') : "",
+      description: metaDescription || (bodyText? bodyText.substring(0, 160) : "No description available")
+    },
+
     aiSearchSimulation: {
       query: "AI temporarily disabled",
       answer: "Rule-based analysis active. Enable AI API for search simulation.",
@@ -482,7 +502,7 @@ app.get("/", (req, res) => {
   res.json({
     status: "running",
     tool: "AI Visibility Platform",
-    version: "2.1-fixed",
+    version: "2.2-stable",
     timestamp: new Date().toISOString()
   });
 });

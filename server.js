@@ -3,7 +3,7 @@ import * as cheerio from "cheerio";
 import cors from "cors";
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT ||10000;
 const scanHistory = [];
 
 app.use(cors());
@@ -99,37 +99,6 @@ function extractKeywordsFromContent(text, headings = "", topN = 10) {
  .map(([word]) => word);
 }
 
-// ========== MAIN ANALYZE - CRASH PROOF ==========
-
-try {
-  const keywords = extractKeywordsFromContent(...) // ye try ke andar hai
-} catch {}
-
-return { keywords: keywords } // yahan undefined error aayega
-
-
-`server.js` me `analyzeSingleUrl` function ke andar ye changes karo:
-
-*1. Function ke top pe ye lines add karo, baaki variables ke saath:*
-async function analyzeSingleUrl(url) {
-  let html = "";
-  let $ = null;
-
-  let keywords = [];
-  let keywordInsights = [];
-
-  let readabilityScore = 50;
-  let aiReport = "Rule-based analysis complete";
-*2. Phir neeche jahan keywords ban rahe hain wahan `const` hata do:*
-
-Pehle ye tha:
-const keywords = extractKeywordsFromContent(bodyText, headings, 15);
-const keywordInsights = keywords.slice(0, 5).map(k => ({
-Isse replace karo:
-keywords = extractKeywordsFromContent(bodyText, headings, 15);
-keywordInsights = keywords.slice(0, 5).map(k => ({
-
-
 
 async function analyzeSingleUrl(url) {
   let html = "";
@@ -185,6 +154,7 @@ async function analyzeSingleUrl(url) {
   let aiReport = "Rule-based analysis complete";
   let keywords = [];
   let keywordInsights = [];
+  
 
   try {
     const startTime = Date.now();
@@ -491,7 +461,6 @@ async function analyzeSingleUrl(url) {
     }
   };
 }
-*Ab deploy karo.* `ReferenceError: keywords is not defined` khatam ho jayega ✅
 
 // ========== API ENDPOINTS ==========
 app.get("/", (req, res) => {

@@ -386,8 +386,7 @@ if (h1) {
     a: metaDescription || bodyText.substring(0,120)
   });
 }
-
- return {
+return {
   url: url || "",
   title: title || "No title",
   h1: h1 || "",
@@ -439,9 +438,7 @@ if (h1) {
   keywords: keywords || [],
 
   aiReport: aiReport || "",
-
   readabilityScore: readabilityScore || 50,
-
   aiTrustScore: aiTrustScore || 0,
 
   featuredSnippetChance: Math.round(
@@ -465,7 +462,7 @@ if (h1) {
   aiExtractedAnswer: bodyText.substring(0, 300) || "No clear answer found",
 
   topicAuthority: {
-    mainTopic: h1 || title.split(' ').slice(0, 3).join(' '),
+    mainTopic: h1 || title.split(" ").slice(0, 3).join(" "),
     found: keywords.slice(0, 5),
     missing: []
   },
@@ -474,24 +471,34 @@ if (h1) {
     trafficIncrease: `+${Math.round((100 - seoScore) * 0.5)}% potential`,
     leadsIncrease: `+${Math.round((100 - aeoScore) * 0.3)}% potential`,
     revenueImpact: `$${Math.round((100 - seoScore) * 50)}-${Math.round((100 - seoScore) * 100)}/month`
+  },
+
+  schemaCoverage: Math.min(100, schemas.length * 20),
+
+  aeoReadiness: Math.round(
+    (hasFAQ ? 25 : 0) +
+    (hasHowTo ? 20 : 0) +
+    (hasDirectAnswer ? 20 : 0) +
+    (hasSchemaMarkup ? 15 : 0) +
+    (hasAuthor ? 10 : 0) +
+    (hasLastModified ? 10 : 0)
+  ),
+
+  aeoSignals: [],
+  fixSuggestions: [],
+
+  realCitationChatGPT: citationChatGPT,
+  realCitationGemini: citationGemini,
+  realCitationPerplexity: citationPerplexity,
+
+  citationReasons: [],
+
+  aiSearchSimulation: {
+    query: "AI temporarily disabled",
+    answer: "Rule-based analysis active. Enable AI API for search simulation.",
+    sources: []
   }
 };
-    schemaCoverage: Math.min(100, schemas.length * 20),
-    aeoReadiness: Math.round((hasFAQ? 25 : 0) + (hasHowTo? 20 : 0) + (hasDirectAnswer? 20 : 0) + (hasSchemaMarkup? 15 : 0) + (hasAuthor? 10 : 0) + (hasLastModified? 10 : 0)),
-    aeoSignals: [],
-    fixSuggestions: [],
-    realCitationChatGPT: citationChatGPT,
-    realCitationGemini: citationGemini,
-    realCitationPerplexity: citationPerplexity,
-    citationReasons: [],
-    aiSearchSimulation: {
-      query: "AI temporarily disabled",
-      answer: "Rule-based analysis active. Enable AI API for search simulation.",
-      sources: []
-    }
-  };
-}
-
 // ========== API ENDPOINTS ==========
 app.get("/", (req, res) => {
   res.json({

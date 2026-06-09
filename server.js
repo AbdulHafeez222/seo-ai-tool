@@ -390,9 +390,9 @@ if (h1) {
     status: seoStatus || "Unknown",
     overall: overall || 0, // <-- ADD
     citationProbability: citationProbability || 0, // <-- ADD  
-    aiVisibilityScore: aiVisibilityScore || 0,
-    overallAIVisibilityScore: aiVisibilityScore || 0,
-    aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
+   aiVisibilityScore: overall || 0,
+   overallAIVisibilityScore: overall || 0,
+   aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
     totalImages: totalImages || 0,
     imagesWithoutAlt: imagesWithoutAlt || 0,
     internalLinks: internalLinks || 0,

@@ -3,7 +3,7 @@ import * as cheerio from "cheerio";
 import cors from "cors";
 
 const app = express();
-const PORT = process.env.PORT ||10000;
+const PORT = process.env.PORT || 10000;
 const scanHistory = [];
 
 app.use(cors());
@@ -18,7 +18,7 @@ async function safeFetch(url, options = {}) {
     const timeout = setTimeout(() => controller.abort(), options.timeout || 10000);
 
     const res = await fetch(url, {
-    ...options,
+     ...options,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; SEO-AEO-Bot/1.0)",...options.headers },
       signal: controller.signal
     });
@@ -86,19 +86,18 @@ function extractKeywordsFromContent(text, headings = "", topN = 10) {
   const combinedText = headingText + ' ' + headingText + ' ' + headingText + ' ' + text.toLowerCase();
 
   const words = combinedText
- .replace(/[^\w\s]/g, ' ')
- .split(/\s+/)
- .filter(w => w.length > 4 &&!stopWords.includes(w));
+   .replace(/[^\w\s]/g, ' ')
+   .split(/\s+/)
+   .filter(w => w.length > 4 &&!stopWords.includes(w));
 
   const freq = {};
   words.forEach(w => freq[w] = (freq[w] || 0) + 1);
 
   return Object.entries(freq)
- .sort((a, b) => b[1] - a[1])
- .slice(0, topN)
- .map(([word]) => word);
+   .sort((a, b) => b[1] - a[1])
+   .slice(0, topN)
+   .map(([word]) => word);
 }
-
 
 async function analyzeSingleUrl(url) {
   let html = "";
@@ -155,7 +154,6 @@ async function analyzeSingleUrl(url) {
   let faqQuestions = [];
   let keywords = [];
   let keywordInsights = [];
-  
 
   try {
     const startTime = Date.now();
@@ -175,7 +173,7 @@ async function analyzeSingleUrl(url) {
     let h1Text = "";
     let h2Texts = "";
     try { h1Text = $("h1").first().text(); } catch {}
-    try { h2Texts = $("h2").map((i,el)=>$(el).text()).get().join(' '); } catch {}
+    try { h2Texts = $("h2").map((i, el) => $(el).text()).get().join(' '); } catch {}
     const headings = h1Text + ' ' + h2Texts;
 
     faqQuestions = [];
@@ -335,7 +333,7 @@ async function analyzeSingleUrl(url) {
   if (hasLastModified) eeatScore += 10;
 
   const aiTrustScore = Math.round((eeatScore * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
- 
+
   const citationChatGPT = Math.min(95, Math.round((aeoScore * 0.4) + (aiTrustScore * 0.3) + (hasFAQ? 20 : 0) + (hasDirectAnswer? 10 : 0)));
   const citationGemini = Math.min(95, Math.round((aeoScore * 0.4) + (seoScore * 0.3) + (hasSchemaMarkup? 20 : 0) + (hasAuthor? 10 : 0)));
   const citationPerplexity = Math.min(95, Math.round((aiTrustScore * 0.4) + (eeatScore * 0.3) + (hasDirectAnswer? 20 : 0)));
@@ -352,154 +350,154 @@ async function analyzeSingleUrl(url) {
   if (imagesWithoutAlt > 0) instantFixes.push("Add ALT Text to Images");
   if (!hasFAQ) instantFixes.push("Add FAQ Schema");
   if (!hasCanonical) instantFixes.push("Add Canonical URL");
+
   const aiTrustSignals = [];
+  if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
+  if (hasAboutPage) aiTrustSignals.push("About Page");
+  if (hasContactPage) aiTrustSignals.push("Contact Page");
+  if (hasAuthor) aiTrustSignals.push("Author Bio");
+  if (isHttps) aiTrustSignals.push("HTTPS Secure");
 
-if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
-if (hasAboutPage) aiTrustSignals.push("About Page");
-if (hasContactPage) aiTrustSignals.push("Contact Page");
-if (hasAuthor) aiTrustSignals.push("Author Bio");
-if (isHttps) aiTrustSignals.push("HTTPS Secure");
+  const snippetReasons = [];
+  if (hasDirectAnswer) snippetReasons.push("Direct answer found");
+  if (hasFAQ) snippetReasons.push("FAQ structure found");
+  if (listCount > 0) snippetReasons.push(`${listCount} lists found`);
+  if (h2Count >= 3) snippetReasons.push("Good heading structure");
 
+  const autoFAQ = [];
+  if (h1) {
+    autoFAQ.push({
+      q: `What is ${h1}?`,
+      a: metaDescription || bodyText.substring(0, 120)
+    });
+  }
 
-const snippetReasons = [];
-
-if (hasDirectAnswer) snippetReasons.push("Direct answer found");
-if (hasFAQ) snippetReasons.push("FAQ structure found");
-if (listCount > 0) snippetReasons.push(`${listCount} lists found`);
-if (h2Count >= 3) snippetReasons.push("Good heading structure");
-
-
-const autoFAQ = [];
-
-if (h1) {
-  autoFAQ.push({
-    q: `What is ${h1}?`,
-    a: metaDescription || bodyText.substring(0,120)
-  });
-}
   const overall = Math.round((seoScore + aeoScore + aiTrustScore + citationProbability) / 4);
 
-const aiVisibilityLevel =
-  overall >= 80
-    ? "Excellent - AI Search Ready"
-    : overall >= 60
-    ? "Good - Needs Minor Fixes"
-    : overall >= 40
-    ? "Fair - Major Improvements Needed"
-    : "Poor - Not AI Ready";
-return {
-  url: url || "",
-  title: title || "No title",
-  h1: h1 || "",
-  metaDescription: metaDescription || "",
-  wordCount: wordCount || 0,
-  lastModified: lastModified || null,
+  const aiVisibilityLevel =
+    overall >= 80
+     ? "Excellent - AI Search Ready"
+      : overall >= 60
+       ? "Good - Needs Minor Fixes"
+        : overall >= 40
+         ? "Fair - Major Improvements Needed"
+          : "Poor - Not AI Ready";
 
-  score: seoScore || 0,
-  status: seoStatus || "Unknown",
+  return {
+    url: url || "",
+    title: title || "No title",
+    h1: h1 || "",
+    metaDescription: metaDescription || "",
+    wordCount: wordCount || 0,
+    lastModified: lastModified || null,
 
-  overall: overall || 0,
-  citationProbability: citationProbability || 0,
+    score: seoScore || 0,
+    status: seoStatus || "Unknown",
 
-  overallAIVisibilityScore: overall || 0,
-  aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
+    overall: overall || 0,
+    citationProbability: citationProbability || 0,
 
-  totalImages: totalImages || 0,
-  imagesWithoutAlt: imagesWithoutAlt || 0,
-  internalLinks: internalLinks || 0,
-  externalLinks: externalLinks || 0,
+    overallAIVisibilityScore: overall || 0,
+    aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
 
-  mobileFriendly: mobileViewport || false,
-  isHttps: isHttps || false,
-  loadTime: loadTime || 0,
-  brokenLinks: brokenLinks || 0,
+    totalImages: totalImages || 0,
+    imagesWithoutAlt: imagesWithoutAlt || 0,
+    internalLinks: internalLinks || 0,
+    externalLinks: externalLinks || 0,
 
-  hasSchemaMarkup: hasSchemaMarkup || false,
-  robotsExists: robotsExists || false,
-  sitemapExists: sitemapExists || false,
-  hasCanonical: hasCanonical || false,
+    mobileFriendly: mobileViewport || false,
+    isHttps: isHttps || false,
+    loadTime: loadTime || 0,
+    brokenLinks: brokenLinks || 0,
 
-  canonical: canonical || "",
-  hasFavicon: hasFavicon || false,
-  favicon: favicon || "",
+    hasSchemaMarkup: hasSchemaMarkup || false,
+    robotsExists: robotsExists || false,
+    sitemapExists: sitemapExists || false,
+    hasCanonical: hasCanonical || false,
 
-  hasOGTags: hasOGTags || false,
-  ogTitle: ogTitle || "",
-  ogDescription: ogDescription || "",
-  ogImage: ogImage || "",
+    canonical: canonical || "",
+    hasFavicon: hasFavicon || false,
+    favicon: favicon || "",
 
-  aeoScore: aeoScore || 0,
-  aeoStatus: aeoStatus || "Needs Work",
+    hasOGTags: hasOGTags || false,
+    ogTitle: ogTitle || "",
+    ogDescription: ogDescription || "",
+    ogImage: ogImage || "",
 
-  hasFAQ: hasFAQ || false,
-  hasHowTo: hasHowTo || false,
-  hasDirectAnswer: hasDirectAnswer || false,
+    aeoScore: aeoScore || 0,
+    aeoStatus: aeoStatus || "Needs Work",
 
-  schemas: schemas || [],
-  keywords: keywords || [],
+    hasFAQ: hasFAQ || false,
+    hasHowTo: hasHowTo || false,
+    hasDirectAnswer: hasDirectAnswer || false,
 
-  aiReport: aiReport || "",
-  readabilityScore: readabilityScore || 50,
-  aiTrustScore: aiTrustScore || 0,
+    schemas: schemas || [],
+    keywords: keywords || [],
 
-  featuredSnippetChance: Math.round(
-    (hasDirectAnswer ? 40 : 0) +
-    (hasFAQ ? 30 : 0) +
-    (listCount > 0 ? 20 : 0) +
-    (h2Count >= 3 ? 10 : 0)
-  ),
+    aiReport: aiReport || "",
+    readabilityScore: readabilityScore || 50,
+    aiTrustScore: aiTrustScore || 0,
 
-  contentStructureScore:
-    (h1Count === 1 ? 20 : 0) +
-    (h2Count >= 3 ? 20 : 0) +
-    (h3Count >= 5 ? 20 : 0) +
-    (listCount >= 2 ? 20 : 0) +
-    (tableCount >= 1 ? 20 : 0),
+    featuredSnippetChance: Math.round(
+      (hasDirectAnswer? 40 : 0) +
+      (hasFAQ? 30 : 0) +
+      (listCount > 0? 20 : 0) +
+      (h2Count >= 3? 10 : 0)
+    ),
 
-  citationChatGPT: citationChatGPT || 0,
-  citationGemini: citationGemini || 0,
-  citationPerplexity: citationPerplexity || 0,
+    contentStructureScore:
+      (h1Count === 1? 20 : 0) +
+      (h2Count >= 3? 20 : 0) +
+      (h3Count >= 5? 20 : 0) +
+      (listCount >= 2? 20 : 0) +
+      (tableCount >= 1? 20 : 0),
 
-  aiExtractedAnswer: bodyText.substring(0, 300) || "No clear answer found",
+    citationChatGPT: citationChatGPT || 0,
+    citationGemini: citationGemini || 0,
+    citationPerplexity: citationPerplexity || 0,
 
-  topicAuthority: {
-    mainTopic: h1 || title.split(" ").slice(0, 3).join(" "),
-    found: keywords.slice(0, 5),
-    missing: []
-  },
+    aiExtractedAnswer: bodyText.substring(0, 300) || "No clear answer found",
 
-  businessValue: {
-    trafficIncrease: `+${Math.round((100 - seoScore) * 0.5)}% potential`,
-    leadsIncrease: `+${Math.round((100 - aeoScore) * 0.3)}% potential`,
-    revenueImpact: `$${Math.round((100 - seoScore) * 50)}-${Math.round((100 - seoScore) * 100)}/month`
-  },
+    topicAuthority: {
+      mainTopic: h1 || title.split(" ").slice(0, 3).join(" "),
+      found: keywords.slice(0, 5),
+      missing: []
+    },
 
-  schemaCoverage: Math.min(100, schemas.length * 20),
+    businessValue: {
+      trafficIncrease: `+${Math.round((100 - seoScore) * 0.5)}% potential`,
+      leadsIncrease: `+${Math.round((100 - aeoScore) * 0.3)}% potential`,
+      revenueImpact: `$${Math.round((100 - seoScore) * 50)}-${Math.round((100 - seoScore) * 100)}/month`
+    },
 
-  aeoReadiness: Math.round(
-    (hasFAQ ? 25 : 0) +
-    (hasHowTo ? 20 : 0) +
-    (hasDirectAnswer ? 20 : 0) +
-    (hasSchemaMarkup ? 15 : 0) +
-    (hasAuthor ? 10 : 0) +
-    (hasLastModified ? 10 : 0)
-  ),
+    schemaCoverage: Math.min(100, schemas.length * 20),
 
-  aeoSignals: [],
-  fixSuggestions: [],
+    aeoReadiness: Math.round(
+      (hasFAQ? 25 : 0) +
+      (hasHowTo? 20 : 0) +
+      (hasDirectAnswer? 20 : 0) +
+      (hasSchemaMarkup? 15 : 0) +
+      (hasAuthor? 10 : 0) +
+      (hasLastModified? 10 : 0)
+    ),
 
-  realCitationChatGPT: citationChatGPT,
-  realCitationGemini: citationGemini,
-  realCitationPerplexity: citationPerplexity,
+    aeoSignals: [],
+    fixSuggestions: [],
 
-  citationReasons: [],
+    realCitationChatGPT: citationChatGPT,
+    realCitationGemini: citationGemini,
+    realCitationPerplexity: citationPerplexity,
 
-  aiSearchSimulation: {
-    query: "AI temporarily disabled",
-    answer: "Rule-based analysis active. Enable AI API for search simulation.",
-    sources: []
-  }
-};
+    citationReasons: [],
+
+    aiSearchSimulation: {
+      query: "AI temporarily disabled",
+      answer: "Rule-based analysis active. Enable AI API for search simulation.",
+      sources: []
+    }
+  };
+}
+
 // ========== API ENDPOINTS ==========
 app.get("/", (req, res) => {
   res.json({
@@ -529,7 +527,7 @@ app.get("/analyze", async (req, res) => {
       timestamp: new Date().toISOString(),
       seoScore: data.score,
       aeoScore: data.aeoScore,
-      aiVisibilityScore: data.aiVisibilityScore
+      aiVisibilityScore: data.overallAIVisibilityScore
     });
 
     res.json(data);
@@ -562,7 +560,7 @@ app.get("/scan", async (req, res) => {
       timestamp: new Date().toISOString(),
       seoScore: data.score,
       aeoScore: data.aeoScore,
-      aiVisibilityScore: data.aiVisibilityScore
+      aiVisibilityScore: data.overallAIVisibilityScore
     });
 
     res.json(data);
@@ -724,8 +722,8 @@ app.get("/roadmap", async (req, res) => {
 
     res.json({
       url: data.url,
-      currentScore: data.aiVisibilityScore,
-      potentialScore: Math.min(100, data.aiVisibilityScore + roadmap.reduce((sum, r) => {
+      currentScore: data.overallAIVisibilityScore,
+      potentialScore: Math.min(100, data.overallAIVisibilityScore + roadmap.reduce((sum, r) => {
         const impact = parseInt(r.impact.match(/\d+/)?.[0] || 0);
         return sum + impact;
       }, 0)),
@@ -773,6 +771,8 @@ app.get("/keyword-theft", async (req, res) => {
       analyzeSingleUrl(competitor.startsWith('http')? competitor : 'https://' + competitor)
     ]);
 
+    const compKeywords = compData.keywords || [];
+    const yourKeywords = new Set(userData.keywords || []);
 
     const missing = compKeywords.filter(k =>!yourKeywords.has(k));
     const shared = compKeywords.filter(k => yourKeywords.has(k));

@@ -387,105 +387,95 @@ if (h1) {
   });
 }
 
-  return {
-    url: url || "",
-    title: title || "No title",
-    h1: h1 || "",
-    metaDescription: metaDescription || "",
-    wordCount: wordCount || 0,
-    lastModified: lastModified || null,
-    score: seoScore || 0,
-    status: seoStatus || "Unknown",
-    overall: overall || 0,
-   citationProbability: citationProbability || 0,
+ return {
+  url: url || "",
+  title: title || "No title",
+  h1: h1 || "",
+  metaDescription: metaDescription || "",
+  wordCount: wordCount || 0,
+  lastModified: lastModified || null,
+
+  score: seoScore || 0,
+  status: seoStatus || "Unknown",
+
+  overall: overall || 0,
+  citationProbability: citationProbability || 0,
 
   overallAIVisibilityScore: overall || 0,
   aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
-    totalImages: totalImages || 0,
-    imagesWithoutAlt: imagesWithoutAlt || 0,
-    internalLinks: internalLinks || 0,
-    externalLinks: externalLinks || 0,
-    mobileFriendly: mobileViewport || false,
-    isHttps: isHttps || false,
-    loadTime: loadTime || 0,
-    brokenLinks: brokenLinks || 0,
-    hasSchemaMarkup: hasSchemaMarkup || false,
-    robotsExists: robotsExists || false,
-    sitemapExists: sitemapExists || false,
-    hasCanonical: hasCanonical || false,
-    canonical: canonical || "",
-    hasFavicon: hasFavicon || false,
-    favicon: favicon || "",
-    hasOGTags: hasOGTags || false,
-    ogTitle: ogTitle || "",
-    ogDescription: ogDescription || "",
-    ogImage: ogImage || "",
-    hasFacebook: hasFacebook || false,
-    hasLinkedIn: hasLinkedIn || false,
-    hasYouTube: hasYouTube || false,
-    hasTwitter: hasTwitter || false,
-    hasEmail: hasEmail || false,
-    hasPhone: hasPhone || false,
-    email: email || null,
-    phone: phone || null,
-    aeoScore: aeoScore || 0,
-    aeoStatus: aeoStatus || "Needs Work",
-    hasFAQ: hasFAQ || false,
-    hasHowTo: hasHowTo || false,
-    hasDirectAnswer: hasDirectAnswer || false,
-    schemas: schemas || [],
-    keywords: keywords || [],
-    keywordInsights: keywordInsights || [],
-    tips: tips || [],
-    criticalIssues: criticalIssues || [],
-    importantIssues: importantIssues || [],
-    minorIssues: minorIssues || [],
-    aiReport: aiReport || "",
-    citationSimulator: hasFAQ? `ChatGPT may quote: "${h1 || title}"` : "Add FAQ schema to increase AI citation chances",
-    instantFixes: instantFixes || [],
-    readabilityScore: readabilityScore || 50,
-    readabilityStatus: readabilityScore >= 70? "Easy" : readabilityScore >= 50? "Medium" : "Hard",
-    hasAuthor: hasAuthor || false,
-    aiTrustScore: aiTrustScore || 0,
-    aiTrustSignals: aiTrustSignals,
-    hasPrivacyPolicy: hasPrivacyPolicy || false,
-    hasAboutPage: hasAboutPage || false,
-    hasContactPage: hasContactPage || false,
-    featuredSnippetChance: Math.round((hasDirectAnswer? 40 : 0) + (hasFAQ? 30 : 0) + (listCount > 0? 20 : 0) + (h2Count >= 3? 10 : 0)),
-    snippetReasons: snippetReasons,
-    contentStructureScore: (h1Count === 1? 20 : 0) + (h2Count >= 3? 20 : 0) + (h3Count >= 5? 20 : 0) + (listCount >= 2? 20 : 0) + (tableCount >= 1? 20 : 0),
-    h1Count: h1Count || 0,
-    h2Count: h2Count || 0,
-    h3Count: h3Count || 0,
-    listCount: listCount || 0,
-    tableCount: tableCount || 0,
-    citationChatGPT: citationChatGPT || 0,
-    citationGemini: citationGemini || 0,
-    citationPerplexity: citationPerplexity || 0,
-    aiExtractedAnswer: bodyText.substring(0, 300) || "No clear answer found",
-    answerQuality: 50,
-    answerQualityChecks: [],
-    autoFAQ: autoFAQ,
-    serpPreview: {
-      title: title || "No title",
-      displayUrl: url.replace(/^https?:\/\//, '').replace(/\/$/, ''),
-      description: metaDescription || bodyText.substring(0, 160) + "..."
-    },
-    mobileScore: mobileViewport? seoScore : Math.max(0, seoScore - 20),
-    desktopScore: seoScore,
-    topicAuthority: {
-      mainTopic: h1 || title.split(' ').slice(0, 3).join(' '),
-      found: keywords.slice(0, 5),
-      missing: []
-    },
-    businessValue: {
-      trafficIncrease: `+${Math.round((100 - seoScore) * 0.5)}% potential`,
-      leadsIncrease: `+${Math.round((100 - aeoScore) * 0.3)}% potential`,
-      revenueImpact: `$${Math.round((100 - seoScore) * 50)}-${Math.round((100 - seoScore) * 100)}/month`
-    },
- overall
-overallAIVisibilityScore: overall || 0,
-aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
+
+  totalImages: totalImages || 0,
+  imagesWithoutAlt: imagesWithoutAlt || 0,
+  internalLinks: internalLinks || 0,
+  externalLinks: externalLinks || 0,
+
+  mobileFriendly: mobileViewport || false,
+  isHttps: isHttps || false,
+  loadTime: loadTime || 0,
+  brokenLinks: brokenLinks || 0,
+
+  hasSchemaMarkup: hasSchemaMarkup || false,
+  robotsExists: robotsExists || false,
+  sitemapExists: sitemapExists || false,
+  hasCanonical: hasCanonical || false,
+
+  canonical: canonical || "",
+  hasFavicon: hasFavicon || false,
+  favicon: favicon || "",
+
+  hasOGTags: hasOGTags || false,
+  ogTitle: ogTitle || "",
+  ogDescription: ogDescription || "",
+  ogImage: ogImage || "",
+
+  aeoScore: aeoScore || 0,
+  aeoStatus: aeoStatus || "Needs Work",
+
+  hasFAQ: hasFAQ || false,
+  hasHowTo: hasHowTo || false,
+  hasDirectAnswer: hasDirectAnswer || false,
+
+  schemas: schemas || [],
+  keywords: keywords || [],
+
+  aiReport: aiReport || "",
+
+  readabilityScore: readabilityScore || 50,
+
+  aiTrustScore: aiTrustScore || 0,
+
+  featuredSnippetChance: Math.round(
+    (hasDirectAnswer ? 40 : 0) +
+    (hasFAQ ? 30 : 0) +
+    (listCount > 0 ? 20 : 0) +
+    (h2Count >= 3 ? 10 : 0)
+  ),
+
+  contentStructureScore:
+    (h1Count === 1 ? 20 : 0) +
+    (h2Count >= 3 ? 20 : 0) +
+    (h3Count >= 5 ? 20 : 0) +
+    (listCount >= 2 ? 20 : 0) +
+    (tableCount >= 1 ? 20 : 0),
+
+  citationChatGPT: citationChatGPT || 0,
+  citationGemini: citationGemini || 0,
+  citationPerplexity: citationPerplexity || 0,
+
+  aiExtractedAnswer: bodyText.substring(0, 300) || "No clear answer found",
+
+  topicAuthority: {
+    mainTopic: h1 || title.split(' ').slice(0, 3).join(' '),
+    found: keywords.slice(0, 5),
+    missing: []
+  },
+
+  businessValue: {
+    trafficIncrease: `+${Math.round((100 - seoScore) * 0.5)}% potential`,
+    leadsIncrease: `+${Math.round((100 - aeoScore) * 0.3)}% potential`,
+    revenueImpact: `$${Math.round((100 - seoScore) * 50)}-${Math.round((100 - seoScore) * 100)}/month`
+  }
+};
     schemaCoverage: Math.min(100, schemas.length * 20),
     aeoReadiness: Math.round((hasFAQ? 25 : 0) + (hasHowTo? 20 : 0) + (hasDirectAnswer? 20 : 0) + (hasSchemaMarkup? 15 : 0) + (hasAuthor? 10 : 0) + (hasLastModified? 10 : 0)),
     aeoSignals: [],

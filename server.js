@@ -32,14 +32,6 @@ async function safeFetch(url, options = {}) {
   }
 }
 
-function safeJSONParse(str, fallback = {}) {
-  try {
-    return JSON.parse(str);
-  } catch {
-    return fallback;
-  }
-}
-
 function extractDomain(url) {
   try {
     return new URL(url).hostname.replace("www.", "");
@@ -339,17 +331,16 @@ async function analyzeSingleUrl(url) {
   const citationPerplexity = Math.min(95, Math.round((aiTrustScore * 0.4) + (eeatScore * 0.3) + (hasDirectAnswer? 20 : 0)));
   const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
 
-  const tips = [];
-  if (!hasFAQ) tips.push("Add FAQ Schema to increase ChatGPT citations");
-  if (!hasHowTo) tips.push("Add HowTo Schema for AI answer extraction");
-  if (!hasAuthor) tips.push("Add author information to improve EEAT");
-  if (!hasLastModified) tips.push("Add Last Updated date");
+  const overall = Math.round((seoScore + aeoScore + aiTrustScore + citationProbability) / 4);
 
-  const instantFixes = [];
-  if (!metaDescription) instantFixes.push("Add Meta Description");
-  if (imagesWithoutAlt > 0) instantFixes.push("Add ALT Text to Images");
-  if (!hasFAQ) instantFixes.push("Add FAQ Schema");
-  if (!hasCanonical) instantFixes.push("Add Canonical URL");
+  const aiVisibilityLevel =
+    overall >= 80
+     ? "Excellent - AI Search Ready"
+      : overall >= 60
+     ? "Good - Needs Minor Fixes"
+      : overall >= 40
+     ? "Fair - Major Improvements Needed"
+      : "Poor - Not AI Ready";
 
   const aiTrustSignals = [];
   if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
@@ -358,12 +349,6 @@ async function analyzeSingleUrl(url) {
   if (hasAuthor) aiTrustSignals.push("Author Bio");
   if (isHttps) aiTrustSignals.push("HTTPS Secure");
 
-  const snippetReasons = [];
-  if (hasDirectAnswer) snippetReasons.push("Direct answer found");
-  if (hasFAQ) snippetReasons.push("FAQ structure found");
-  if (listCount > 0) snippetReasons.push(`${listCount} lists found`);
-  if (h2Count >= 3) snippetReasons.push("Good heading structure");
-
   const autoFAQ = [];
   if (h1) {
     autoFAQ.push({
@@ -371,17 +356,6 @@ async function analyzeSingleUrl(url) {
       a: metaDescription || bodyText.substring(0, 120)
     });
   }
-
-  const overall = Math.round((seoScore + aeoScore + aiTrustScore + citationProbability) / 4);
-
-  const aiVisibilityLevel =
-    overall >= 80
-     ? "Excellent - AI Search Ready"
-      : overall >= 60
-       ? "Good - Needs Minor Fixes"
-        : overall >= 40
-         ? "Fair - Major Improvements Needed"
-          : "Poor - Not AI Ready";
 
   return {
     url: url || "",
@@ -394,11 +368,11 @@ async function analyzeSingleUrl(url) {
     score: seoScore || 0,
     status: seoStatus || "Unknown",
 
-    overall: overall || 0,
+    overall: overall,
+    overallAIVisibilityScore: overall,
+    aiVisibilityScore: overall,
+    aiVisibilityLevel: aiVisibilityLevel,
     citationProbability: citationProbability || 0,
-
-    overallAIVisibilityScore: overall || 0,
-    aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
 
     totalImages: totalImages || 0,
     imagesWithoutAlt: imagesWithoutAlt || 0,
@@ -433,6 +407,7 @@ async function analyzeSingleUrl(url) {
 
     schemas: schemas || [],
     keywords: keywords || [],
+    keywordInsights: keywordInsights || [],
 
     aiReport: aiReport || "",
     readabilityScore: readabilityScore || 50,
@@ -481,20 +456,24 @@ async function analyzeSingleUrl(url) {
       (hasLastModified? 10 : 0)
     ),
 
-    aeoSignals: [],
+    aeoSignals: aiTrustSignals,
     fixSuggestions: [],
+    instantFixes: [],
 
     realCitationChatGPT: citationChatGPT,
     realCitationGemini: citationGemini,
     realCitationPerplexity: citationPerplexity,
 
-    citationReasons: [],
-
     aiSearchSimulation: {
       query: "AI temporarily disabled",
       answer: "Rule-based analysis active. Enable AI API for search simulation.",
       sources: []
-    }
+    },
+
+    criticalIssues: criticalIssues,
+    importantIssues: importantIssues,
+    minorIssues: minorIssues,
+    autoFAQ: autoFAQ
   };
 }
 
@@ -503,7 +482,7 @@ app.get("/", (req, res) => {
   res.json({
     status: "running",
     tool: "AI Visibility Platform",
-    version: "2.0-stable",
+    version: "2.1-fixed",
     timestamp: new Date().toISOString()
   });
 });

@@ -1,11 +1,3 @@
-Samajh gaya. Tumhare code me 3 bade issue hain:
-
-1. `schemas` 2 baar declare hai - ek baar line 32 pe `let schemas = []`, phir line 140 pe `const schemas = []`. JS me same naam se dubara declare nahi kar sakte.
-2. FAQ/Schema extraction code duplicate hai - upar bhi aur STEP 5 me bhi.
-3. Neeche end me phir se headings/keywords wala code chipka diya.
-
-### *Fixed `server.js` - Poora Copy-Paste Karo*
-
 import express from "express";
 import * as cheerio from "cheerio";
 import cors from "cors";

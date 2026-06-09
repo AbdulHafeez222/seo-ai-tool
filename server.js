@@ -100,8 +100,42 @@ function extractKeywordsFromContent(text, headings = "", topN = 10) {
 }
 
 // ========== MAIN ANALYZE - CRASH PROOF ==========
+Bhai abhi bhi 2 error hain kyunki variables `try` block ke andar banaye aur bahar use kar rahe ho. JS me scope ka issue hai.
+
+### *Problem*
+try {
+  const keywords = extractKeywordsFromContent(...) // ye try ke andar hai
+} catch {}
+
+return { keywords: keywords } // yahan undefined error aayega
+### *Fix: Variables Upar Declare Karo*
+
+`server.js` me `analyzeSingleUrl` function ke andar ye changes karo:
+
+*1. Function ke top pe ye lines add karo, baaki variables ke saath:*
 async function analyzeSingleUrl(url) {
-  // STEP 1: SAFE DEFAULTS
+  let html = "";
+  let $ = null;
+  //... baaki saare let variables
+
+  // ⬇️ YE 2 LINES ADD KARO ⬇️
+  let keywords = [];
+  let keywordInsights = [];
+
+  let readabilityScore = 50;
+  let aiReport = "Rule-based analysis complete";
+*2. Phir neeche jahan keywords ban rahe hain wahan `const` hata do:*
+
+Pehle ye tha:
+const keywords = extractKeywordsFromContent(bodyText, headings, 15);
+const keywordInsights = keywords.slice(0, 5).map(k => ({
+Isse replace karo:
+keywords = extractKeywordsFromContent(bodyText, headings, 15);
+keywordInsights = keywords.slice(0, 5).map(k => ({
+### *Full Fixed `analyzeSingleUrl` Function*
+
+Copy-paste kardo poora function:
+async function analyzeSingleUrl(url) {
   let html = "";
   let $ = null;
   let loadTime = 0;
@@ -123,7 +157,7 @@ async function analyzeSingleUrl(url) {
   let robotsExists = false;
   let sitemapExists = false;
   let brokenLinks = 0;
-  let schemas = []; // SIRF EK BAAR DECLARE
+  let schemas = [];
   let hasFAQ = false;
   let hasHowTo = false;
   let hasSchemaMarkup = false;
@@ -153,26 +187,24 @@ async function analyzeSingleUrl(url) {
   let lastModified = null;
   let readabilityScore = 50;
   let aiReport = "Rule-based analysis complete";
+  let keywords = [];
+  let keywordInsights = [];
 
   try {
-    // STEP 2: SAFE FETCH
     const startTime = Date.now();
     html = await safeFetch(url);
     loadTime = Date.now() - startTime;
-
     if (!html) throw new Error("Empty HTML response");
 
     $ = cheerio.load(html);
     $('script, style, nav, footer, header, noscript, svg').remove();
 
-    // STEP 3: SAFE EXTRACTION
     try { title = $("title").text().trim(); } catch {}
     try { h1 = $("h1").first().text().trim(); } catch {}
     try { metaDescription = $('meta[name="description"]').attr("content") || ""; } catch {}
     try { bodyText = $("p, li, h2, h3, h4, td").text().replace(/\s+/g, " ").trim(); } catch {}
     try { wordCount = bodyText.split(/\s+/).filter(Boolean).length; } catch {}
 
-    // HEADINGS + FAQ + SCHEMA - EK HI JAGAH
     let h1Text = "";
     let h2Texts = "";
     try { h1Text = $("h1").first().text(); } catch {}
@@ -197,14 +229,12 @@ async function analyzeSingleUrl(url) {
     hasHowTo = schemas.includes("HowTo");
     hasSchemaMarkup = schemas.length > 0;
 
-    const keywords = extractKeywordsFromContent(bodyText, headings, 15);
-    const keywordInsights = keywords.slice(0, 5).map(k => ({
+    keywords = extractKeywordsFromContent(bodyText, headings, 15);
+    keywordInsights = keywords.slice(0, 5).map(k => ({
       keyword: k,
       difficulty: getKeywordDifficulty(k),
       opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
     }));
-
-    const brandName = getBrandName(url);
 
     try {
       const images = $("img");
@@ -221,7 +251,6 @@ async function analyzeSingleUrl(url) {
     try { canonical = $('link[rel="canonical"]').attr("href") || ""; hasCanonical =!!canonical; } catch {}
     try { favicon = $('link[rel="icon"], link[rel="shortcut icon"]').attr("href") || ""; hasFavicon =!!favicon; } catch {}
 
-    // STEP 4: SAFE EXTERNAL CHECKS
     try {
       const robotsHtml = await safeFetch(new URL("/robots.txt", url).href);
       robotsExists = robotsHtml.length > 0;
@@ -234,7 +263,6 @@ async function analyzeSingleUrl(url) {
 
     hasDirectAnswer = bodyText.includes("Q:") && bodyText.includes("A:");
 
-    // STEP 6: OG TAGS
     try {
       ogTitle = $('meta[property="og:title"]').attr("content") || "";
       ogDescription = $('meta[property="og:description"]').attr("content") || "";
@@ -242,9 +270,8 @@ async function analyzeSingleUrl(url) {
       hasOGTags =!!(ogTitle && ogDescription);
     } catch {}
 
-    // STEP 7: SOCIAL + CONTACT
     try {
-      const socialLinks = $("a[href]").map((i, el) => $(el).attr("href") || "").get();
+      const socialLinks = $("a").map((i, el) => $(el).attr("href") || "").get();
       hasFacebook = socialLinks.some(link => link.includes("facebook.com"));
       hasLinkedIn = socialLinks.some(link => link.includes("linkedin.com"));
       hasYouTube = socialLinks.some(link => link.includes("youtube.com"));
@@ -260,7 +287,6 @@ async function analyzeSingleUrl(url) {
       phone = phoneMatch? phoneMatch[0] : null;
     } catch {}
 
-    // STEP 8: PAGE DETECTION
     try {
       const allText = bodyText.toLowerCase();
       hasPrivacyPolicy = allText.includes("privacy policy") || allText.includes("privacy");
@@ -268,7 +294,6 @@ async function analyzeSingleUrl(url) {
       hasContactPage = allText.includes("contact us") || allText.includes("contact");
     } catch {}
 
-    // STEP 9: STRUCTURE
     try {
       h1Count = $("h1").length;
       h2Count = $("h2").length;
@@ -277,22 +302,19 @@ async function analyzeSingleUrl(url) {
       tableCount = $("table").length;
     } catch {}
 
-    // STEP 10: AUTHOR + DATES
     try {
       const authorSelectors = ['.author', '.byline', '[rel="author"]', '[class*="author"]', '[itemprop="author"]'];
       hasAuthor = authorSelectors.some(sel => $(sel).length > 0);
     } catch {}
 
     try {
-      const dateStr = $('meta[property="article:modified_time"]').attr('content') ||
-                      $('meta[property="article:published_time"]').attr('content');
+      const dateStr = $('meta[property="article:modified_time"]').attr('content') || $('meta[property="article:published_time"]').attr('content');
       if (dateStr) {
         lastModified = new Date(dateStr).toLocaleDateString();
         hasLastModified = true;
       }
     } catch {}
 
-    // STEP 11: READABILITY
     try {
       const sentences = bodyText.split(/[.!?]+/).length || 1;
       const avgWordsPerSentence = wordCount / sentences;
@@ -306,7 +328,6 @@ async function analyzeSingleUrl(url) {
     aiReport = `Partial analysis due to: ${mainError.message}`;
   }
 
-  // STEP 12: SCORING
   let seoScore = 100;
   const criticalIssues = [];
   const importantIssues = [];
@@ -347,19 +368,8 @@ async function analyzeSingleUrl(url) {
   if (hasLastModified) eeatScore += 10;
 
   const aiTrustScore = Math.round((eeatScore * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
-
-  const aiVisibilityScore = Math.round(
-    (seoScore * 0.25) +
-    (aeoScore * 0.25) +
-    (aiTrustScore * 0.2) +
-    (readabilityScore * 0.15) +
-    (schemas.length * 3)
-  );
-
-  const aiVisibilityLevel = aiVisibilityScore >= 80? "Excellent - AI Search Ready" :
-                           aiVisibilityScore >= 60? "Good - Needs Minor Fixes" :
-                           aiVisibilityScore >= 40? "Fair - Major Improvements Needed" :
-                           "Poor - Not AI Ready";
+  const aiVisibilityScore = Math.round((seoScore * 0.25) + (aeoScore * 0.25) + (aiTrustScore * 0.2) + (readabilityScore * 0.15) + (schemas.length * 3));
+  const aiVisibilityLevel = aiVisibilityScore >= 80? "Excellent - AI Search Ready" : aiVisibilityScore >= 60? "Good - Needs Minor Fixes" : aiVisibilityScore >= 40? "Fair - Major Improvements Needed" : "Poor - Not AI Ready";
 
   const citationChatGPT = Math.min(95, Math.round((aeoScore * 0.4) + (aiTrustScore * 0.3) + (hasFAQ? 20 : 0) + (hasDirectAnswer? 10 : 0)));
   const citationGemini = Math.min(95, Math.round((aeoScore * 0.4) + (seoScore * 0.3) + (hasSchemaMarkup? 20 : 0) + (hasAuthor? 10 : 0)));
@@ -485,6 +495,7 @@ async function analyzeSingleUrl(url) {
     }
   };
 }
+*Ab deploy karo.* `ReferenceError: keywords is not defined` khatam ho jayega ✅
 
 // ========== API ENDPOINTS ==========
 app.get("/", (req, res) => {

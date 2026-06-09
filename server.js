@@ -54,7 +54,7 @@ function getBrandName(url) {
   return brand.charAt(0).toUpperCase() + brand.slice(1);
 }
 
-ffunction extractKeywordsFromContent(text, headings = "", topN = 10) {
+function extractKeywordsFromContent(text, headings = "", topN = 10) {
   if (!text) return [];
   
   // STEP 1: Badi Stop Words list - JS keywords block

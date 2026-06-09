@@ -56,8 +56,8 @@ function getBrandName(url) {
 
 function extractKeywordsFromContent(text, headings = "", topN = 10) {
   if (!text) return [];
-  
-  // STEP 1: Badi Stop Words list - JS keywords block
+  const headingText = String(headings || "").toLowerCase();
+
   const stopWords = [
     'about', 'https', 'website', 'click', 'here', 'their', 'there', 'which', 'would',
     'function', 'return', 'const', 'document', 'window', 'typeof', 'undefined', 'null',

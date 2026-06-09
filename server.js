@@ -152,6 +152,7 @@ async function analyzeSingleUrl(url) {
   let lastModified = null;
   let readabilityScore = 50;
   let aiReport = "Rule-based analysis complete";
+  let faqQuestions = [];
   let keywords = [];
   let keywordInsights = [];
   

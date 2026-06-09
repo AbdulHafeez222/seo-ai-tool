@@ -1,10 +1,18 @@
+Samajh gaya. Tumhare code me 3 bade issue hain:
+
+1. `schemas` 2 baar declare hai - ek baar line 32 pe `let schemas = []`, phir line 140 pe `const schemas = []`. JS me same naam se dubara declare nahi kar sakte.
+2. FAQ/Schema extraction code duplicate hai - upar bhi aur STEP 5 me bhi.
+3. Neeche end me phir se headings/keywords wala code chipka diya.
+
+### *Fixed `server.js` - Poora Copy-Paste Karo*
+
 import express from "express";
 import * as cheerio from "cheerio";
 import cors from "cors";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const scanHistory = []; // ONLY DECLARATION - NO DUPLICATES
+const scanHistory = [];
 
 app.use(cors());
 app.use(express.json());
@@ -18,7 +26,7 @@ async function safeFetch(url, options = {}) {
     const timeout = setTimeout(() => controller.abort(), options.timeout || 10000);
 
     const res = await fetch(url, {
-     ...options,
+    ...options,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; SEO-AEO-Bot/1.0)",...options.headers },
       signal: controller.signal
     });
@@ -28,7 +36,7 @@ async function safeFetch(url, options = {}) {
     return await res.text();
   } catch (e) {
     console.error(`Fetch failed for ${url}:`, e.message);
-    return ""; // NEVER CRASH - return empty
+    return "";
   }
 }
 
@@ -61,18 +69,16 @@ function getKeywordDifficulty(keyword) {
   return "Low";
 }
 
-
 function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
   let score = 0;
   if (hasFAQ) score++;
   if (hasSchema) score++;
-  if (keyword.split(' ').length > 2) score++; // Long tail = high opp
-  
+  if (keyword.split(' ').length > 2) score++;
+
   if (score >= 2) return "High";
   if (score === 1) return "Medium";
   return "Low";
 }
-
 
 function extractKeywordsFromContent(text, headings = "", topN = 10) {
   if (!text) return [];
@@ -84,28 +90,26 @@ function extractKeywordsFromContent(text, headings = "", topN = 10) {
     'foreach', 'classlist', 'addeventlistener', 'javascript', 'button', 'var', 'let'
   ];
 
-  // Fix 1: headings ko string me convert karo
   const headingText = String(headings || "").toLowerCase();
-
-  // Fix 2: combinedText wapas add karo - ye line missing thi
   const combinedText = headingText + ' ' + headingText + ' ' + headingText + ' ' + text.toLowerCase();
 
   const words = combinedText
-  .replace(/[^\w\s]/g, ' ')
-  .split(/\s+/)
-  .filter(w => w.length > 4 &&!stopWords.includes(w));
+ .replace(/[^\w\s]/g, ' ')
+ .split(/\s+/)
+ .filter(w => w.length > 4 &&!stopWords.includes(w));
 
   const freq = {};
   words.forEach(w => freq[w] = (freq[w] || 0) + 1);
 
   return Object.entries(freq)
-  .sort((a, b) => b[1] - a[1])
-  .slice(0, topN)
-  .map(([word]) => word);
+ .sort((a, b) => b[1] - a[1])
+ .slice(0, topN)
+ .map(([word]) => word);
 }
+
 // ========== MAIN ANALYZE - CRASH PROOF ==========
 async function analyzeSingleUrl(url) {
-  // STEP 1: SAFE DEFAULTS - NEVER UNDEFINED
+  // STEP 1: SAFE DEFAULTS
   let html = "";
   let $ = null;
   let loadTime = 0;
@@ -127,7 +131,7 @@ async function analyzeSingleUrl(url) {
   let robotsExists = false;
   let sitemapExists = false;
   let brokenLinks = 0;
-  let schemas = [];
+  let schemas = []; // SIRF EK BAAR DECLARE
   let hasFAQ = false;
   let hasHowTo = false;
   let hasSchemaMarkup = false;
@@ -167,53 +171,47 @@ async function analyzeSingleUrl(url) {
     if (!html) throw new Error("Empty HTML response");
 
     $ = cheerio.load(html);
-$('script, style, nav, footer, header, noscript, svg').remove();
-    // STEP 3: SAFE EXTRACTION - EVERYTHING IN TRY-CATCH
+    $('script, style, nav, footer, header, noscript, svg').remove();
+
+    // STEP 3: SAFE EXTRACTION
     try { title = $("title").text().trim(); } catch {}
     try { h1 = $("h1").first().text().trim(); } catch {}
     try { metaDescription = $('meta[name="description"]').attr("content") || ""; } catch {}
-try { bodyText = $("p, li, h2, h3, h4, td").text().replace(/\s+/g, " ").trim(); 
-} catch {}
+    try { bodyText = $("p, li, h2, h3, h4, td").text().replace(/\s+/g, " ").trim(); } catch {}
     try { wordCount = bodyText.split(/\s+/).filter(Boolean).length; } catch {}
 
-let h1Text = "";
-let h2Texts = "";
-try { h1Text = $("h1").first().text(); } catch {}
-try { h2Texts = $("h2").map((i,el)=>$(el).text()).get().join(' '); } catch {}
-const headings = h1Text + ' ' + h2Texts;
+    // HEADINGS + FAQ + SCHEMA - EK HI JAGAH
+    let h1Text = "";
+    let h2Texts = "";
+    try { h1Text = $("h1").first().text(); } catch {}
+    try { h2Texts = $("h2").map((i,el)=>$(el).text()).get().join(' '); } catch {}
+    const headings = h1Text + ' ' + h2Texts;
 
-// 1. FAQ Questions nikaalo
-const faqQuestions = [];
-$('script[type="application/ld+json"]').each((i, el) => {
-  try {
-    const json = JSON.parse($(el).html());
-    if (json['@type'] === 'FAQPage') {
-      json.mainEntity?.forEach(q => {
-        if (q.name) faqQuestions.push(q.name);
-      });
-    }
-  } catch {}
-});
+    const faqQuestions = [];
+    $('script[type="application/ld+json"]').each((i, el) => {
+      try {
+        const json = JSON.parse($(el).html());
+        if (json['@type'] === 'FAQPage') {
+          json.mainEntity?.forEach(q => {
+            if (q.name) faqQuestions.push(q.name);
+          });
+        }
+        const type = json["@type"] || json["@graph"]?.[0]?.["@type"];
+        if (type) schemas.push(Array.isArray(type)? type[0] : type);
+      } catch {}
+    });
 
-// 2. Schema markup check karo  
-const schemas = [];
-$('script[type="application/ld+json"]').each((i, el) => {
-  try {
-    const json = JSON.parse($(el).html());
-    if (json['@type']) schemas.push(json['@type']);
-  } catch {}
-});
+    hasFAQ = faqQuestions.length > 0 || schemas.includes("FAQPage");
+    hasHowTo = schemas.includes("HowTo");
+    hasSchemaMarkup = schemas.length > 0;
 
-// 3. AB ye chalega
-hasFAQ = faqQuestions.length > 0;
-hasSchemaMarkup = schemas.length > 0;
+    const keywords = extractKeywordsFromContent(bodyText, headings, 15);
+    const keywordInsights = keywords.slice(0, 5).map(k => ({
+      keyword: k,
+      difficulty: getKeywordDifficulty(k),
+      opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
+    }));
 
-const keywords = extractKeywordsFromContent(bodyText, headings, 15);
-const keywordInsights = keywords.slice(0, 5).map(k => ({
-  keyword: k,
-  difficulty: getKeywordDifficulty(k),
-  opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
-}));
     const brandName = getBrandName(url);
 
     try {
@@ -240,20 +238,6 @@ const keywordInsights = keywords.slice(0, 5).map(k => ({
     try {
       const sitemapHtml = await safeFetch(new URL("/sitemap.xml", url).href);
       sitemapExists = sitemapHtml.length > 0;
-    } catch {}
-
-    // STEP 5: SCHEMA EXTRACTION
-    try {
-      $('script[type="application/ld+json"]').each((i, el) => {
-        try {
-          const json = safeJSONParse($(el).html());
-          const type = json["@type"] || json["@graph"]?.[0]?.["@type"];
-          if (type) schemas.push(Array.isArray(type)? type[0] : type);
-        } catch {}
-      });
-      hasFAQ = schemas.includes("FAQPage");
-      hasHowTo = schemas.includes("HowTo");
-      hasSchemaMarkup = schemas.length > 0;
     } catch {}
 
     hasDirectAnswer = bodyText.includes("Q:") && bodyText.includes("A:");
@@ -330,7 +314,7 @@ const keywordInsights = keywords.slice(0, 5).map(k => ({
     aiReport = `Partial analysis due to: ${mainError.message}`;
   }
 
-  // STEP 12: SCORING - NEVER FAIL
+  // STEP 12: SCORING
   let seoScore = 100;
   const criticalIssues = [];
   const importantIssues = [];
@@ -361,7 +345,6 @@ const keywordInsights = keywords.slice(0, 5).map(k => ({
   if (h1 && metaDescription) aeoScore += 10;
   const aeoStatus = aeoScore >= 80? "ChatGPT Ready" : aeoScore >= 50? "AI Friendly" : "Needs Work";
 
-  // EEAT Score
   let eeatScore = 0;
   if (hasAuthor) eeatScore += 20;
   if (hasContactPage || hasEmail || hasPhone) eeatScore += 15;
@@ -389,26 +372,8 @@ const keywordInsights = keywords.slice(0, 5).map(k => ({
   const citationChatGPT = Math.min(95, Math.round((aeoScore * 0.4) + (aiTrustScore * 0.3) + (hasFAQ? 20 : 0) + (hasDirectAnswer? 10 : 0)));
   const citationGemini = Math.min(95, Math.round((aeoScore * 0.4) + (seoScore * 0.3) + (hasSchemaMarkup? 20 : 0) + (hasAuthor? 10 : 0)));
   const citationPerplexity = Math.min(95, Math.round((aiTrustScore * 0.4) + (eeatScore * 0.3) + (hasDirectAnswer? 20 : 0)));
-// 1. Headings nikaalo PEHLE
-const h1Text = $('h1').first().text().trim() || '';
-const h2Texts = $('h2').map((i, el) => $(el).text()).get().join(' ');
-let headings = h1Text + ' ' + h2Texts; // Ye zaroori hai
 
-// 2. Keywords nikaalo headings ke saath
-const keywords = extractKeywordsFromContent(bodyText, headings, 15);
-
-// 3. hasFAQ aur hasSchemaMarkup pehle se defined hone chahiye
-hasFAQ = faqQuestions.length > 0;
-hasSchemaMarkup = schemas.length > 0;
-
-// 4. AB keywordInsights banao
-const keywordInsights = keywords.slice(0, 5).map(k => ({
-  keyword: k,
-  difficulty: getKeywordDifficulty(k),
-  opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
-}));
-
-const tips = [];
+  const tips = [];
   if (!hasFAQ) tips.push("Add FAQ Schema to increase ChatGPT citations");
   if (!hasHowTo) tips.push("Add HowTo Schema for AI answer extraction");
   if (!hasAuthor) tips.push("Add author information to improve EEAT");
@@ -420,7 +385,6 @@ const tips = [];
   if (!hasFAQ) instantFixes.push("Add FAQ Schema");
   if (!hasCanonical) instantFixes.push("Add Canonical URL");
 
-  // STEP 13: ALWAYS RETURN COMPLETE OBJECT - NO UNDEFINED
   return {
     url: url || "",
     title: title || "No title",
@@ -464,7 +428,7 @@ const tips = [];
     hasDirectAnswer: hasDirectAnswer || false,
     schemas: schemas || [],
     keywords: keywords || [],
-    keywordInsights: keywordInsights || [], 
+    keywordInsights: keywordInsights || [],
     tips: tips || [],
     criticalIssues: criticalIssues || [],
     importantIssues: importantIssues || [],
@@ -530,7 +494,7 @@ const tips = [];
   };
 }
 
-// ========== API ENDPOINTS - ALL WITH VALIDATION ==========
+// ========== API ENDPOINTS ==========
 app.get("/", (req, res) => {
   res.json({
     status: "running",
@@ -832,7 +796,6 @@ app.get("/health", (req, res) => {
   res.json({ status: "OK", ai: "waiting", timestamp: new Date().toISOString() });
 });
 
-// GLOBAL ERROR HANDLER - CATCH ALL
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", err);
   res.status(500).json({
@@ -841,182 +804,6 @@ app.use((err, req, res, next) => {
     fallback: true
   });
 });
-function extractDates($) {
-  const metaDates = {
-    published: $('meta[property="article:published_time"]').attr('content') ||
-               $('meta[name="date"]').attr('content') ||
-               $('time[datetime]').attr('datetime'),
-    modified: $('meta[property="article:modified_time"]').attr('content') ||
-              $('meta[name="last-modified"]').attr('content'),
-    updated: $('.updated,.last-updated, [class*="update"]').first().text()
-  };
-
-  return {
-    published: metaDates.published? new Date(metaDates.published) : null,
-    modified: metaDates.modified? new Date(metaDates.modified) : null,
-    raw: metaDates
-  };
-}
-function analyzeInternalLinks($, baseUrl) {
-  const links = [];
-  const baseDomain = extractDomain(baseUrl);
-
-  $('a[href]').each((i, el) => {
-    const href = $(el).attr('href');
-    if (!href) return;
-
-    try {
-      const fullUrl = new URL(href, baseUrl).href;
-      const linkDomain = extractDomain(fullUrl);
-      if (linkDomain === baseDomain) {
-        links.push({
-          url: fullUrl,
-          text: $(el).text().trim().substring(0, 50),
-          path: new URL(fullUrl).pathname
-        });
-      }
-    } catch {}
-  });
-
-  const pageCounts = {};
-  links.forEach(link => {
-    pageCounts[link.path] = (pageCounts[link.path] || 0) + 1;
-  });
-
-  const sorted = Object.entries(pageCounts).sort((a, b) => b[1] - a[1]);
-
-  return {
-    total: links.length,
-    uniquePages: Object.keys(pageCounts).length,
-    mostLinked: sorted[0]? { path: sorted[0][0], count: sorted[0][1] } : null,
-    weakPages: sorted.filter(([path, count]) => count <= 2).slice(0, 5).map(([path, count]) => ({ path, count }))
-  };
-}
-
-function calculateEEATScore($, data) {
-  let score = 0;
-  const signals = [];
-
-  if (data.hasAuthor) {
-    score += 20;
-    signals.push('✓ Author Bio Found');
-  } else {
-    signals.push('✗ Author Bio Missing');
-  }
-
-  if (data.hasContactPage || data.hasEmail || data.hasPhone) {
-    score += 15;
-    signals.push('✓ Contact Information Found');
-  } else {
-    signals.push('✗ Contact Information Missing');
-  }
-
-  if (data.hasAboutPage) {
-    score += 15;
-    signals.push('✓ About Page Found');
-  } else {
-    signals.push('✗ About Page Missing');
-  }
-
-  if (data.hasPrivacyPolicy) {
-    score += 15;
-    signals.push('✓ Privacy Policy Found');
-  } else {
-    signals.push('✗ Privacy Policy Missing');
-  }
-
-  const socialCount = [data.hasFacebook, data.hasLinkedIn, data.hasYouTube, data.hasTwitter].filter(Boolean).length;
-  score += socialCount * 5;
-  if (socialCount >= 2) {
-    signals.push(`✓ ${socialCount} Social Profiles Found`);
-  } else {
-    signals.push('✗ Insufficient Social Profiles');
-  }
-
-  if (data.isHttps) {
-    score += 10;
-    signals.push('✓ HTTPS Secure');
-  }
-
-  if (data.lastModified) {
-    score += 10;
-    signals.push('✓ Last Updated Date Found');
-  } else {
-    signals.push('✗ Last Updated Date Missing');
-  }
-
-  return { score: Math.min(score, 100), signals };
-}
-
-function calculateFreshnessScore(dates) {
-  if (!dates.modified &&!dates.published) {
-    return { score: 0, status: 'No dates found', daysAgo: null };
-  }
-
-  const latest = dates.modified || dates.published;
-  const daysAgo = Math.floor((Date.now() - latest.getTime()) / (1000 * 60 * 60 * 24));
-
-  let score = 100;
-  if (daysAgo > 365) score = 20;
-  else if (daysAgo > 180) score = 40;
-  else if (daysAgo > 90) score = 60;
-  else if (daysAgo > 30) score = 80;
-
-  return {
-    score,
-    daysAgo,
-    status: daysAgo < 30? 'Fresh' : daysAgo < 90? 'Good' : daysAgo < 180? 'Stale' : 'Outdated',
-    lastUpdated: latest.toLocaleDateString()
-  };
-}
-
-function calculateZeroClickScore(data) {
-  let score = 0;
-  const factors = [];
-
-  if (data.hasDirectAnswer) {
-    score += 25;
-    factors.push('✓ Direct Answer Found');
-  } else {
-    factors.push('✗ No Direct Answer');
-  }
-
-  if (data.hasFAQ) {
-    score += 20;
-    factors.push('✓ FAQ Schema');
-  } else {
-    factors.push('✗ FAQ Schema Missing');
-  }
-
-  if (data.listCount >= 2) {
-    score += 15;
-    factors.push(`✓ ${data.listCount} Lists Found`);
-  } else {
-    factors.push('✗ Insufficient Lists');
-  }
-
-  if (data.tableCount >= 1) {
-    score += 15;
-    factors.push(`✓ ${data.tableCount} Tables Found`);
-  } else {
-    factors.push('✗ No Tables');
-  }
-
-  if (data.h2Count >= 3) {
-    score += 15;
-    factors.push(`✓ ${data.h2Count} H2 Headers`);
-  } else {
-    factors.push('✗ Poor Heading Structure');
-  }
-
-  if (data.hasHowTo) {
-    score += 10;
-    factors.push('✓ HowTo Schema');
-  }
-
-  return { score: Math.min(score, 100), factors };
-}
-
 
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform running on port ${PORT}`);

@@ -78,17 +78,17 @@ function extractKeywordsFromContent(text, headings = "", topN = 10) {
   const combinedText = headingText + ' ' + headingText + ' ' + headingText + ' ' + text.toLowerCase();
 
   const words = combinedText
-  .replace(/[^\w\s]/g, ' ')
-  .split(/\s+/)
-  .filter(w => w.length > 4 &&!stopWords.includes(w));
+ .replace(/[^\w\s]/g, ' ')
+ .split(/\s+/)
+ .filter(w => w.length > 4 &&!stopWords.includes(w));
 
   const freq = {};
   words.forEach(w => freq[w] = (freq[w] || 0) + 1);
 
   return Object.entries(freq)
-  .sort((a, b) => b[1] - a[1])
-  .slice(0, topN)
-  .map(([word]) => word);
+ .sort((a, b) => b[1] - a[1])
+ .slice(0, topN)
+ .map(([word]) => word);
 }
 
 async function analyzeSingleUrl(url) {
@@ -335,11 +335,11 @@ async function analyzeSingleUrl(url) {
 
   const aiVisibilityLevel =
     overall >= 80
-    ? "Excellent - AI Search Ready"
+   ? "Excellent - AI Search Ready"
       : overall >= 60
-    ? "Good - Needs Minor Fixes"
+   ? "Good - Needs Minor Fixes"
       : overall >= 40
-    ? "Fair - Major Improvements Needed"
+   ? "Fair - Major Improvements Needed"
       : "Poor - Not AI Ready";
 
   const aiTrustSignals = [];
@@ -357,7 +357,7 @@ async function analyzeSingleUrl(url) {
     });
   }
 
-  // Calculate answerQuality based on content signals
+  // FIX 3: Answer Quality calculation + both names
   const answerQuality = Math.min(100, Math.round(
     (hasDirectAnswer? 30 : 0) +
     (hasFAQ? 25 : 0) +
@@ -365,6 +365,10 @@ async function analyzeSingleUrl(url) {
     (h2Count >= 3? 15 : 0) +
     (readabilityScore * 0.15)
   )) || 50;
+
+  // FIX 2: Mobile vs Desktop scores
+  const mobileScore = mobileViewport? seoScore : Math.max(0, seoScore - 20);
+  const desktopScore = seoScore;
 
   return {
     url: url || "",
@@ -374,9 +378,10 @@ async function analyzeSingleUrl(url) {
     wordCount: wordCount || 0,
     lastModified: lastModified || null,
 
-    score: seoScore || 0,
+    score: Number(seoScore) || 0,
     status: seoStatus || "Unknown",
 
+    // FIX 1: Force number, never undefined. Send all 3 names for compatibility
     overall: Number(overall) || 0,
     overallAIVisibilityScore: Number(overall) || 0,
     aiVisibilityScore: Number(overall) || 0,
@@ -393,6 +398,10 @@ async function analyzeSingleUrl(url) {
     loadTime: loadTime || 0,
     brokenLinks: brokenLinks || 0,
 
+    // FIX 2: Mobile/Desktop explicit scores
+    mobileScore: Number(mobileScore) || 0,
+    desktopScore: Number(desktopScore) || 0,
+
     hasSchemaMarkup: hasSchemaMarkup || false,
     robotsExists: robotsExists || false,
     sitemapExists: sitemapExists || false,
@@ -407,7 +416,7 @@ async function analyzeSingleUrl(url) {
     ogDescription: ogDescription || "",
     ogImage: ogImage || "",
 
-    aeoScore: aeoScore || 0,
+    aeoScore: Number(aeoScore) || 0,
     aeoStatus: aeoStatus || "Needs Work",
 
     hasFAQ: hasFAQ || false,
@@ -419,10 +428,10 @@ async function analyzeSingleUrl(url) {
     keywordInsights: keywordInsights || [],
 
     aiReport: aiReport || "",
-    readabilityScore: readabilityScore || 50,
-    aiTrustScore: aiTrustScore || 0,
+    readabilityScore: Number(readabilityScore) || 50,
+    aiTrustScore: Number(aiTrustScore) || 0,
 
-    // FIX 3: Answer Quality - both names for compatibility
+    // FIX 3: Answer Quality both names
     answerQuality: Number(answerQuality) || 50,
     answerQualityScore: Number(answerQuality) || 50,
 
@@ -502,7 +511,7 @@ app.get("/", (req, res) => {
   res.json({
     status: "running",
     tool: "AI Visibility Platform",
-    version: "2.2-stable",
+    version: "2.3-unified",
     timestamp: new Date().toISOString()
   });
 });

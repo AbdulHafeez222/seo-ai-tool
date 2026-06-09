@@ -353,6 +353,31 @@ async function analyzeSingleUrl(url) {
   if (imagesWithoutAlt > 0) instantFixes.push("Add ALT Text to Images");
   if (!hasFAQ) instantFixes.push("Add FAQ Schema");
   if (!hasCanonical) instantFixes.push("Add Canonical URL");
+  const aiTrustSignals = [];
+
+if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
+if (hasAboutPage) aiTrustSignals.push("About Page");
+if (hasContactPage) aiTrustSignals.push("Contact Page");
+if (hasAuthor) aiTrustSignals.push("Author Bio");
+if (isHttps) aiTrustSignals.push("HTTPS Secure");
+
+
+const snippetReasons = [];
+
+if (hasDirectAnswer) snippetReasons.push("Direct answer found");
+if (hasFAQ) snippetReasons.push("FAQ structure found");
+if (listCount > 0) snippetReasons.push(`${listCount} lists found`);
+if (h2Count >= 3) snippetReasons.push("Good heading structure");
+
+
+const autoFAQ = [];
+
+if (h1) {
+  autoFAQ.push({
+    q: `What is ${h1}?`,
+    a: metaDescription || bodyText.substring(0,120)
+  });
+}
 
   return {
     url: url || "",
@@ -365,7 +390,8 @@ async function analyzeSingleUrl(url) {
     status: seoStatus || "Unknown",
     overall: overall || 0, // <-- ADD
     citationProbability: citationProbability || 0, // <-- ADD  
-    aiVisibilityScore: overall || 0,
+    aiVisibilityScore: aiVisibilityScore || 0,
+    overallAIVisibilityScore: aiVisibilityScore || 0,
     aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
     totalImages: totalImages || 0,
     imagesWithoutAlt: imagesWithoutAlt || 0,
@@ -413,12 +439,12 @@ async function analyzeSingleUrl(url) {
     readabilityStatus: readabilityScore >= 70? "Easy" : readabilityScore >= 50? "Medium" : "Hard",
     hasAuthor: hasAuthor || false,
     aiTrustScore: aiTrustScore || 0,
-    aiTrustSignals: [],
+    aiTrustSignals: aiTrustSignals,
     hasPrivacyPolicy: hasPrivacyPolicy || false,
     hasAboutPage: hasAboutPage || false,
     hasContactPage: hasContactPage || false,
     featuredSnippetChance: Math.round((hasDirectAnswer? 40 : 0) + (hasFAQ? 30 : 0) + (listCount > 0? 20 : 0) + (h2Count >= 3? 10 : 0)),
-    snippetReasons: [],
+    snippetReasons: snippetReasons,
     contentStructureScore: (h1Count === 1? 20 : 0) + (h2Count >= 3? 20 : 0) + (h3Count >= 5? 20 : 0) + (listCount >= 2? 20 : 0) + (tableCount >= 1? 20 : 0),
     h1Count: h1Count || 0,
     h2Count: h2Count || 0,
@@ -431,7 +457,7 @@ async function analyzeSingleUrl(url) {
     aiExtractedAnswer: bodyText.substring(0, 300) || "No clear answer found",
     answerQuality: 50,
     answerQualityChecks: [],
-    autoFAQ: [],
+    autoFAQ: autoFAQ,
     serpPreview: {
       title: title || "No title",
       displayUrl: url.replace(/^https?:\/\//, '').replace(/\/$/, ''),

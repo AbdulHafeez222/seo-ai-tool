@@ -56,7 +56,6 @@ function getBrandName(url) {
 
 function extractKeywordsFromContent(text, headings = "", topN = 10) {
   if (!text) return [];
-  const headingText = String(headings || "").toLowerCase();
 
   const stopWords = [
     'about', 'https', 'website', 'click', 'here', 'their', 'there', 'which', 'would',
@@ -64,21 +63,25 @@ function extractKeywordsFromContent(text, headings = "", topN = 10) {
     'true', 'false', 'this', 'that', 'with', 'from', 'have', 'your', 'will', 'been',
     'foreach', 'classlist', 'addeventlistener', 'javascript', 'button', 'var', 'let'
   ];
-  
- 
-  
+
+  // Fix 1: headings ko string me convert karo
+  const headingText = String(headings || "").toLowerCase();
+
+  // Fix 2: combinedText wapas add karo - ye line missing thi
+  const combinedText = headingText + ' ' + headingText + ' ' + headingText + ' ' + text.toLowerCase();
+
   const words = combinedText
-   .replace(/[^\w\s]/g, ' ')
-   .split(/\s+/)
-   .filter(w => w.length > 4 && !stopWords.includes(w));
+  .replace(/[^\w\s]/g, ' ')
+  .split(/\s+/)
+  .filter(w => w.length > 4 &&!stopWords.includes(w));
 
   const freq = {};
   words.forEach(w => freq[w] = (freq[w] || 0) + 1);
 
   return Object.entries(freq)
-   .sort((a, b) => b[1] - a[1])
-   .slice(0, topN)
-   .map(([word]) => word);
+  .sort((a, b) => b[1] - a[1])
+  .slice(0, topN)
+  .map(([word]) => word);
 }
 // ========== MAIN ANALYZE - CRASH PROOF ==========
 async function analyzeSingleUrl(url) {

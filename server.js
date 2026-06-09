@@ -340,7 +340,7 @@ async function analyzeSingleUrl(url) {
   const citationGemini = Math.min(95, Math.round((aeoScore * 0.4) + (seoScore * 0.3) + (hasSchemaMarkup? 20 : 0) + (hasAuthor? 10 : 0)));
   const citationPerplexity = Math.min(95, Math.round((aiTrustScore * 0.4) + (eeatScore * 0.3) + (hasDirectAnswer? 20 : 0)));
   const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
- const overall = Math.round((seoScore + aeoScore + aiTrustScore + citationProbability) / 4);
+const overall = Math.round((seoScore + aeoScore + aiTrustScore + citationProbability) / 4);
 
 const aiVisibilityLevel =
   overall >= 80
@@ -396,11 +396,11 @@ if (h1) {
     lastModified: lastModified || null,
     score: seoScore || 0,
     status: seoStatus || "Unknown",
-    overall: overall || 0, // <-- ADD
-    citationProbability: citationProbability || 0, // <-- ADD  
-   overall,
-overallAIVisibilityScore: overall || 0,
-aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
+    overall: overall || 0,
+   citationProbability: citationProbability || 0,
+
+  overallAIVisibilityScore: overall || 0,
+  aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
     totalImages: totalImages || 0,
     imagesWithoutAlt: imagesWithoutAlt || 0,
     internalLinks: internalLinks || 0,

@@ -390,9 +390,9 @@ if (h1) {
     status: seoStatus || "Unknown",
     overall: overall || 0, // <-- ADD
     citationProbability: citationProbability || 0, // <-- ADD  
-  aiVisibilityScore: overall || 0,
-   overallAIVisibilityScore: overall || 0,
-   aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
+ aiVisibilityScore: overall || 0,
+overallAIVisibilityScore: overall || 0,
+aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
     totalImages: totalImages || 0,
     imagesWithoutAlt: imagesWithoutAlt || 0,
     internalLinks: internalLinks || 0,
@@ -475,9 +475,9 @@ if (h1) {
       leadsIncrease: `+${Math.round((100 - aeoScore) * 0.3)}% potential`,
       revenueImpact: `$${Math.round((100 - seoScore) * 50)}-${Math.round((100 - seoScore) * 100)}/month`
     },
-  aiVisibilityScore: overall,
- overallAIVisibilityScore: overall,
-  aiVisibilityLevel: aiVisibilityLevel,
+ aiVisibilityScore: overall || 0,
+overallAIVisibilityScore: overall || 0,
+aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
     schemaCoverage: Math.min(100, schemas.length * 20),
     aeoReadiness: Math.round((hasFAQ? 25 : 0) + (hasHowTo? 20 : 0) + (hasDirectAnswer? 20 : 0) + (hasSchemaMarkup? 15 : 0) + (hasAuthor? 10 : 0) + (hasLastModified? 10 : 0)),
     aeoSignals: [],

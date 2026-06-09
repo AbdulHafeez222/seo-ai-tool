@@ -65,8 +65,7 @@ function extractKeywordsFromContent(text, headings = "", topN = 10) {
     'foreach', 'classlist', 'addeventlistener', 'javascript', 'button', 'var', 'let'
   ];
   
-  const headingText = headings.toLowerCase();
-  const combinedText = headingText + ' ' + headingText + ' ' + headingText + ' ' + text.toLowerCase();
+ 
   
   const words = combinedText
    .replace(/[^\w\s]/g, ' ')

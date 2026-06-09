@@ -340,16 +340,7 @@ async function analyzeSingleUrl(url) {
   const citationGemini = Math.min(95, Math.round((aeoScore * 0.4) + (seoScore * 0.3) + (hasSchemaMarkup? 20 : 0) + (hasAuthor? 10 : 0)));
   const citationPerplexity = Math.min(95, Math.round((aiTrustScore * 0.4) + (eeatScore * 0.3) + (hasDirectAnswer? 20 : 0)));
   const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
-const overall = Math.round((seoScore + aeoScore + aiTrustScore + citationProbability) / 4);
 
-const aiVisibilityLevel =
-  overall >= 80
-    ? "Excellent - AI Search Ready"
-    : overall >= 60
-    ? "Good - Needs Minor Fixes"
-    : overall >= 40
-    ? "Fair - Major Improvements Needed"
-    : "Poor - Not AI Ready";
   const tips = [];
   if (!hasFAQ) tips.push("Add FAQ Schema to increase ChatGPT citations");
   if (!hasHowTo) tips.push("Add HowTo Schema for AI answer extraction");
@@ -386,6 +377,16 @@ if (h1) {
     a: metaDescription || bodyText.substring(0,120)
   });
 }
+  const overall = Math.round((seoScore + aeoScore + aiTrustScore + citationProbability) / 4);
+
+const aiVisibilityLevel =
+  overall >= 80
+    ? "Excellent - AI Search Ready"
+    : overall >= 60
+    ? "Good - Needs Minor Fixes"
+    : overall >= 40
+    ? "Fair - Major Improvements Needed"
+    : "Poor - Not AI Ready";
 return {
   url: url || "",
   title: title || "No title",

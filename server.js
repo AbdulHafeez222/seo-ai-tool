@@ -327,6 +327,164 @@ async function analyzeSingleUrl(url) {
         (listCount > 0 ? 20 : 0) +
         (h2Count >= 3 ? 10 : 0)
       ),
+    
+
+    const sentences = bodyText.split(/[.!?]+/).length || 1;
+    const avgWordsPerSentence = wordCount / sentences;
+    let readabilityScore = 50;
+    if (avgWordsPerSentence > 25) readabilityScore = 30;
+    else if (avgWordsPerSentence > 20) readabilityScore = 50;
+    else readabilityScore = 80;
+
+    // ===== FIX 1: Sitemap/Robots with proper error handling =====
+    let robotsExists = false;
+    let sitemapExists = false;
+    try {
+      const robotsRes = await fetch(new URL("/robots.txt", url).href, { signal: AbortSignal.timeout(3000) });
+      robotsExists = robotsRes.ok;
+    } catch {}
+    try {
+      const sitemapRes = await fetch(new URL("/sitemap.xml", url).href, { signal: AbortSignal.timeout(3000) });
+      sitemapExists = sitemapRes.ok;
+    } catch {}
+
+    // ===== CALCULATE SCORES =====
+    let seoScore = 100;
+    const criticalIssues = [];
+    const importantIssues = [];
+    const minorIssues = [];
+
+    if (!title) { seoScore -= 10; criticalIssues.push("Title tag missing"); }
+    if (title.length > 60) { seoScore -= 5; importantIssues.push("Title too long (>60 chars)"); }
+    if (!metaDescription) { seoScore -= 10; criticalIssues.push("Meta description missing"); }
+    if (!h1) { seoScore -= 10; criticalIssues.push("H1 tag missing"); }
+    if (imagesWithoutAlt > 0) { seoScore -= 5; importantIssues.push(`${imagesWithoutAlt} images missing ALT text`); }
+    if (!isHttps) { seoScore -= 15; criticalIssues.push("Site not using HTTPS"); }
+    if (!mobileViewport) { seoScore -= 10; criticalIssues.push("Mobile viewport not set"); }
+    if (loadTime > 3000) { seoScore -= 10; importantIssues.push("Slow load time (>3s)"); }
+    if (!hasSchemaMarkup) { seoScore -= 10; importantIssues.push("No schema markup found"); }
+    if (!robotsExists) { seoScore -= 5; minorIssues.push("robots.txt missing"); }
+    if (!sitemapExists) { seoScore -= 5; minorIssues.push("sitemap.xml missing"); }
+    if (!hasCanonical) { seoScore -= 5; importantIssues.push("Canonical URL missing"); }
+    if (!hasFavicon) { seoScore -= 3; minorIssues.push("Favicon missing"); }
+
+    seoScore = Math.max(0, seoScore);
+    const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 60 ? "Good" : seoScore >= 40 ? "Fair" : "Poor";
+
+    let aeoScore = 0;
+    if (hasFAQ) aeoScore += 30;
+    if (hasHowTo) aeoScore += 20;
+    if (hasDirectAnswer) aeoScore += 25;
+    if (hasSchemaMarkup) aeoScore += 15;
+    if (h1 && metaDescription) aeoScore += 10;
+    const aeoStatus = aeoScore >= 80 ? "ChatGPT Ready" : aeoScore >= 50 ? "AI Friendly" : "Needs Work";
+
+    let eeatScore = 0;
+    if (hasAuthor) eeatScore += 20;
+    if (hasContactPage || hasEmail || hasPhone) eeatScore += 15;
+    if (hasAboutPage) eeatScore += 15;
+    if (hasPrivacyPolicy) eeatScore += 15;
+    if (hasFacebook || hasLinkedIn || hasYouTube || hasTwitter) eeatScore += 15;
+    if (isHttps) eeatScore += 10;
+    if (hasLastModified) eeatScore += 10;
+
+    const aiTrustScore = Math.round((eeatScore * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
+
+    // ===== FIX 2: Define these FIRST before using citationProbability =====
+    const citationChatGPT = Math.min(95, 20 + (hasFAQ ? 25 : 0) + (listCount > 2 ? 15 : 0) + (hasDirectAnswer ? 20 : 0) + (hasAuthor ? 10 : 0));
+    const citationGemini = Math.min(95, 20 + (hasSchemaMarkup ? 30 : 0) + (tableCount > 0 ? 20 : 0) + (hasAuthor ? 15 : 0) + (wordCount > 800 ? 15 : 0));
+    const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer ? 25 : 0) + (hasLastModified ? 15 : 0) + (externalLinks > 5 ? 15 : 0) + (listCount > 0 ? 15 : 0));
+    
+    // Now use them - NO ERROR
+    const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
+
+    const schemaScore = (hasFAQ ? 25 : 0) + (hasHowTo ? 25 : 0) + (hasDirectAnswer ? 20 : 0) + (schemas.length > 0 ? 30 : 0);
+
+    const overallAIVisibilityScore = Math.round(
+      (seoScore * 0.30) +
+      (aeoScore * 0.20) +
+      (aiTrustScore * 0.15) +
+      (citationProbability * 0.15) +
+      (readabilityScore * 0.10) +
+      (schemaScore * 0.10)
+    );
+
+    // Only declare ONCE
+    const aiVisibilityLevel = overallAIVisibilityScore >= 80 ? "Excellent" :
+                              overallAIVisibilityScore >= 60 ? "Good" :
+                              overallAIVisibilityScore >= 40 ? "Fair" : "Needs Work";
+
+    const answerQuality = Math.min(100, Math.round(
+      (hasDirectAnswer ? 30 : 0) +
+      (hasFAQ ? 25 : 0) +
+      (listCount > 0 ? 15 : 0) +
+      (h2Count >= 3 ? 15 : 0) +
+      (readabilityScore * 0.15)
+    )) || 50;
+
+    const mobileScore = mobileViewport ? seoScore : Math.max(0, seoScore - 20);
+    const desktopScore = seoScore;
+
+    // ===== FIX 3: Ensure email/phone are defined =====
+    const email = emailMatch ? emailMatch[0] : null;
+    const phone = phoneMatch ? phoneMatch[0] : null;
+
+    const keywords = extractKeywordsFromContent(bodyText, h1 + ' ' + $("h2").map((i, el) => $(el).text()).get().join(' '), 15);
+    const keywordInsights = keywords.slice(0, 5).map(k => ({
+      keyword: k,
+      difficulty: getKeywordDifficulty(k),
+      opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
+    }));
+
+    const aiTrustSignals = [];
+    if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
+    if (hasAboutPage) aiTrustSignals.push("About Page");
+    if (hasContactPage) aiTrustSignals.push("Contact Page");
+    if (hasAuthor) aiTrustSignals.push("Author Bio");
+    if (isHttps) aiTrustSignals.push("HTTPS Secure");
+
+    const autoFAQ = [];
+    if (h1) {
+      autoFAQ.push({
+        q: `What is ${h1}?`,
+        a: metaDescription || bodyText.substring(0, 120)
+      });
+    }
+
+    return {
+      url, title, h1, metaDescription, wordCount, lastModified,
+      score: seoScore,
+      status: seoStatus,
+      overallAIVisibilityScore,
+      aiVisibilityLevel,
+      breakdown: {
+        seo: seoScore,
+        aeo: aeoScore,
+        trust: aiTrustScore,
+        citation: citationProbability,
+        readability: readabilityScore,
+        schema: schemaScore
+      },
+      citationProbability,
+      totalImages, imagesWithoutAlt, internalLinks, externalLinks,
+      mobileFriendly: mobileViewport, isHttps, loadTime, brokenLinks: 0,
+      mobileScore, desktopScore,
+      hasSchemaMarkup, robotsExists, sitemapExists, hasCanonical,
+      canonical, hasFavicon, favicon,
+      hasOGTags, ogTitle, ogDescription, ogImage,
+      aeoScore, aeoStatus,
+      hasFAQ, hasHowTo, hasDirectAnswer,
+      schemas, keywords, keywordInsights,
+      aiReport: "Rule-based analysis complete",
+      readabilityScore, aiTrustScore,
+      answerQuality,
+      answerQualityScore: answerQuality,
+      featuredSnippetChance: Math.round(
+        (hasDirectAnswer ? 40 : 0) +
+        (hasFAQ ? 30 : 0) +
+        (listCount > 0 ? 20 : 0) +
+        (h2Count >= 3 ? 10 : 0)
+      ),
       contentStructureScore: (h1Count === 1 ? 20 : 0) + (h2Count >= 3 ? 20 : 0) + (h3Count >= 5 ? 20 : 0) + (listCount >= 2 ? 20 : 0) + (tableCount >= 1 ? 20 : 0),
       citationChatGPT, citationGemini, citationPerplexity,
       aiExtractedAnswer: bodyText.substring(0, 300) || "No clear answer found",
@@ -374,8 +532,6 @@ async function analyzeSingleUrl(url) {
     throw new Error(`Failed to analyze ${url}: ${mainError.message}`);
   }
 }
-
-
 
 // ========== API ENDPOINTS ==========
 app.get("/", (req, res) => {

@@ -183,7 +183,7 @@ async function analyzeSingleUrl(url) {
 
     // Sitemap/Robots check with timeout - won't crash
  
-    let sitemapExists = false;
+  
     try {
       const robotsRes = await fetch(new URL("/robots.txt", url).href, { signal: AbortSignal.timeout(3000) });
       robotsExists = robotsRes.ok;

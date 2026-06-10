@@ -368,17 +368,6 @@ if (overallAIVisibilityScore >= 80) {
   const citationPerplexity = Math.min(95, Math.round((aiTrustScore * 0.4) + (eeatScore * 0.3) + (hasDirectAnswer? 20 : 0)));
   const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
 
-  const overall = Math.round((seoScore + aeoScore + aiTrustScore + citationProbability) / 4);
-
-  const aiVisibilityLevel =
-    overall >= 80
-   ? "Excellent - AI Search Ready"
-      : overall >= 60
-   ? "Good - Needs Minor Fixes"
-      : overall >= 40
-   ? "Fair - Major Improvements Needed"
-      : "Poor - Not AI Ready";
-
   const aiTrustSignals = [];
   if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
   if (hasAboutPage) aiTrustSignals.push("About Page");

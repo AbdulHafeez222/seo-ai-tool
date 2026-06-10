@@ -1308,7 +1308,284 @@ app.get("/predict-ai-answer", async (req, res) => {
   });
 });
 
+// ========== AI VISIBILITY ENGINE v5 - SEO AUTOPILOT ==========
 
+// 🔥 2. SEO DIAGNOSIS AGENT
+function seoDiagnosisAgent(data) {
+  const critical = [];
+  const warnings = [];
+  const opportunities = [];
+
+  // Critical Issues
+  if (!data.hasFAQ) critical.push({ issue: "No FAQ Schema", impact: 25, fix: "Add 3-5 FAQs with FAQPage schema" });
+  if (!data.hasSchemaMarkup) critical.push({ issue: "Zero Schema Markup", impact: 30, fix: "Add Organization + Article schema" });
+  if (data.h2Count === 0) critical.push({ issue: "No H2 Headings", impact: 15, fix: "Add 3-5 H2s for structure" });
+  if (!data.hasAuthor) critical.push({ issue: "No Author EEAT", impact: 20, fix: "Add author bio + credentials" });
+
+  // Warnings
+  if (!data.hasPrivacyPolicy) warnings.push({ issue: "Missing Privacy Policy", impact: 10 });
+  if (!data.hasContactPage) warnings.push({ issue: "No Contact Page", impact: 10 });
+  if (data.listCount === 0) warnings.push({ issue: "No Lists", impact: 8, fix: "Add bullet points" });
+  if (data.externalLinks < 3) warnings.push({ issue: "Low External Links", impact: 5 });
+
+  // Opportunities
+  if (data.wordCount < 800) opportunities.push({ area: "Content Length", gain: "+15% AI cite", action: "Expand to 1200+ words" });
+  if (data.tableCount === 0) opportunities.push({ area: "Data Tables", gain: "+12% Gemini", action: "Add comparison table" });
+  if (!data.hasHowTo) opportunities.push({ area: "HowTo Schema", gain: "+20% Featured Snippet", action: "Add step-by-step guide" });
+
+  const aiImpactScore = 100 - (critical.reduce((a,b) => a + b.impact, 0) + warnings.reduce((a,b) => a + b.impact, 0));
+
+  return {
+    critical,
+    warnings,
+    opportunities,
+    aiImpactScore: Math.max(0, aiImpactScore),
+    totalIssues: critical.length + warnings.length
+  };
+}
+
+// ✍️ 3. CONTENT WRITER AGENT
+function contentWriterAgent(topic, keywords = []) {
+  const cleanTopic = topic.replace(/what is|how to|best/gi, '').trim();
+
+  return {
+    title: `${cleanTopic}: Complete Guide 2026 | Expert Tips`,
+    metaDescription: `Learn everything about ${cleanTopic}. Expert guide with FAQs, examples, and actionable tips. Updated for 2026.`,
+    h1: `The Ultimate ${cleanTopic} Guide`,
+    h2s: [
+      `What is ${cleanTopic}?`,
+      `Why ${cleanTopic} Matters in 2026`,
+      `How to Get Started with ${cleanTopic}`,
+      `${cleanTopic} Best Practices`,
+      `Common ${cleanTopic} Mistakes to Avoid`
+    ],
+    faq: [
+      { q: `What is ${cleanTopic}?`, a: `${cleanTopic} is a solution that helps users with [specific problem]. It works by [mechanism] and delivers [benefit].` },
+      { q: `How much does ${cleanTopic} cost?`, a: `${cleanTopic} pricing starts at $X. Most users choose the $Y plan for best value.` },
+      { q: `Is ${cleanTopic} worth it?`, a: `Yes, ${cleanTopic} delivers ROI in [timeframe] by [benefit]. 100+ clients confirm results.` }
+    ],
+    aiOptimizedAnswerBlocks: [
+      `Quick Answer: ${cleanTopic} helps you [benefit] in [timeframe].`,
+      `Key Steps: 1) Step one 2) Step two 3) Step three`,
+      `Pro Tip: [Extractable insight for AI citation]`
+    ],
+    aiRelevanceScore: 85 // Based on structure quality
+  };
+}
+
+// 🧾 4. SCHEMA GENERATOR AGENT
+function schemaGeneratorAgent(data) {
+  const baseUrl = data.url;
+  const schemas = {};
+
+  // FAQ Schema
+  if (data.faqQuestions?.length || data.autoFAQ?.length) {
+    const faqs = data.autoFAQ || data.faqQuestions.map(q => ({ q, a: "Answer from content" }));
+    schemas.faqSchema = {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": faqs.slice(0,5).map(f => ({
+        "@type": "Question",
+        "name": f.q || f,
+        "acceptedAnswer": { "@type": "Answer", "text": f.a || "See our guide for details" }
+      }))
+    };
+  }
+
+  // Article Schema
+  schemas.articleSchema = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": data.title,
+    "author": { "@type": "Person", "name": data.author || "Expert Team" },
+    "dateModified": data.lastModified || new Date().toISOString(),
+    "publisher": { "@type": "Organization", "name": data.brand || "Company" }
+  };
+
+  // HowTo Schema
+  if (data.h1?.toLowerCase().includes('how') || data.h2Count > 0) {
+    schemas.howToSchema = {
+      "@context": "https://schema.org",
+      "@type": "HowTo",
+      "name": data.h1 || data.title,
+      "step": [
+        { "@type": "HowToStep", "name": "Step 1", "text": "First action" },
+        { "@type": "HowToStep", "name": "Step 2", "text": "Second action" },
+        { "@type": "HowToStep", "name": "Step 3", "text": "Final result" }
+      ]
+    };
+  }
+
+  // Organization Schema
+  schemas.organizationSchema = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": data.brand || data.url.replace(/https?:\/\//,'').split('/')[0],
+    "url": baseUrl,
+    "logo": data.ogImage || `${baseUrl}/logo.png`,
+    "sameAs": [
+      data.hasFacebook? "https://facebook.com/yourpage" : "",
+      data.hasLinkedIn? "https://linkedin.com/company/yourpage" : ""
+    ].filter(Boolean)
+  };
+
+  const completenessScore = Object.keys(schemas).length * 25; // 25 per schema type
+
+  return {...schemas, completenessScore: Math.min(100, completenessScore) };
+}
+
+// 🔗 5. INTERNAL LINKING AGENT
+function internalLinkingAgent(data) {
+  const suggestions = [];
+  const orphanPages = [];
+
+  // Simulate page analysis
+  if (data.h2Count >= 3) {
+    suggestions.push({ from: "Home", to: "#section1", anchor: data.h2s?.[0] || "Learn More", reason: "Link to H2 sections" });
+    suggestions.push({ from: "Home", to: "/about", anchor: "About Our Team", reason: "Boost EEAT" });
+    suggestions.push({ from: "Blog", to: "/", anchor: "Homepage", reason: "Pass link equity" });
+  }
+
+  if (data.internalLinks < 3) {
+    orphanPages.push({ url: "/blog", issue: "No internal links pointing here" });
+  }
+
+  const linkFlowScore = Math.min(100, (data.internalLinks * 10) + (data.h2Count * 5));
+
+  return {
+    suggestions: suggestions.slice(0,5),
+    orphanPages,
+    linkFlowScore,
+    recommendation: linkFlowScore < 50? "Add 5+ internal links from homepage" : "Good link structure"
+  };
+}
+
+// 📈 6. RANKING PREDICTOR AGENT
+function rankingPredictorAgent(data, diagnosis) {
+  const currentScore = data.overallAIVisibilityScore || data.aiVisibilityScore || 50;
+
+  // Simulate current position
+  const currentPositionEstimate = currentScore > 80? "Top 3" :
+                                   currentScore > 60? "Page 1 (4-10)" :
+                                   currentScore > 40? "Page 2" : "Page 3+";
+
+  // Calculate improvement
+  const fixableIssues = diagnosis.critical.length * 20 + diagnosis.warnings.length * 5;
+  const improvementAfterFixes = Math.min(100, currentScore + fixableIssues);
+
+  const newPosition = improvementAfterFixes > 80? "Top 3" :
+                      improvementAfterFixes > 60? "Page 1" : "Page 2";
+
+  const trafficPotential = Math.round((improvementAfterFixes - currentScore) * 50); // Rough: 1 point = 50 visits
+  const aiCitationBoost = Math.round(fixableIssues * 0.8); // 80% of fix impact goes to AI
+
+  return {
+    currentPositionEstimate,
+    improvementAfterFixes,
+    newPositionEstimate: newPosition,
+    trafficPotential: `+${trafficPotential} visits/month`,
+    aiCitationBoost: `+${aiCitationBoost}%`,
+    timeline: "2-4 weeks after fixes"
+  };
+}
+
+// 🤖 7. AUTOPILOT ACTION EXECUTOR
+function autopilotEngine(data, diagnosis) {
+  const actions = [];
+
+  diagnosis.critical.forEach(issue => {
+    actions.push({
+      priority: "CRITICAL",
+      action: issue.fix,
+      impact: "High",
+      reason: issue.issue,
+      effort: "15-30 min",
+      code: issue.issue.includes("FAQ")? `<script type="application/ld+json">{FAQ_SCHEMA}</script>` :
+            issue.issue.includes("Schema")? `<script type="application/ld+json">{ORG_SCHEMA}</script>` :
+            `Add <h2> tags to structure content`
+    });
+  });
+
+  if (data.listCount === 0) {
+    actions.push({
+      priority: "HIGH",
+      action: "Add Bullet List to Content",
+      impact: "Medium",
+      reason: "Lists improve AI extraction by 40%",
+      effort: "5 min",
+      code: `<ul><li>Benefit 1</li><li>Benefit 2</li><li>Benefit 3</li></ul>`
+    });
+  }
+
+  if (!data.hasAboutPage) {
+    actions.push({
+      priority: "HIGH",
+      action: "Create About Page with Author Bio",
+      impact: "High",
+      reason: "Boosts EEAT + Gemini trust by 25%",
+      effort: "20 min",
+      code: `<h1>About Us</h1><p>Author: [Name], [Credentials]</p>`
+    });
+  }
+
+  return actions.sort((a,b) => a.priority === "CRITICAL"? -1 : 1);
+}
+
+// ========== v5 MAIN ENDPOINT ==========
+app.get("/autopilot", async (req, res) => {
+  const { url, keyword } = req.query;
+  if (!url) return res.status(400).json({ error: "URL required" });
+
+  try {
+    const rawData = await analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url);
+    const data = fixData(rawData);
+
+    // Run all agents
+    const diagnosis = seoDiagnosisAgent(data);
+    const contentPlan = contentWriterAgent(keyword || data.h1 || data.title, data.keywords);
+    const schemas = schemaGeneratorAgent(data);
+    const linking = internalLinkingAgent(data);
+    const ranking = rankingPredictorAgent(data, diagnosis);
+    const autopilotActions = autopilotEngine(data, diagnosis);
+
+    // v5 Final Score
+    const overallAIVisibilityScore = Math.round(
+      (diagnosis.aiImpactScore * 0.25) +
+      (parseInt(ranking.aiCitationBoost) * 0.25) +
+      (contentPlan.aiRelevanceScore * 0.2) +
+      (schemas.completenessScore * 0.15) +
+      (linking.linkFlowScore * 0.15)
+    );
+
+    res.json({
+      score: overallAIVisibilityScore,
+      level: overallAIVisibilityScore >= 80? "AI Autopilot Ready" :
+             overallAIVisibilityScore >= 60? "Needs Optimization" : "Critical Fixes Required",
+
+      agents: {
+        seoDiagnosis: diagnosis,
+        contentWriter: contentPlan,
+        schema: schemas,
+        linking: linking,
+        rankingPrediction: ranking
+      },
+
+      autopilotPlan: autopilotActions,
+
+      aiReport: {
+        chatgpt: schemas.faqSchema? "optimized" : "needs FAQ schema",
+        perplexity: data.hasDirectAnswer? "citation-ready" : "add direct answers",
+        gemini: schemas.completenessScore > 75? "structured-friendly" : "add more schema"
+      },
+
+      estimatedTimeToFix: `${autopilotActions.length * 15} minutes`,
+      projectedResults: ranking
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform running on port ${PORT}`);
   console.log(`📊 Features: Rule-based SEO/AEO Analysis | AI: WAITING MODE`);

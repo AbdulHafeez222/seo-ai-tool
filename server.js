@@ -182,7 +182,7 @@ async function analyzeSingleUrl(url) {
     else readabilityScore = 80;
 
     // Sitemap/Robots check with timeout - won't crash
-    let robotsExists = false;
+ 
     let sitemapExists = false;
     try {
       const robotsRes = await fetch(new URL("/robots.txt", url).href, { signal: AbortSignal.timeout(3000) });
@@ -327,11 +327,7 @@ async function analyzeSingleUrl(url) {
     // ===== FIX: Define emailMatch/phoneMatch BEFORE using them =====
    
     const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
-    const email = emailMatch? emailMatch[0] : null;
-    const phone = phoneMatch? phoneMatch[0] : null;
-    const hasEmail =!!email;
-    const hasPhone =!!phone;
-
+    
     let robotsExists = false;
     let sitemapExists = false;
     try {
@@ -422,7 +418,8 @@ async function analyzeSingleUrl(url) {
     // ===== FIX 3: Ensure email/phone are defined =====
     const email = emailMatch ? emailMatch[0] : null;
     const phone = phoneMatch ? phoneMatch[0] : null;
-
+    const hasEmail =!!email;
+    const hasPhone =!!phone;
     const keywords = extractKeywordsFromContent(bodyText, h1 + ' ' + $("h2").map((i, el) => $(el).text()).get().join(' '), 15);
     const keywordInsights = keywords.slice(0, 5).map(k => ({
       keyword: k,

@@ -373,7 +373,7 @@ async function analyzeSingleUrl(url) {
     throw new Error(`Failed to analyze ${url}: ${mainError.message}`);
   }
 }
-}
+
 
 // ========== API ENDPOINTS ==========
 app.get("/", (req, res) => {

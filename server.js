@@ -325,7 +325,44 @@ async function analyzeSingleUrl(url) {
   if (hasLastModified) eeatScore += 10;
 
   const aiTrustScore = Math.round((eeatScore * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
+const safe = (v) => (typeof v === "number" && !isNaN(v) ? v : 0);
+const clamp = (v, min = 0, max = 100) =>
+  Math.max(min, Math.min(max, v));
 
+const seo = clamp(safe(seoScore));
+const aeo = clamp(safe(aeoScore));
+const trust = clamp(safe(aiTrustScore));
+const citation = clamp(safe(citationProbability));
+const readability = clamp(safe(readabilityScore));
+
+const schema =
+  (hasFAQ ? 25 : 0) +
+  (hasHowTo ? 25 : 0) +
+  (hasDirectAnswer ? 20 : 0) +
+  (schemas.length > 0 ? 30 : 0);
+
+const schemaScore = clamp(schema);
+
+const overallAIVisibilityScore = Math.round(
+  (seo * 0.30) +
+  (aeo * 0.20) +
+  (trust * 0.15) +
+  (citation * 0.15) +
+  (readability * 0.10) +
+  (schemaScore * 0.10)
+);
+
+let aiVisibilityLevel = "Poor - Not AI Ready";
+
+if (overallAIVisibilityScore >= 80) {
+  aiVisibilityLevel = "Excellent - AI Ready";
+} else if (overallAIVisibilityScore >= 65) {
+  aiVisibilityLevel = "Good - Minor Improvements Needed";
+} else if (overallAIVisibilityScore >= 45) {
+  aiVisibilityLevel = "Fair - Needs Optimization";
+} else {
+  aiVisibilityLevel = "Poor - Not AI Ready";
+}
   const citationChatGPT = Math.min(95, Math.round((aeoScore * 0.4) + (aiTrustScore * 0.3) + (hasFAQ? 20 : 0) + (hasDirectAnswer? 10 : 0)));
   const citationGemini = Math.min(95, Math.round((aeoScore * 0.4) + (seoScore * 0.3) + (hasSchemaMarkup? 20 : 0) + (hasAuthor? 10 : 0)));
   const citationPerplexity = Math.min(95, Math.round((aiTrustScore * 0.4) + (eeatScore * 0.3) + (hasDirectAnswer? 20 : 0)));
@@ -382,10 +419,17 @@ async function analyzeSingleUrl(url) {
     status: seoStatus || "Unknown",
 
     // FIX 1: Force number, never undefined. Send all 3 names for compatibility
-    overall: Number(overall) || 0,
-    overallAIVisibilityScore: Number(overall) || 0,
-    aiVisibilityScore: Number(overall) || 0,
-    aiVisibilityLevel: aiVisibilityLevel || "Poor - Not AI Ready",
+    overallAIVisibilityScore,
+aiVisibilityLevel,
+
+breakdown: {
+  seo,
+  aeo,
+  trust,
+  citation,
+  readability,
+  schema: schemaScore
+},
     citationProbability: Number(citationProbability) || 0,
 
     totalImages: totalImages || 0,

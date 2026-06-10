@@ -816,6 +816,498 @@ app.use((err, req, res, next) => {
     fallback: true
   });
 });
+// ========== AEO ENGINE v2: 4 NEW FEATURES ==========
+
+// 1. REAL CITATION SIMULATION
+app.get("/citation-simulation", async (req, res) => {
+  const { url, query } = req.query;
+  if (!url) return res.status(400).json({ error: "URL required" });
+
+  try {
+    const data = await analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url);
+
+    let chatGPTScore = 0;
+    let geminiScore = 0;
+    let perplexityScore = 0;
+    const reasons = [];
+
+    if (data.hasFAQ) { chatGPTScore += 30; reasons.push("FAQ Schema = ChatGPT favorite"); }
+    if (data.hasDirectAnswer) { chatGPTScore += 25; reasons.push("Q&A format detected"); }
+    if (data.listCount >= 2) { chatGPTScore += 15; reasons.push("Lists = Easy to quote"); }
+    if (data.hasAuthor) { chatGPTScore += 10; reasons.push("Author = Trust signal"); }
+    if (data.readabilityScore > 70) { chatGPTScore += 20; reasons.push("High readability"); }
+
+    if (data.hasSchemaMarkup) { geminiScore += 25; reasons.push("Schema markup helps Gemini"); }
+    if (data.hasLastModified) { geminiScore += 20; reasons.push("Fresh content preferred"); }
+    if (data.tableCount > 0) { geminiScore += 20; reasons.push("Tables = Structured data"); }
+    if (data.h2Count >= 5) { geminiScore += 15; reasons.push("Good heading structure"); }
+    if (data.hasAuthor) { geminiScore += 20; reasons.push("EEAT signals strong"); }
+
+    if (data.hasDirectAnswer) { perplexityScore += 30; reasons.push("Direct answers = Perplexity gold"); }
+    if (data.hasLastModified) { perplexityScore += 25; reasons.push("Recent update = Perplexity ranks"); }
+    if (data.wordCount > 800) { perplexityScore += 20; reasons.push("Long-form = Authority"); }
+    if (data.externalLinks > 3) { perplexityScore += 15; reasons.push("Outbound links = Research"); }
+    if (data.listCount > 0) { perplexityScore += 10; reasons.push("Lists extractable"); }
+
+    chatGPTScore = Math.min(100, chatGPTScore);
+    geminiScore = Math.min(100, geminiScore);
+    perplexityScore = Math.min(100, perplexityScore);
+
+    const avgScore = (chatGPTScore + geminiScore + perplexityScore) / 3;
+    const estimatedCitations = Math.round((avgScore / 100) * 50);
+
+    res.json({
+      url: data.url,
+      query: query || "general topic",
+      chatGPTCitationChance: chatGPTScore,
+      geminiCitationChance: geminiScore,
+      perplexityCitationChance: perplexityScore,
+      estimatedCitationsPer1000: estimatedCitations,
+      reasoning: reasons.slice(0, 5),
+      recommendation: avgScore < 40? "Add FAQ Schema + Direct Answers ASAP" :
+                      avgScore < 70? "Improve heading structure + add tables" :
+                      "Excellent - Maintain freshness"
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. KEYWORD INTENT CLUSTERING
+app.get("/intent-cluster", async (req, res) => {
+  const { keyword } = req.query;
+  if (!keyword) return res.status(400).json({ error: "Keyword required" });
+
+  const kw = keyword.toLowerCase();
+  const clusters = {
+    informational: [],
+    commercial: [],
+    transactional: [],
+    navigational: []
+  };
+
+  if (kw.includes('what') || kw.includes('how') || kw.includes('why') || kw.includes('guide')) {
+    clusters.informational.push(`What is ${keyword}?`);
+    clusters.informational.push(`How to use ${keyword}?`);
+    clusters.informational.push(`${keyword} explained`);
+    clusters.informational.push(`${keyword} tutorial for beginners`);
+  }
+
+  if (kw.includes('best') || kw.includes('top') || kw.includes('vs') || kw.includes('compare')) {
+    clusters.commercial.push(`Best ${keyword} 2026`);
+    clusters.commercial.push(`${keyword} vs alternatives`);
+    clusters.commercial.push(`Top ${keyword} comparison`);
+    clusters.commercial.push(`${keyword} reviews`);
+  }
+
+  if (kw.includes('buy') || kw.includes('price') || kw.includes('cost') || kw.includes('deal')) {
+    clusters.transactional.push(`Buy ${keyword}`);
+    clusters.transactional.push(`${keyword} pricing`);
+    clusters.transactional.push(`${keyword} discount`);
+    clusters.transactional.push(`${keyword} free trial`);
+  }
+
+  if (kw.includes('login') || kw.includes('official') || kw.includes('website')) {
+    clusters.navigational.push(`${keyword} official site`);
+    clusters.navigational.push(`${keyword} login`);
+    clusters.navigational.push(`${keyword} dashboard`);
+  }
+
+  if (Object.values(clusters).every(arr => arr.length === 0)) {
+    clusters.informational.push(`What is ${keyword}?`);
+    clusters.informational.push(`${keyword} guide`);
+    clusters.commercial.push(`Best ${keyword}`);
+  }
+
+  const primaryIntent = clusters.informational.length? 'informational' :
+                        clusters.commercial.length? 'commercial' : 'transactional';
+
+  let aiAnswer = "";
+  if (primaryIntent === 'informational') {
+    aiAnswer = `${keyword} is a solution that helps users with [specific problem]. It works by [mechanism]. Key benefits include: 1) Benefit one, 2) Benefit two, 3) Benefit three. Best for users who need [use case].`;
+  } else if (primaryIntent === 'commercial') {
+    aiAnswer = `The best ${keyword} options in 2026 are: 1) Option A - best for beginners, 2) Option B - best value, 3) Option C - enterprise grade. Compare features, pricing, and reviews before choosing.`;
+  } else {
+    aiAnswer = `You can get ${keyword} starting at $X/month. Free trial available. Click here to start or compare pricing plans.`;
+  }
+
+  res.json({
+    keyword,
+    primaryIntent,
+    clusters,
+    aiGeneratedAnswer: aiAnswer,
+    recommendedContent: primaryIntent === 'informational'? 'Blog post + FAQ Schema' :
+                        primaryIntent === 'commercial'? 'Comparison table + Product Schema' :
+                        'Landing page + Offer Schema'
+  });
+});
+
+// 3. COMPETITOR GAP AI SCORING
+app.get("/competitor-gap-ai", async (req, res) => {
+  const { url, competitor } = req.query;
+  if (!url ||!competitor) return res.status(400).json({ error: "Both URLs required" });
+
+  try {
+    const [userData, compData] = await Promise.all([
+      analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url),
+      analyzeSingleUrl(competitor.startsWith('http')? competitor : 'https://' + competitor)
+    ]);
+
+    const competitorFAQs = compData.faqQuestions || [];
+    const yourFAQs = new Set(userData.faqQuestions || []);
+
+    const missingFAQs = competitorFAQs.filter(q =>!yourFAQs.has(q));
+
+    const gapScore = missingFAQs.map(faq => {
+      let importance = 50;
+      if (faq.toLowerCase().includes('price') || faq.toLowerCase().includes('cost')) importance = 90;
+      if (faq.toLowerCase().includes('how') || faq.toLowerCase().includes('what')) importance = 80;
+      if (faq.toLowerCase().includes('vs') || faq.toLowerCase().includes('compare')) importance = 85;
+      return { question: faq, importance, impact: `+${Math.round(importance/10)}% citation chance` };
+    }).sort((a,b) => b.importance - a.importance);
+
+    const schemaGaps = [];
+    if (compData.hasFAQ &&!userData.hasFAQ) schemaGaps.push({ schema: 'FAQPage', impact: '+25% ChatGPT' });
+    if (compData.hasHowTo &&!userData.hasHowTo) schemaGaps.push({ schema: 'HowTo', impact: '+20% Gemini' });
+    if (compData.hasAuthor &&!userData.hasAuthor) schemaGaps.push({ schema: 'Author', impact: '+15% EEAT' });
+
+    res.json({
+      yourUrl: userData.url,
+      competitorUrl: compData.url,
+      totalGaps: gapScore.length,
+      criticalGaps: gapScore.filter(g => g.importance >= 80).length,
+      missingFAQs: gapScore.slice(0, 10),
+      schemaGaps,
+      estimatedCitationLoss: `${gapScore.length * 3}%`,
+      priorityFix: gapScore[0]?.question || 'Add FAQ Schema first',
+      competitorAdvantage: compData.aeoScore > userData.aeoScore?
+        `${compData.aeoScore - userData.aeoScore} points ahead` : 'You are ahead'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. CHATGPT-STYLE ANSWER PREDICTION
+app.get("/predict-ai-answer", async (req, res) => {
+  const { query, url } = req.query;
+  if (!query) return res.status(400).json({ error: "Query required" });
+
+  let contextData = null;
+  if (url) {
+    try {
+      contextData = await analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url);
+    } catch {}
+  }
+
+  const q = query.toLowerCase();
+  let predictedAnswer = "";
+  let confidence = 50;
+  let sources = [];
+  let format = "paragraph";
+
+  if (q.includes('what is') || q.includes('define')) {
+    format = "definition";
+    predictedAnswer = `${query.replace(/what is|define/gi, '').trim()} is [extracted definition from top result]. Key points: 1) Point one, 2) Point two, 3) Point three.`;
+    confidence = 75;
+    sources = ["FAQ Schema", "H1 tag", "First paragraph"];
+  }
+  else if (q.includes('how to') || q.includes('how do')) {
+    format = "steps";
+    predictedAnswer = `To ${query.replace(/how to|how do/gi, '').trim()}:\n1. Step one\n2. Step two\n3. Step three\n\nTip: [extracted from HowTo schema]`;
+    confidence = 80;
+    sources = ["HowTo Schema", "Numbered lists", "H2 headings"];
+  }
+  else if (q.includes('best') || q.includes('top')) {
+    format = "list";
+    predictedAnswer = `The best ${query.replace(/best|top/gi, '').trim()} are:\n1. Option A - [reason]\n2. Option B - [reason]\n3. Option C - [reason]\n\nBased on [criteria].`;
+    confidence = 70;
+    sources = ["Comparison tables", "Lists", "Review snippets"];
+  }
+  else if (q.includes('vs') || q.includes('compare')) {
+    format = "comparison";
+    predictedAnswer = `${query} comparison:\n| Feature | Option A | Option B |\n|---------|----------|----------|\n| Key 1 | Value | Value |\n\nVerdict: [extracted conclusion]`;
+    confidence = 65;
+    sources = ["Tables", "VS articles", "Comparison sections"];
+  }
+  else {
+    format = "paragraph";
+    predictedAnswer = `Based on available data, ${query} involves [extracted summary]. Important factors: [factor 1], [factor 2].`;
+    confidence = 60;
+    sources = ["Meta description", "H1/H2", "First 100 words"];
+  }
+
+  if (contextData) {
+    if (contextData.hasFAQ) confidence += 10;
+    if (contextData.hasHowTo && q.includes('how')) confidence += 15;
+    if (contextData.hasDirectAnswer) confidence += 10;
+    sources.push("Your site: " + contextData.url);
+  }
+
+  confidence = Math.min(95, confidence);
+
+  res.json({
+    query,
+    predictedAnswer,
+    format,
+    confidence,
+    sourcesUsed: sources,
+    willCiteYou: contextData? (confidence > 70? "High chance" : confidence > 50? "Medium chance" : "Low chance") : "Provide URL to check",
+    optimization: confidence < 70? [
+      "Add FAQ Schema for this query",
+      "Create H2 with exact query text",
+      "Add numbered list or table",
+      "Put answer in first 100 words"
+    ] : ["Content is AI-ready"]
+  });
+});
+
+// ========== AEO ENGINE v2: 4 NEW FEATURES ==========
+
+// 1. REAL CITATION SIMULATION
+app.get("/citation-simulation", async (req, res) => {
+  const { url, query } = req.query;
+  if (!url) return res.status(400).json({ error: "URL required" });
+
+  try {
+    const data = await analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url);
+
+    let chatGPTScore = 0;
+    let geminiScore = 0;
+    let perplexityScore = 0;
+    const reasons = [];
+
+    if (data.hasFAQ) { chatGPTScore += 30; reasons.push("FAQ Schema = ChatGPT favorite"); }
+    if (data.hasDirectAnswer) { chatGPTScore += 25; reasons.push("Q&A format detected"); }
+    if (data.listCount >= 2) { chatGPTScore += 15; reasons.push("Lists = Easy to quote"); }
+    if (data.hasAuthor) { chatGPTScore += 10; reasons.push("Author = Trust signal"); }
+    if (data.readabilityScore > 70) { chatGPTScore += 20; reasons.push("High readability"); }
+
+    if (data.hasSchemaMarkup) { geminiScore += 25; reasons.push("Schema markup helps Gemini"); }
+    if (data.hasLastModified) { geminiScore += 20; reasons.push("Fresh content preferred"); }
+    if (data.tableCount > 0) { geminiScore += 20; reasons.push("Tables = Structured data"); }
+    if (data.h2Count >= 5) { geminiScore += 15; reasons.push("Good heading structure"); }
+    if (data.hasAuthor) { geminiScore += 20; reasons.push("EEAT signals strong"); }
+
+    if (data.hasDirectAnswer) { perplexityScore += 30; reasons.push("Direct answers = Perplexity gold"); }
+    if (data.hasLastModified) { perplexityScore += 25; reasons.push("Recent update = Perplexity ranks"); }
+    if (data.wordCount > 800) { perplexityScore += 20; reasons.push("Long-form = Authority"); }
+    if (data.externalLinks > 3) { perplexityScore += 15; reasons.push("Outbound links = Research"); }
+    if (data.listCount > 0) { perplexityScore += 10; reasons.push("Lists extractable"); }
+
+    chatGPTScore = Math.min(100, chatGPTScore);
+    geminiScore = Math.min(100, geminiScore);
+    perplexityScore = Math.min(100, perplexityScore);
+
+    const avgScore = (chatGPTScore + geminiScore + perplexityScore) / 3;
+    const estimatedCitations = Math.round((avgScore / 100) * 50);
+
+    res.json({
+      url: data.url,
+      query: query || "general topic",
+      chatGPTCitationChance: chatGPTScore,
+      geminiCitationChance: geminiScore,
+      perplexityCitationChance: perplexityScore,
+      estimatedCitationsPer1000: estimatedCitations,
+      reasoning: reasons.slice(0, 5),
+      recommendation: avgScore < 40? "Add FAQ Schema + Direct Answers ASAP" :
+                      avgScore < 70? "Improve heading structure + add tables" :
+                      "Excellent - Maintain freshness"
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. KEYWORD INTENT CLUSTERING
+app.get("/intent-cluster", async (req, res) => {
+  const { keyword } = req.query;
+  if (!keyword) return res.status(400).json({ error: "Keyword required" });
+
+  const kw = keyword.toLowerCase();
+  const clusters = {
+    informational: [],
+    commercial: [],
+    transactional: [],
+    navigational: []
+  };
+
+  if (kw.includes('what') || kw.includes('how') || kw.includes('why') || kw.includes('guide')) {
+    clusters.informational.push(`What is ${keyword}?`);
+    clusters.informational.push(`How to use ${keyword}?`);
+    clusters.informational.push(`${keyword} explained`);
+    clusters.informational.push(`${keyword} tutorial for beginners`);
+  }
+
+  if (kw.includes('best') || kw.includes('top') || kw.includes('vs') || kw.includes('compare')) {
+    clusters.commercial.push(`Best ${keyword} 2026`);
+    clusters.commercial.push(`${keyword} vs alternatives`);
+    clusters.commercial.push(`Top ${keyword} comparison`);
+    clusters.commercial.push(`${keyword} reviews`);
+  }
+
+  if (kw.includes('buy') || kw.includes('price') || kw.includes('cost') || kw.includes('deal')) {
+    clusters.transactional.push(`Buy ${keyword}`);
+    clusters.transactional.push(`${keyword} pricing`);
+    clusters.transactional.push(`${keyword} discount`);
+    clusters.transactional.push(`${keyword} free trial`);
+  }
+
+  if (kw.includes('login') || kw.includes('official') || kw.includes('website')) {
+    clusters.navigational.push(`${keyword} official site`);
+    clusters.navigational.push(`${keyword} login`);
+    clusters.navigational.push(`${keyword} dashboard`);
+  }
+
+  if (Object.values(clusters).every(arr => arr.length === 0)) {
+    clusters.informational.push(`What is ${keyword}?`);
+    clusters.informational.push(`${keyword} guide`);
+    clusters.commercial.push(`Best ${keyword}`);
+  }
+
+  const primaryIntent = clusters.informational.length? 'informational' :
+                        clusters.commercial.length? 'commercial' : 'transactional';
+
+  let aiAnswer = "";
+  if (primaryIntent === 'informational') {
+    aiAnswer = `${keyword} is a solution that helps users with [specific problem]. It works by [mechanism]. Key benefits include: 1) Benefit one, 2) Benefit two, 3) Benefit three. Best for users who need [use case].`;
+  } else if (primaryIntent === 'commercial') {
+    aiAnswer = `The best ${keyword} options in 2026 are: 1) Option A - best for beginners, 2) Option B - best value, 3) Option C - enterprise grade. Compare features, pricing, and reviews before choosing.`;
+  } else {
+    aiAnswer = `You can get ${keyword} starting at $X/month. Free trial available. Click here to start or compare pricing plans.`;
+  }
+
+  res.json({
+    keyword,
+    primaryIntent,
+    clusters,
+    aiGeneratedAnswer: aiAnswer,
+    recommendedContent: primaryIntent === 'informational'? 'Blog post + FAQ Schema' :
+                        primaryIntent === 'commercial'? 'Comparison table + Product Schema' :
+                        'Landing page + Offer Schema'
+  });
+});
+
+// 3. COMPETITOR GAP AI SCORING
+app.get("/competitor-gap-ai", async (req, res) => {
+  const { url, competitor } = req.query;
+  if (!url ||!competitor) return res.status(400).json({ error: "Both URLs required" });
+
+  try {
+    const [userData, compData] = await Promise.all([
+      analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url),
+      analyzeSingleUrl(competitor.startsWith('http')? competitor : 'https://' + competitor)
+    ]);
+
+    const competitorFAQs = compData.faqQuestions || [];
+    const yourFAQs = new Set(userData.faqQuestions || []);
+
+    const missingFAQs = competitorFAQs.filter(q =>!yourFAQs.has(q));
+
+    const gapScore = missingFAQs.map(faq => {
+      let importance = 50;
+      if (faq.toLowerCase().includes('price') || faq.toLowerCase().includes('cost')) importance = 90;
+      if (faq.toLowerCase().includes('how') || faq.toLowerCase().includes('what')) importance = 80;
+      if (faq.toLowerCase().includes('vs') || faq.toLowerCase().includes('compare')) importance = 85;
+      return { question: faq, importance, impact: `+${Math.round(importance/10)}% citation chance` };
+    }).sort((a,b) => b.importance - a.importance);
+
+    const schemaGaps = [];
+    if (compData.hasFAQ &&!userData.hasFAQ) schemaGaps.push({ schema: 'FAQPage', impact: '+25% ChatGPT' });
+    if (compData.hasHowTo &&!userData.hasHowTo) schemaGaps.push({ schema: 'HowTo', impact: '+20% Gemini' });
+    if (compData.hasAuthor &&!userData.hasAuthor) schemaGaps.push({ schema: 'Author', impact: '+15% EEAT' });
+
+    res.json({
+      yourUrl: userData.url,
+      competitorUrl: compData.url,
+      totalGaps: gapScore.length,
+      criticalGaps: gapScore.filter(g => g.importance >= 80).length,
+      missingFAQs: gapScore.slice(0, 10),
+      schemaGaps,
+      estimatedCitationLoss: `${gapScore.length * 3}%`,
+      priorityFix: gapScore[0]?.question || 'Add FAQ Schema first',
+      competitorAdvantage: compData.aeoScore > userData.aeoScore?
+        `${compData.aeoScore - userData.aeoScore} points ahead` : 'You are ahead'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. CHATGPT-STYLE ANSWER PREDICTION
+app.get("/predict-ai-answer", async (req, res) => {
+  const { query, url } = req.query;
+  if (!query) return res.status(400).json({ error: "Query required" });
+
+  let contextData = null;
+  if (url) {
+    try {
+      contextData = await analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url);
+    } catch {}
+  }
+
+  const q = query.toLowerCase();
+  let predictedAnswer = "";
+  let confidence = 50;
+  let sources = [];
+  let format = "paragraph";
+
+  if (q.includes('what is') || q.includes('define')) {
+    format = "definition";
+    predictedAnswer = `${query.replace(/what is|define/gi, '').trim()} is [extracted definition from top result]. Key points: 1) Point one, 2) Point two, 3) Point three.`;
+    confidence = 75;
+    sources = ["FAQ Schema", "H1 tag", "First paragraph"];
+  }
+  else if (q.includes('how to') || q.includes('how do')) {
+    format = "steps";
+    predictedAnswer = `To ${query.replace(/how to|how do/gi, '').trim()}:\n1. Step one\n2. Step two\n3. Step three\n\nTip: [extracted from HowTo schema]`;
+    confidence = 80;
+    sources = ["HowTo Schema", "Numbered lists", "H2 headings"];
+  }
+  else if (q.includes('best') || q.includes('top')) {
+    format = "list";
+    predictedAnswer = `The best ${query.replace(/best|top/gi, '').trim()} are:\n1. Option A - [reason]\n2. Option B - [reason]\n3. Option C - [reason]\n\nBased on [criteria].`;
+    confidence = 70;
+    sources = ["Comparison tables", "Lists", "Review snippets"];
+  }
+  else if (q.includes('vs') || q.includes('compare')) {
+    format = "comparison";
+    predictedAnswer = `${query} comparison:\n| Feature | Option A | Option B |\n|---------|----------|----------|\n| Key 1 | Value | Value |\n\nVerdict: [extracted conclusion]`;
+    confidence = 65;
+    sources = ["Tables", "VS articles", "Comparison sections"];
+  }
+  else {
+    format = "paragraph";
+    predictedAnswer = `Based on available data, ${query} involves [extracted summary]. Important factors: [factor 1], [factor 2].`;
+    confidence = 60;
+    sources = ["Meta description", "H1/H2", "First 100 words"];
+  }
+
+  if (contextData) {
+    if (contextData.hasFAQ) confidence += 10;
+    if (contextData.hasHowTo && q.includes('how')) confidence += 15;
+    if (contextData.hasDirectAnswer) confidence += 10;
+    sources.push("Your site: " + contextData.url);
+  }
+
+  confidence = Math.min(95, confidence);
+
+  res.json({
+    query,
+    predictedAnswer,
+    format,
+    confidence,
+    sourcesUsed: sources,
+    willCiteYou: contextData? (confidence > 70? "High chance" : confidence > 50? "Medium chance" : "Low chance") : "Provide URL to check",
+    optimization: confidence < 70? [
+      "Add FAQ Schema for this query",
+      "Create H2 with exact query text",
+      "Add numbered list or table",
+      "Put answer in first 100 words"
+    ] : ["Content is AI-ready"]
+  });
+});
+
 
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform running on port ${PORT}`);

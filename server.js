@@ -95,7 +95,7 @@ async function analyzeSingleUrl(url) {
   let html = "";
   let $ = null;
   let loadTime = 0;
-  
+
   try {
     const startTime = Date.now();
     html = await safeFetch(url);
@@ -116,7 +116,7 @@ async function analyzeSingleUrl(url) {
     $('script[type="application/ld+json"]').each((i, el) => {
       try {
         const json = JSON.parse($(el).html());
-        if (json['@type']) schemas.push(Array.isArray(json['@type']) ? json['@type'][0] : json['@type']);
+        if (json['@type']) schemas.push(Array.isArray(json['@type'])? json['@type'][0] : json['@type']);
       } catch {}
     });
 
@@ -138,15 +138,15 @@ async function analyzeSingleUrl(url) {
     const listCount = $("ul, ol").length;
     const tableCount = $("table").length;
     const totalImages = $("img").length;
-    const imagesWithoutAlt = $("img").filter((i, el) => !$(el).attr("alt")).length;
+    const imagesWithoutAlt = $("img").filter((i, el) =>!$(el).attr("alt")).length;
     const internalLinks = $(`a[href^='/'], a[href^='${url}']`).length;
     const externalLinks = $("a[href^='http']").not(`a[href^='${url}']`).length;
     const isHttps = url.startsWith("https://");
     const mobileViewport = $('meta[name="viewport"]').length > 0;
     const canonical = $('link[rel="canonical"]').attr("href") || "";
-    const hasCanonical = !!canonical;
+    const hasCanonical =!!canonical;
     const favicon = $('link[rel="icon"], link[rel="shortcut icon"]').attr("href") || "";
-    const hasFavicon = !!favicon;
+    const hasFavicon =!!favicon;
     const hasFAQ = faqQuestions.length > 0 || schemas.includes("FAQPage");
     const hasHowTo = schemas.includes("HowTo");
     const hasSchemaMarkup = schemas.length > 0;
@@ -154,12 +154,12 @@ async function analyzeSingleUrl(url) {
     const ogTitle = $('meta[property="og:title"]').attr("content") || "";
     const ogDescription = $('meta[property="og:description"]').attr("content") || "";
     const ogImage = $('meta[property="og:image"]').attr("content") || "";
-    const hasOGTags = !!(ogTitle && ogDescription);
+    const hasOGTags =!!(ogTitle && ogDescription);
     const hasAuthor = ['.author', '.byline', '[rel="author"]', '[class*="author"]', '[itemprop="author"]'].some(sel => $(sel).length > 0);
-    
+
     const dateStr = $('meta[property="article:modified_time"]').attr('content') || $('meta[property="article:published_time"]').attr('content');
-    const hasLastModified = !!dateStr;
-    const lastModified = dateStr ? new Date(dateStr).toLocaleDateString() : null;
+    const hasLastModified =!!dateStr;
+    const lastModified = dateStr? new Date(dateStr).toLocaleDateString() : null;
 
     const socialLinks = $("a").map((i, el) => $(el).attr("href") || "").get();
     const hasFacebook = socialLinks.some(link => link.includes("facebook.com"));
@@ -168,7 +168,12 @@ async function analyzeSingleUrl(url) {
     const hasTwitter = socialLinks.some(link => link.includes("twitter.com") || link.includes("x.com"));
 
     const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-   
+    const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
+    const email = emailMatch? emailMatch[0] : null;
+    const phone = phoneMatch? phoneMatch[0] : null;
+    const hasEmail =!!email;
+    const hasPhone =!!phone;
+
     const allText = bodyText.toLowerCase();
     const hasPrivacyPolicy = allText.includes("privacy policy") || allText.includes("privacy");
     const hasAboutPage = allText.includes("about us") || allText.includes("about");
@@ -181,153 +186,6 @@ async function analyzeSingleUrl(url) {
     else if (avgWordsPerSentence > 20) readabilityScore = 50;
     else readabilityScore = 80;
 
-    // Sitemap/Robots check with timeout - won't crash
- 
-  
-    try {
-      const robotsRes = await fetch(new URL("/robots.txt", url).href, { signal: AbortSignal.timeout(3000) });
-      robotsExists = robotsRes.ok;
-    } catch {}
-    try {
-      const sitemapRes = await fetch(new URL("/sitemap.xml", url).href, { signal: AbortSignal.timeout(3000) });
-      sitemapExists = sitemapRes.ok;
-    } catch {}
-
-    // ===== NOW CALCULATE SCORES - AFTER DATA IS READY =====
-    let seoScore = 100;
-    const criticalIssues = [];
-    const importantIssues = [];
-    const minorIssues = [];
-
-    if (!title) { seoScore -= 10; criticalIssues.push("Title tag missing"); }
-    if (title.length > 60) { seoScore -= 5; importantIssues.push("Title too long (>60 chars)"); }
-    if (!metaDescription) { seoScore -= 10; criticalIssues.push("Meta description missing"); }
-    if (!h1) { seoScore -= 10; criticalIssues.push("H1 tag missing"); }
-    if (imagesWithoutAlt > 0) { seoScore -= 5; importantIssues.push(`${imagesWithoutAlt} images missing ALT text`); }
-    if (!isHttps) { seoScore -= 15; criticalIssues.push("Site not using HTTPS"); }
-    if (!mobileViewport) { seoScore -= 10; criticalIssues.push("Mobile viewport not set"); }
-    if (loadTime > 3000) { seoScore -= 10; importantIssues.push("Slow load time (>3s)"); }
-    if (!hasSchemaMarkup) { seoScore -= 10; importantIssues.push("No schema markup found"); }
-    if (!robotsExists) { seoScore -= 5; minorIssues.push("robots.txt missing"); }
-    if (!sitemapExists) { seoScore -= 5; minorIssues.push("sitemap.xml missing"); }
-    if (!hasCanonical) { seoScore -= 5; importantIssues.push("Canonical URL missing"); }
-    if (!hasFavicon) { seoScore -= 3; minorIssues.push("Favicon missing"); }
-
-    seoScore = Math.max(0, seoScore);
-    const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 60 ? "Good" : seoScore >= 40 ? "Fair" : "Poor";
-
-    let aeoScore = 0;
-    if (hasFAQ) aeoScore += 30;
-    if (hasHowTo) aeoScore += 20;
-    if (hasDirectAnswer) aeoScore += 25;
-    if (hasSchemaMarkup) aeoScore += 15;
-    if (h1 && metaDescription) aeoScore += 10;
-    const aeoStatus = aeoScore >= 80 ? "ChatGPT Ready" : aeoScore >= 50 ? "AI Friendly" : "Needs Work";
-
-    let eeatScore = 0;
-    if (hasAuthor) eeatScore += 20;
-    if (hasContactPage || hasEmail || hasPhone) eeatScore += 15;
-    if (hasAboutPage) eeatScore += 15;
-    if (hasPrivacyPolicy) eeatScore += 15;
-    if (hasFacebook || hasLinkedIn || hasYouTube || hasTwitter) eeatScore += 15;
-    if (isHttps) eeatScore += 10;
-    if (hasLastModified) eeatScore += 10;
-
-    const aiTrustScore = Math.round((eeatScore * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
-
-    const citationChatGPT = Math.min(95, 20 + (hasFAQ ? 25 : 0) + (listCount > 2 ? 15 : 0) + (hasDirectAnswer ? 20 : 0) + (hasAuthor ? 10 : 0));
-    const citationGemini = Math.min(95, 20 + (hasSchemaMarkup ? 30 : 0) + (tableCount > 0 ? 20 : 0) + (hasAuthor ? 15 : 0) + (wordCount > 800 ? 15 : 0));
-    const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer ? 25 : 0) + (hasLastModified ? 15 : 0) + (externalLinks > 5 ? 15 : 0) + (listCount > 0 ? 15 : 0));
-    const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
-
-    const schemaScore = (hasFAQ ? 25 : 0) + (hasHowTo ? 25 : 0) + (hasDirectAnswer ? 20 : 0) + (schemas.length > 0 ? 30 : 0);
-
-    const overallAIVisibilityScore = Math.round(
-      (seoScore * 0.30) +
-      (aeoScore * 0.20) +
-      (aiTrustScore * 0.15) +
-      (citationProbability * 0.15) +
-      (readabilityScore * 0.10) +
-      (schemaScore * 0.10)
-    );
-
-    const aiVisibilityLevel = overallAIVisibilityScore >= 80 ? "Excellent" :
-                              overallAIVisibilityScore >= 60 ? "Good" :
-                              overallAIVisibilityScore >= 40 ? "Fair" : "Needs Work";
-
-    const answerQuality = Math.min(100, Math.round(
-      (hasDirectAnswer ? 30 : 0) +
-      (hasFAQ ? 25 : 0) +
-      (listCount > 0 ? 15 : 0) +
-      (h2Count >= 3 ? 15 : 0) +
-      (readabilityScore * 0.15)
-    )) || 50;
-
-    const mobileScore = mobileViewport ? seoScore : Math.max(0, seoScore - 20);
-    const desktopScore = seoScore;
-
-    const keywords = extractKeywordsFromContent(bodyText, h1 + ' ' + $("h2").map((i, el) => $(el).text()).get().join(' '), 15);
-    const keywordInsights = keywords.slice(0, 5).map(k => ({
-      keyword: k,
-      difficulty: getKeywordDifficulty(k),
-      opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
-    }));
-
-    // REMOVED DUPLICATE bodyText, wordCount, sentences, readabilityScore block
-
-    const aiTrustSignals = [];
-    if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
-    if (hasAboutPage) aiTrustSignals.push("About Page");
-    if (hasContactPage) aiTrustSignals.push("Contact Page");
-    if (hasAuthor) aiTrustSignals.push("Author Bio");
-    if (isHttps) aiTrustSignals.push("HTTPS Secure");
-
-    const autoFAQ = [];
-    if (h1) {
-      autoFAQ.push({
-        q: `What is ${h1}?`,
-        a: metaDescription || bodyText.substring(0, 120)
-      });
-    }
-
-    return {
-      url, title, h1, metaDescription, wordCount, lastModified,
-      score: seoScore,
-      status: seoStatus,
-      overallAIVisibilityScore,
-      aiVisibilityLevel,
-      breakdown: {
-        seo: seoScore,
-        aeo: aeoScore,
-        trust: aiTrustScore,
-        citation: citationProbability,
-        readability: readabilityScore,
-        schema: schemaScore
-      },
-      citationProbability,
-      totalImages, imagesWithoutAlt, internalLinks, externalLinks,
-      mobileFriendly: mobileViewport, isHttps, loadTime, brokenLinks: 0,
-      mobileScore, desktopScore,
-      hasSchemaMarkup, robotsExists, sitemapExists, hasCanonical,
-      canonical, hasFavicon, favicon,
-      hasOGTags, ogTitle, ogDescription, ogImage,
-      aeoScore, aeoStatus,
-      hasFAQ, hasHowTo, hasDirectAnswer,
-      schemas, keywords, keywordInsights,
-      aiReport: "Rule-based analysis complete",
-      readabilityScore, aiTrustScore,
-      answerQuality,
-      featuredSnippetChance: Math.round(
-        (hasDirectAnswer ? 40 : 0) +
-        (hasFAQ ? 30 : 0) +
-        (listCount > 0 ? 20 : 0) +
-        (h2Count >= 3 ? 10 : 0)
-      )
-    };
-    // ===== FIX: Define emailMatch/phoneMatch BEFORE using them =====
-   
-    const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
-    
     let robotsExists = false;
     let sitemapExists = false;
     try {
@@ -339,6 +197,7 @@ async function analyzeSingleUrl(url) {
       sitemapExists = sitemapRes.ok;
     } catch {}
 
+    // ===== CALCULATE SCORES - ONLY ONCE =====
     let seoScore = 100;
     const criticalIssues = [];
     const importantIssues = [];
@@ -359,7 +218,7 @@ async function analyzeSingleUrl(url) {
     if (!hasFavicon) { seoScore -= 3; minorIssues.push("Favicon missing"); }
 
     seoScore = Math.max(0, seoScore);
-    const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 60 ? "Good" : seoScore >= 40 ? "Fair" : "Poor";
+    const seoStatus = seoScore >= 80? "Excellent" : seoScore >= 60? "Good" : seoScore >= 40? "Fair" : "Poor";
 
     let aeoScore = 0;
     if (hasFAQ) aeoScore += 30;
@@ -367,7 +226,7 @@ async function analyzeSingleUrl(url) {
     if (hasDirectAnswer) aeoScore += 25;
     if (hasSchemaMarkup) aeoScore += 15;
     if (h1 && metaDescription) aeoScore += 10;
-    const aeoStatus = aeoScore >= 80 ? "ChatGPT Ready" : aeoScore >= 50 ? "AI Friendly" : "Needs Work";
+    const aeoStatus = aeoScore >= 80? "ChatGPT Ready" : aeoScore >= 50? "AI Friendly" : "Needs Work";
 
     let eeatScore = 0;
     if (hasAuthor) eeatScore += 20;
@@ -380,15 +239,12 @@ async function analyzeSingleUrl(url) {
 
     const aiTrustScore = Math.round((eeatScore * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
 
-    // ===== FIX 2: Define these FIRST before using citationProbability =====
-    const citationChatGPT = Math.min(95, 20 + (hasFAQ ? 25 : 0) + (listCount > 2 ? 15 : 0) + (hasDirectAnswer ? 20 : 0) + (hasAuthor ? 10 : 0));
-    const citationGemini = Math.min(95, 20 + (hasSchemaMarkup ? 30 : 0) + (tableCount > 0 ? 20 : 0) + (hasAuthor ? 15 : 0) + (wordCount > 800 ? 15 : 0));
-    const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer ? 25 : 0) + (hasLastModified ? 15 : 0) + (externalLinks > 5 ? 15 : 0) + (listCount > 0 ? 15 : 0));
-    
-    // Now use them - NO ERROR
+    const citationChatGPT = Math.min(95, 20 + (hasFAQ? 25 : 0) + (listCount > 2? 15 : 0) + (hasDirectAnswer? 20 : 0) + (hasAuthor? 10 : 0));
+    const citationGemini = Math.min(95, 20 + (hasSchemaMarkup? 30 : 0) + (tableCount > 0? 20 : 0) + (hasAuthor? 15 : 0) + (wordCount > 800? 15 : 0));
+    const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer? 25 : 0) + (hasLastModified? 15 : 0) + (externalLinks > 5? 15 : 0) + (listCount > 0? 15 : 0));
     const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
 
-    const schemaScore = (hasFAQ ? 25 : 0) + (hasHowTo ? 25 : 0) + (hasDirectAnswer ? 20 : 0) + (schemas.length > 0 ? 30 : 0);
+    const schemaScore = (hasFAQ? 25 : 0) + (hasHowTo? 25 : 0) + (hasDirectAnswer? 20 : 0) + (schemas.length > 0? 30 : 0);
 
     const overallAIVisibilityScore = Math.round(
       (seoScore * 0.30) +
@@ -399,27 +255,21 @@ async function analyzeSingleUrl(url) {
       (schemaScore * 0.10)
     );
 
-    // Only declare ONCE
-    const aiVisibilityLevel = overallAIVisibilityScore >= 80 ? "Excellent" :
-                              overallAIVisibilityScore >= 60 ? "Good" :
-                              overallAIVisibilityScore >= 40 ? "Fair" : "Needs Work";
+    const aiVisibilityLevel = overallAIVisibilityScore >= 80? "Excellent" :
+                              overallAIVisibilityScore >= 60? "Good" :
+                              overallAIVisibilityScore >= 40? "Fair" : "Needs Work";
 
     const answerQuality = Math.min(100, Math.round(
-      (hasDirectAnswer ? 30 : 0) +
-      (hasFAQ ? 25 : 0) +
-      (listCount > 0 ? 15 : 0) +
-      (h2Count >= 3 ? 15 : 0) +
+      (hasDirectAnswer? 30 : 0) +
+      (hasFAQ? 25 : 0) +
+      (listCount > 0? 15 : 0) +
+      (h2Count >= 3? 15 : 0) +
       (readabilityScore * 0.15)
     )) || 50;
 
-    const mobileScore = mobileViewport ? seoScore : Math.max(0, seoScore - 20);
+    const mobileScore = mobileViewport? seoScore : Math.max(0, seoScore - 20);
     const desktopScore = seoScore;
 
-    // ===== FIX 3: Ensure email/phone are defined =====
-    const email = emailMatch ? emailMatch[0] : null;
-    const phone = phoneMatch ? phoneMatch[0] : null;
-    const hasEmail =!!email;
-    const hasPhone =!!phone;
     const keywords = extractKeywordsFromContent(bodyText, h1 + ' ' + $("h2").map((i, el) => $(el).text()).get().join(' '), 15);
     const keywordInsights = keywords.slice(0, 5).map(k => ({
       keyword: k,
@@ -471,12 +321,12 @@ async function analyzeSingleUrl(url) {
       answerQuality,
       answerQualityScore: answerQuality,
       featuredSnippetChance: Math.round(
-        (hasDirectAnswer ? 40 : 0) +
-        (hasFAQ ? 30 : 0) +
-        (listCount > 0 ? 20 : 0) +
-        (h2Count >= 3 ? 10 : 0)
+        (hasDirectAnswer? 40 : 0) +
+        (hasFAQ? 30 : 0) +
+        (listCount > 0? 20 : 0) +
+        (h2Count >= 3? 10 : 0)
       ),
-      contentStructureScore: (h1Count === 1 ? 20 : 0) + (h2Count >= 3 ? 20 : 0) + (h3Count >= 5 ? 20 : 0) + (listCount >= 2 ? 20 : 0) + (tableCount >= 1 ? 20 : 0),
+      contentStructureScore: (h1Count === 1? 20 : 0) + (h2Count >= 3? 20 : 0) + (h3Count >= 5? 20 : 0) + (listCount >= 2? 20 : 0) + (tableCount >= 1? 20 : 0),
       citationChatGPT, citationGemini, citationPerplexity,
       aiExtractedAnswer: bodyText.substring(0, 300) || "No clear answer found",
       topicAuthority: {
@@ -491,8 +341,8 @@ async function analyzeSingleUrl(url) {
       },
       schemaCoverage: Math.min(100, schemas.length * 20),
       aeoReadiness: Math.round(
-        (hasFAQ ? 25 : 0) + (hasHowTo ? 20 : 0) + (hasDirectAnswer ? 20 : 0) +
-        (hasSchemaMarkup ? 15 : 0) + (hasAuthor ? 10 : 0) + (hasLastModified ? 10 : 0)
+        (hasFAQ? 25 : 0) + (hasHowTo? 20 : 0) + (hasDirectAnswer? 20 : 0) +
+        (hasSchemaMarkup? 15 : 0) + (hasAuthor? 10 : 0) + (hasLastModified? 10 : 0)
       ),
       aeoSignals: aiTrustSignals,
       fixSuggestions: [],
@@ -502,8 +352,8 @@ async function analyzeSingleUrl(url) {
       realCitationPerplexity: citationPerplexity,
       serpPreview: {
         title: title || "No title",
-        displayUrl: url ? url.replace(/^https?:\/\//, '').replace(/\/$/, '') : "",
-        description: metaDescription || (bodyText ? bodyText.substring(0, 160) : "No description available")
+        displayUrl: url? url.replace(/^https?:\/\//, '').replace(/\/$/, '') : "",
+        description: metaDescription || (bodyText? bodyText.substring(0, 160) : "No description available")
       },
       aiSearchSimulation: {
         query: "AI temporarily disabled",
@@ -522,6 +372,7 @@ async function analyzeSingleUrl(url) {
     console.error("Analysis error:", mainError.message);
     throw new Error(`Failed to analyze ${url}: ${mainError.message}`);
   }
+}
 }
 
 // ========== API ENDPOINTS ==========

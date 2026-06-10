@@ -352,17 +352,6 @@ const overallAIVisibilityScore = Math.round(
   (schemaScore * 0.10)
 );
 
-let aiVisibilityLevel = "Poor - Not AI Ready";
-
-if (overallAIVisibilityScore >= 80) {
-  aiVisibilityLevel = "Excellent - AI Ready";
-} else if (overallAIVisibilityScore >= 65) {
-  aiVisibilityLevel = "Good - Minor Improvements Needed";
-} else if (overallAIVisibilityScore >= 45) {
-  aiVisibilityLevel = "Fair - Needs Optimization";
-} else {
-  aiVisibilityLevel = "Poor - Not AI Ready";
-}
   const citationChatGPT = Math.min(95, Math.round((aeoScore * 0.4) + (aiTrustScore * 0.3) + (hasFAQ? 20 : 0) + (hasDirectAnswer? 10 : 0)));
   const citationGemini = Math.min(95, Math.round((aeoScore * 0.4) + (seoScore * 0.3) + (hasSchemaMarkup? 20 : 0) + (hasAuthor? 10 : 0)));
   const citationPerplexity = Math.min(95, Math.round((aiTrustScore * 0.4) + (eeatScore * 0.3) + (hasDirectAnswer? 20 : 0)));

@@ -328,7 +328,8 @@ async function analyzeSingleUrl(url) {
         (h2Count >= 3 ? 10 : 0)
       ),
     
-
+    const bodyText = $("body").text().replace(/\s+/g, " ").trim();
+    const wordCount = bodyText.split(" ").filter(w => w.length > 0).length;
     const sentences = bodyText.split(/[.!?]+/).length || 1;
     const avgWordsPerSentence = wordCount / sentences;
     let readabilityScore = 50;
@@ -336,7 +337,14 @@ async function analyzeSingleUrl(url) {
     else if (avgWordsPerSentence > 20) readabilityScore = 50;
     else readabilityScore = 80;
 
-    // ===== FIX 1: Sitemap/Robots with proper error handling =====
+    // ===== FIX: Define emailMatch/phoneMatch BEFORE using them =====
+    const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
+    const email = emailMatch? emailMatch[0] : null;
+    const phone = phoneMatch? phoneMatch[0] : null;
+    const hasEmail =!!email;
+    const hasPhone =!!phone;
+
     let robotsExists = false;
     let sitemapExists = false;
     try {
@@ -348,7 +356,6 @@ async function analyzeSingleUrl(url) {
       sitemapExists = sitemapRes.ok;
     } catch {}
 
-    // ===== CALCULATE SCORES =====
     let seoScore = 100;
     const criticalIssues = [];
     const importantIssues = [];

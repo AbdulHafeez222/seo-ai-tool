@@ -326,7 +326,7 @@ async function analyzeSingleUrl(url) {
         (hasFAQ ? 30 : 0) +
         (listCount > 0 ? 20 : 0) +
         (h2Count >= 3 ? 10 : 0)
-      ),
+      
     
     const bodyText = $("body").text().replace(/\s+/g, " ").trim();
     const wordCount = bodyText.split(" ").filter(w => w.length > 0).length;

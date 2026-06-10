@@ -168,10 +168,7 @@ async function analyzeSingleUrl(url) {
     const hasTwitter = socialLinks.some(link => link.includes("twitter.com") || link.includes("x.com"));
 
     const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-    const phoneMatch = bodyText.match(/(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
-    const hasEmail = !!emailMatch;
-    const hasPhone = !!phoneMatch;
-
+   
     const allText = bodyText.toLowerCase();
     const hasPrivacyPolicy = allText.includes("privacy policy") || allText.includes("privacy");
     const hasAboutPage = allText.includes("about us") || allText.includes("about");
@@ -328,7 +325,7 @@ async function analyzeSingleUrl(url) {
       )
     };
     // ===== FIX: Define emailMatch/phoneMatch BEFORE using them =====
-    const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+   
     const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
     const email = emailMatch? emailMatch[0] : null;
     const phone = phoneMatch? phoneMatch[0] : null;

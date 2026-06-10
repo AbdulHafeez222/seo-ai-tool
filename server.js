@@ -238,7 +238,6 @@ async function analyzeSingleUrl(url) {
 
     const aiTrustScore = Math.round((eeatScore * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
 
-    // FIX: Calculate citationProbability HERE after all data is ready
     const citationChatGPT = Math.min(95, 20 + (hasFAQ ? 25 : 0) + (listCount > 2 ? 15 : 0) + (hasDirectAnswer ? 20 : 0) + (hasAuthor ? 10 : 0));
     const citationGemini = Math.min(95, 20 + (hasSchemaMarkup ? 30 : 0) + (tableCount > 0 ? 20 : 0) + (hasAuthor ? 15 : 0) + (wordCount > 800 ? 15 : 0));
     const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer ? 25 : 0) + (hasLastModified ? 15 : 0) + (externalLinks > 5 ? 15 : 0) + (listCount > 0 ? 15 : 0));
@@ -246,7 +245,6 @@ async function analyzeSingleUrl(url) {
 
     const schemaScore = (hasFAQ ? 25 : 0) + (hasHowTo ? 25 : 0) + (hasDirectAnswer ? 20 : 0) + (schemas.length > 0 ? 30 : 0);
 
-    // FIX: Only declare aiVisibilityLevel ONCE
     const overallAIVisibilityScore = Math.round(
       (seoScore * 0.30) +
       (aeoScore * 0.20) +
@@ -277,6 +275,8 @@ async function analyzeSingleUrl(url) {
       difficulty: getKeywordDifficulty(k),
       opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
     }));
+
+    // REMOVED DUPLICATE bodyText, wordCount, sentences, readabilityScore block
 
     const aiTrustSignals = [];
     if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
@@ -325,20 +325,8 @@ async function analyzeSingleUrl(url) {
         (hasFAQ ? 30 : 0) +
         (listCount > 0 ? 20 : 0) +
         (h2Count >= 3 ? 10 : 0)
-      ),
-      
-    }; 
-
-    
-    const bodyText = $("body").text().replace(/\s+/g, " ").trim();
-    const wordCount = bodyText.split(" ").filter(w => w.length > 0).length;
-    const sentences = bodyText.split(/[.!?]+/).length || 1;
-    const avgWordsPerSentence = wordCount / sentences;
-    let readabilityScore = 50;
-    if (avgWordsPerSentence > 25) readabilityScore = 30;
-    else if (avgWordsPerSentence > 20) readabilityScore = 50;
-    else readabilityScore = 80;
-
+      )
+    };
     // ===== FIX: Define emailMatch/phoneMatch BEFORE using them =====
     const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
     const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);

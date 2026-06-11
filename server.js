@@ -18,7 +18,7 @@ async function safeFetch(url, options = {}) {
     const timeout = setTimeout(() => controller.abort(), options.timeout || 10000);
 
     const res = await fetch(url, {
-     ...options,
+    ...options,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; SEO-AEO-Bot/1.0)",...options.headers },
       signal: controller.signal
     });
@@ -69,8 +69,8 @@ function extractEntitiesFromContent(text, headings = "", topN = 10) {
 
   const entityRegex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
   const entities = [...new Set((text + ' ' + headings).match(entityRegex) || [])]
-   .filter(e => e.length > 3 &&!['The', 'This', 'That', 'With', 'From'].includes(e))
-   .slice(0, topN);
+  .filter(e => e.length > 3 &&!['The', 'This', 'That', 'With', 'From'].includes(e))
+  .slice(0, topN);
 
   const stopWords = ['about', 'https', 'website', 'click', 'here', 'their', 'there', 'which', 'would', 'function', 'return', 'const', 'document', 'window', 'typeof', 'undefined', 'null', 'true', 'false', 'this', 'that', 'with', 'from', 'have', 'your', 'will', 'been'];
 
@@ -78,17 +78,17 @@ function extractEntitiesFromContent(text, headings = "", topN = 10) {
   const combinedText = headingText + ' ' + headingText + ' ' + headingText + ' ' + text.toLowerCase();
 
   const words = combinedText
-   .replace(/[^\w\s]/g, ' ')
-   .split(/\s+/)
-   .filter(w => w.length > 4 &&!stopWords.includes(w));
+  .replace(/[^\w\s]/g, ' ')
+  .split(/\s+/)
+  .filter(w => w.length > 4 &&!stopWords.includes(w));
 
   const freq = {};
   words.forEach(w => freq[w] = (freq[w] || 0) + 1);
 
   const keywords = Object.entries(freq)
-   .sort((a, b) => b[1] - a[1])
-   .slice(0, topN)
-   .map(([word]) => word);
+  .sort((a, b) => b[1] - a[1])
+  .slice(0, topN)
+  .map(([word]) => word);
 
   return { keywords, entities };
 }
@@ -157,6 +157,16 @@ async function analyzeSingleUrl(url) {
       }
     });
     const uniqueSchemas = [...new Set(schemas)];
+
+    // ===== SCHEMA INTELLIGENCE SCORING =====
+    const schemaIntelligence = {
+      FAQPage: { present: uniqueSchemas.includes('FAQPage'), score: 0, issues: [] },
+      HowTo: { present: uniqueSchemas.includes('HowTo'), score: 0, issues: [] },
+      Article: { present: uniqueSchemas.includes('Article'), score: 0, issues: [] },
+      Organization: { present: uniqueSchemas.includes('Organization'), score: 0, issues: [] },
+      LocalBusiness: { present: uniqueSchemas.includes('LocalBusiness'), score: 0, issues: [] },
+      BreadcrumbList: { present: uniqueSchemas.includes('BreadcrumbList'), score: 0, issues: [] }
+    };
 
     const faqQuestions = [];
     $('script[type="application/ld+json"]').each((i, el) => {
@@ -332,6 +342,41 @@ async function analyzeSingleUrl(url) {
       (schemaScore * 0.10)
     );
 
+    // FAQ Schema Score
+    if (schemaIntelligence.FAQPage.present) {
+      schemaIntelligence.FAQPage.score = faqQuestions.length >= 3? 100 : faqQuestions.length * 30;
+      if (faqQuestions.length === 0) schemaIntelligence.FAQPage.issues.push('No questions in FAQPage schema');
+    }
+
+    // HowTo Schema Score
+    if (schemaIntelligence.HowTo.present) {
+      const hasSteps = $('script[type="application/ld+json"]').text().includes('step');
+      schemaIntelligence.HowTo.score = hasSteps? 100 : 40;
+      if (!hasSteps) schemaIntelligence.HowTo.issues.push('HowTo schema missing step property');
+    }
+
+    // Article Schema Score
+    if (schemaIntelligence.Article.present) {
+      let articleScore = 0;
+      if (hasAuthor) articleScore += 40;
+      if (hasLastModified) articleScore += 30;
+      if (wordCount > 300) articleScore += 30;
+      schemaIntelligence.Article.score = articleScore;
+      if (!hasAuthor) schemaIntelligence.Article.issues.push('Article missing author');
+    }
+
+    // Organization Schema Score
+    if (schemaIntelligence.Organization.present) {
+      let orgScore = 0;
+      if (hasContactPage) orgScore += 50;
+      if (hasLinkedIn) orgScore += 50;
+      schemaIntelligence.Organization.score = orgScore;
+    }
+
+    const schemaIntelligenceScore = Math.round(
+      Object.values(schemaIntelligence).reduce((sum, s) => sum + s.score, 0) / Object.keys(schemaIntelligence).length
+    );
+
     // ===== SCHEMA VALIDATOR =====
     const schemaErrors = [];
     const schemaWarnings = [];
@@ -413,7 +458,7 @@ async function analyzeSingleUrl(url) {
       `${mainTopic} vs Alternatives`
     ];
     const missingSubtopics = expectedSubtopics.filter(exp =>
-     !subtopics.some(sub => sub.toLowerCase().includes(exp.toLowerCase().split(' ')[0]))
+    !subtopics.some(sub => sub.toLowerCase().includes(exp.toLowerCase().split(' ')[0]))
     );
     const topicCoverage = Math.round(((expectedSubtopics.length - missingSubtopics.length) / expectedSubtopics.length) * 100);
 
@@ -445,6 +490,58 @@ async function analyzeSingleUrl(url) {
       });
     }
 
+    // ===== AI RECOMMENDATION ENGINE =====
+    const aiRecommendations = [];
+    if (!hasFAQ) aiRecommendations.push({
+      priority: "CRITICAL",
+      action: "Add FAQ Schema",
+      impact: "+15% ChatGPT Citation",
+      effort: "15 mins",
+      code: `<script type="application/ld+json">{"@type":"FAQPage",...}</script>`
+    });
+
+    if (!hasAuthor) aiRecommendations.push({
+      priority: "HIGH",
+      action: "Add Author Section with Credentials",
+      impact: "+12% EEAT Score",
+      effort: "10 mins",
+      code: `<div class="author">By John Doe, SEO Expert</div>`
+    });
+
+    if (!hasDirectAnswer) aiRecommendations.push({
+      priority: "HIGH",
+      action: "Add Direct Answer Block in First 100 Words",
+      impact: "+20% Featured Snippet Chance",
+      effort: "20 mins",
+      code: `<p><strong>Quick Answer:</strong> [50-word summary]</p>`
+    });
+
+    if (wordCount < 800) aiRecommendations.push({
+      priority: "MEDIUM",
+      action: "Add Statistics/Data Points",
+      impact: "+10% AI Trust Score",
+      effort: "30 mins",
+      code: `Add: "Studies show 73% of users..." with source`
+    });
+
+    if (externalLinks < 3) aiRecommendations.push({
+      priority: "MEDIUM",
+      action: "Add Trust Signals - External Citations",
+      impact: "+8% Perplexity Citation",
+      effort: "15 mins",
+      code: `Link to: Google, Wikipedia, Industry reports`
+    });
+
+    if (listCount < 2) aiRecommendations.push({
+      priority: "MEDIUM",
+      action: "Add Comparison Tables/Lists",
+      impact: "+12% Gemini Citation",
+      effort: "25 mins",
+      code: `<table> or <ul> with key points`
+    });
+
+    const recommendationScore = Math.max(0, 100 - (aiRecommendations.length * 12));
+
     return {
       url, title, h1, metaDescription, wordCount, lastModified,
       score: seoScore,
@@ -455,6 +552,8 @@ async function analyzeSingleUrl(url) {
         seo: seoScore,
         aeo: aeoScore,
         schemaValidator,
+        schemaIntelligence,
+        schemaIntelligenceScore,
         eeatScore: eeatScoreFinal,
         internalLinkingAudit,
         topicalAuthorityScore,
@@ -488,7 +587,8 @@ async function analyzeSingleUrl(url) {
         mainTopic: h1 || title.split(" ").slice(0, 3).join(" "),
         found: keywords.slice(0, 5),
         entities,
-        missing: []
+        missing: [],
+        subtopics
       },
       aiReadiness: {
         chatgpt: chatGPTReadiness,
@@ -496,6 +596,8 @@ async function analyzeSingleUrl(url) {
         perplexity: perplexityReadiness,
         claude: claudeReadiness
       },
+      aiRecommendations,
+      recommendationScore,
       businessValue: {
         trafficIncrease: `+${Math.round((100 - seoScore) * 0.5)}% potential`,
         leadsIncrease: `+${Math.round((100 - aeoScore) * 0.3)}% potential`,
@@ -641,7 +743,7 @@ app.get("/gap-analysis", async (req, res) => {
       { key: 'hasContactPage', label: 'Contact Page' }
     ];
 
-    checks.forEach(check => {
+        checks.forEach(check => {
       if (compData[check.key]) gaps.competitor.has.push(check.label);
       if (compData[check.key] &&!userData[check.key]) gaps.you.missing.push(check.label);
     });
@@ -650,6 +752,57 @@ app.get("/gap-analysis", async (req, res) => {
   } catch (err) {
     console.error("Gap analysis error:", err);
     res.status(500).json({ error: "Gap analysis failed", message: err.message });
+  }
+});
+
+app.get("/competitor-gap-ai", async (req, res) => {
+  const { url, competitor } = req.query;
+  if (!url ||!competitor) return res.status(400).json({ error: "Both URLs required" });
+
+  try {
+    const [yourData, compData] = await Promise.all([
+      analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url),
+      analyzeSingleUrl(competitor.startsWith('http')? competitor : 'https://' + competitor)
+    ]);
+
+    const yourH2s = yourData.topicAuthority?.subtopics || [];
+    const compH2s = compData.topicAuthority?.subtopics || [];
+
+    const missingH2s = compH2s.filter(h2 =>
+   !yourH2s.some(y => y.toLowerCase().includes(h2.toLowerCase().split(' ')[0]))
+    );
+
+    const yourKeywords = new Set(yourData.keywords);
+    const missingKeywords = compData.keywords.filter(k =>!yourKeywords.has(k));
+
+    const yourEntities = new Set(yourData.topicAuthority?.entities || []);
+    const missingEntities = (compData.topicAuthority?.entities || []).filter(e =>!yourEntities.has(e));
+
+    const yourFAQs = yourData.autoFAQ.map(f => f.q);
+    const compFAQs = compData.autoFAQ.map(f => f.q);
+    const missingFAQs = compFAQs.filter(f =>!yourFAQs.includes(f));
+
+    const contentLengthGap = compData.wordCount - yourData.wordCount;
+
+    res.json({
+      your: { url: yourData.url, wordCount: yourData.wordCount },
+      competitor: { url: compData.url, wordCount: compData.wordCount },
+      gaps: {
+        missingH2s: missingH2s.slice(0, 5),
+        missingKeywords: missingKeywords.slice(0, 10),
+        missingEntities: missingEntities.slice(0, 8),
+        missingFAQs: missingFAQs.slice(0, 5),
+        contentLengthGap: contentLengthGap > 0? `+${contentLengthGap} words needed` : 'You have more content'
+      },
+      opportunityScore: Math.min(100,
+        (missingH2s.length * 10) +
+        (missingKeywords.length * 5) +
+        (missingEntities.length * 8) +
+        (missingFAQs.length * 12)
+      )
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -768,7 +921,7 @@ app.get("/roadmap", async (req, res) => {
       totalSteps: roadmap.length,
       estimatedTime: roadmap.length * 20 + " mins",
       roadmap
-        });
+    });
   } catch (err) {
     console.error("Roadmap error:", err);
     res.status(500).json({ error: "Roadmap generation failed", message: err.message });
@@ -850,30 +1003,51 @@ app.use((err, req, res, next) => {
 app.get("/citation-simulator-v2", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: "URL required" });
-  
+
   try {
     const data = await analyzeSingleUrl(url);
-    
-    const whyWillCite = [];
-    const whyWillIgnore = [];
-    
-    if (data.hasFAQ) whyWillCite.push("FAQ Schema present - AI loves Q&A format");
-    if (data.hasDirectAnswer) whyWillCite.push("Direct answers found in first 100 words");
-    if (data.listCount >= 3) whyWillCite.push("Multiple lists - easy to extract");
-    if (data.hasAuthor && data.breakdown.eeatScore > 60) whyWillCite.push("Strong EEAT signals");
-    
-    if (!data.hasFAQ) whyWillIgnore.push("No FAQ Schema - ChatGPT prefers FAQs");
-    if (!data.hasLastModified) whyWillIgnore.push("No last modified date - seems outdated");
-    if (data.readabilityScore < 50) whyWillIgnore.push("Complex sentences - hard to parse");
-    if (!data.hasSchemaMarkup) whyWillIgnore.push("No structured data - Gemini won't understand");
-    
+
+    const chatGPTReason = {
+      willCite: data.hasFAQ && data.hasDirectAnswer && data.listCount >= 3,
+      reasons: [],
+      score: data.citationChatGPT
+    };
+    if (data.hasFAQ) chatGPTReason.reasons.push("FAQ Schema = ChatGPT's favorite format");
+    if (data.hasDirectAnswer) chatGPTReason.reasons.push("Direct Q&A in first 100 words");
+    if (data.listCount >= 3) chatGPTReason.reasons.push("Structured lists = easy extraction");
+    if (!data.hasFAQ) chatGPTReason.reasons.push("Missing: Add FAQ schema to boost 25%");
+
+    const geminiReason = {
+      willCite: data.hasSchemaMarkup && data.tableCount > 0 && data.hasAuthor,
+      reasons: [],
+      score: data.citationGemini
+    };
+    if (data.hasSchemaMarkup) geminiReason.reasons.push("Rich schema markup = Gemini understands");
+    if (data.tableCount > 0) geminiReason.reasons.push("Tables = Gemini's preferred data format");
+    if (data.hasAuthor) geminiReason.reasons.push("Author signals = EEAT boost");
+    if (!data.hasSchemaMarkup) geminiReason.reasons.push("Missing: Add Article/Organization schema");
+
+    const perplexityReason = {
+      willCite: data.hasDirectAnswer && data.hasLastModified && data.externalLinks > 5,
+      reasons: [],
+      score: data.citationPerplexity
+    };
+    if (data.hasDirectAnswer) perplexityReason.reasons.push("Direct answers = Perplexity cites instantly");
+    if (data.hasLastModified) perplexityReason.reasons.push("Fresh content = higher priority");
+    if (data.externalLinks > 5) perplexityReason.reasons.push("External citations = trust signals");
+    if (!data.hasLastModified) perplexityReason.reasons.push("Missing: Add lastModified date");
+
     res.json({
       url: data.url,
-      citationProbability: data.citationProbability,
-      willCite: whyWillCite,
-      willIgnore: whyWillIgnore,
-      topReason: whyWillCite[0] || "No strong citation signals",
-      criticalFix: whyWillIgnore[0] || "Content is AI-ready"
+      overallProbability: data.citationProbability,
+      chatgpt: chatGPTReason,
+      gemini: geminiReason,
+      perplexity: perplexityReason,
+      criticalFix: [
+     !data.hasFAQ? "Add FAQ Schema" : null,
+     !data.hasAuthor? "Add Author Bio" : null,
+     !data.hasLastModified? "Add Last Modified Date" : null
+      ].filter(Boolean)[0] || "Content is AI-ready"
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -883,18 +1057,18 @@ app.get("/citation-simulator-v2", async (req, res) => {
 app.get("/ai-snippet-generator", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: "URL required" });
-  
+
   try {
     const data = await analyzeSingleUrl(url);
     const topic = data.h1 || data.title;
-    
+
     const snippets = {
-      directAnswer: `Quick Answer: ${topic} is ${data.metaDescription || '...'} `,
+      directAnswer: `Quick Answer: ${topic} is ${data.metaDescription || '...'}`,
       featuredSnippet: `${topic}\n\nKey Points:\n• ${data.keywords[0] || 'Point 1'}\n• ${data.keywords[1] || 'Point 2'}\n• ${data.keywords[2] || 'Point 3'}`,
       aiOverview: `Based on analysis, ${topic} helps users with ${data.keywords.slice(0,3).join(', ')}. Key benefits include improved ${data.keywords[0] || 'results'}.`,
       faqBlock: data.autoFAQ.length? `Q: ${data.autoFAQ[0].q}\nA: ${data.autoFAQ[0].a}` : `Q: What is ${topic}?\nA: ${data.metaDescription}`
     };
-    
+
     res.json({ url, topic, snippets, readyToCopy: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -904,4 +1078,4 @@ app.get("/ai-snippet-generator", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform running on port ${PORT}`);
   console.log(`📊 Features: Rule-based SEO/AEO Analysis | AI: WAITING MODE`);
-});
+});.push(check.label

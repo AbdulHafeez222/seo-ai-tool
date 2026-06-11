@@ -278,12 +278,21 @@ async function analyzeSingleUrl(url) {
     }));
 
     const aiTrustSignals = [];
-    if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
-    if (hasAboutPage) aiTrustSignals.push("About Page");
-    if (hasContactPage) aiTrustSignals.push("Contact Page");
-    if (hasAuthor) aiTrustSignals.push("Author Bio");
-    if (isHttps) aiTrustSignals.push("HTTPS Secure");
-
+   if(hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
+  if(hasAboutPage) aiTrustSignals.push("About Page");
+  if(hasContactPage) aiTrustSignals.push("Contact Page");
+ if(hasFacebook) aiTrustSignals.push("Facebook");
+ if(hasLinkedIn) aiTrustSignals.push("LinkedIn");
+ if(hasYouTube) aiTrustSignals.push("YouTube");
+ if(hasPhone) aiTrustSignals.push("Phone");
+ if(isHttps) aiTrustSignals.push("HTTPS");
+const featuredSnippetChance = Math.min(
+  100,
+  (hasDirectAnswer ? 40 : 0) +
+  (hasFAQ ? 30 : 0) +
+  (listCount > 0 ? 20 : 0) +
+  (h2Count >= 3 ? 10 : 0)
+);
     const autoFAQ = [];
     if (h1) {
       autoFAQ.push({

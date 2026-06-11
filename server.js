@@ -743,7 +743,7 @@ app.get("/gap-analysis", async (req, res) => {
       { key: 'hasContactPage', label: 'Contact Page' }
     ];
 
-        checks.forEach(check => {
+            checks.forEach(check => {
       if (compData[check.key]) gaps.competitor.has.push(check.label);
       if (compData[check.key] &&!userData[check.key]) gaps.you.missing.push(check.label);
     });

@@ -769,7 +769,7 @@ app.get("/competitor-gap-ai", async (req, res) => {
     const compH2s = compData.topicAuthority?.subtopics || [];
 
     const missingH2s = compH2s.filter(h2 =>
-   !yourH2s.some(y => y.toLowerCase().includes(h2.toLowerCase().split(' ')[0]))
+  !yourH2s.some(y => y.toLowerCase().includes(h2.toLowerCase().split(' ')[0]))
     );
 
     const yourKeywords = new Set(yourData.keywords);
@@ -1044,9 +1044,9 @@ app.get("/citation-simulator-v2", async (req, res) => {
       gemini: geminiReason,
       perplexity: perplexityReason,
       criticalFix: [
-     !data.hasFAQ? "Add FAQ Schema" : null,
-     !data.hasAuthor? "Add Author Bio" : null,
-     !data.hasLastModified? "Add Last Modified Date" : null
+  !data.hasFAQ? "Add FAQ Schema" : null,
+  !data.hasAuthor? "Add Author Bio" : null,
+  !data.hasLastModified? "Add Last Modified Date" : null
       ].filter(Boolean)[0] || "Content is AI-ready"
     });
   } catch (err) {
@@ -1078,4 +1078,4 @@ app.get("/ai-snippet-generator", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform running on port ${PORT}`);
   console.log(`📊 Features: Rule-based SEO/AEO Analysis | AI: WAITING MODE`);
-});.push(check.label
+});                  

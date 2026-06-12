@@ -15,10 +15,10 @@ app.use(express.static("public"));
 async function safeFetch(url, options = {}) {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), options.timeout || 10000);
+    const timeout = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(url, {
-     ...options,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; SEO-AEO-Bot/3.0)",...options.headers },
+      ...options,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; SEO-AEO-Bot/4.0)", ...options.headers },
       signal: controller.signal
     });
     clearTimeout(timeout);
@@ -117,38 +117,119 @@ function detectAllSchemas($, html) {
 
 // ========== UPGRADE 4: INTERNAL LINK INTELLIGENCE ==========
 function analyzeInternalLinks($, url, h2s) {
-  const baseUrl = new URL(url).origin;
-  const allLinks = $('a').map((i, el) => $(el).attr('href')).get();
-  const internalLinks = allLinks.filter(href =>
-    href && (href.startsWith('/') || href.startsWith(baseUrl))
-  );
-
+  const baseHostname = new URL(url).hostname;
+  let internalLinks = 0;
+  let externalLinks = 0;
   const linkMap = {};
-  internalLinks.forEach(link => {
-    const clean = link.split('#')[0].split('?')[0];
-    linkMap[clean] = (linkMap[clean] || 0) + 1;
+  
+  $("a").each((i, el) => {
+    const href = $(el).attr("href");
+    if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+    
+    try {
+      const fullUrl = href.startsWith('/') ? new URL(href, url).href : href;
+      const linkHostname = new URL(fullUrl).hostname;
+      
+      if (linkHostname === baseHostname || linkHostname === 'www.' + baseHostname) {
+        internalLinks++;
+        const clean = fullUrl.split('#')[0].split('?')[0];
+        linkMap[clean] = (linkMap[clean] || 0) + 1;
+      } else if (href.startsWith('http')) {
+        externalLinks++;
+      }
+    } catch {}
   });
 
+  const uniquePages = Object.keys(linkMap).length;
   const orphanPages = [];
-  const totalPages = Object.keys(linkMap).length;
-  if (totalPages < 3) orphanPages.push(`${baseUrl}/blog`);
-
-  const linkDepths = internalLinks.map(link => {
+  if (uniquePages < 3) orphanPages.push(`${url}/blog`);
+  
+  const linkDepths = Object.keys(linkMap).map(link => {
     const parts = link.split('/').filter(Boolean);
     return parts.length;
   });
-  const avgDepth = linkDepths.length > 0? (linkDepths.reduce((a,b) => a+b, 0) / linkDepths.length).toFixed(1) : 0;
-
-  const authorityFlow = h2s.length > 0? Math.round((internalLinks.length / h2s.length) * 100) : 0;
-
-  const weakLinking = internalLinks.length < h2s.length;
+  const avgDepth = linkDepths.length > 0 ? (linkDepths.reduce((a,b) => a+b, 0) / linkDepths.length).toFixed(1) : 0;
+  const authorityFlow = h2s.length > 0 ? Math.round((internalLinks / h2s.length) * 100) : 0;
+  const weakLinking = internalLinks < h2s.length;
   const suggestions = [];
   if (weakLinking) {
     h2s.slice(0, 3).forEach(h2 => {
       suggestions.push(`Add internal link to section: ${h2}`);
     });
   }
-
+const schemaGenerator = {
+  FAQPage: schemas.FAQPage.present ? null : {
+    recommended: faqQuestions.length > 0,
+    code: `&lt;script type="application/ld+json"&gt;{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [${autoFAQ.map(f => `{
+    "@type": "Question",
+    "name": "${f.q}",
+    "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "${f.a}"
+    }
+  }`).join(',')}]
+}&lt;/script&gt;`
+  },
+  HowTo: {
+    recommended: bodyText.includes('step') || bodyText.includes('how to'),
+    code: `&lt;script type="application/ld+json"&gt;{
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  "name": "${h1}",
+  "step": [${h2s.slice(0,5).map((h, i) => `{
+    "@type": "HowToStep",
+    "position": ${i+1},
+    "name": "${h}",
+    "text": "Follow this step"
+  }`).join(',')}]
+}&lt;/script&gt;`
+  },
+  LocalBusiness: {
+    recommended: !schemas.LocalBusiness.present && (hasPhone || hasContactPage),
+    code: `&lt;script type="application/ld+json"&gt;{
+  "@context": "https://schema.org",
+  "@type": "LocalBusiness",
+  "name": "${getBrandName(url)}",
+  "url": "${url}",
+  ${hasPhone ? `"telephone": "${phone}",` : ''}
+  ${hasEmail ? `"email": "${email}",` : ''}
+  "address": {
+    "@type": "PostalAddress",
+    "addressCountry": "PK"
+  }
+}&lt;/script&gt;`
+  },
+  Article: {
+    recommended: !schemas.Article.present && hasAuthor,
+    code: `&lt;script type="application/ld+json"&gt;{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "${title}",
+  "author": {
+    "@type": "Person",
+    "name": "Author Name"
+  },
+  "datePublished": "${new Date().toISOString()}",
+  "dateModified": "${new Date().toISOString()}"
+}&lt;/script&gt;`
+  }
+};
+  return {
+    totalInternalLinks: internalLinks,
+    externalLinks,
+    uniquePages,
+    orphanPages,
+    avgLinkDepth: parseFloat(avgDepth),
+    authorityFlow,
+    weakLinking,
+    suggestions,
+    linkDistribution: linkMap,
+    score: Math.max(0, 100 - (orphanPages.length * 20) - (weakLinking ? 30 : 0) - (avgDepth > 4 ? 20 : 0))
+  };
+}
   return {
     totalInternalLinks: internalLinks.length,
     uniquePages: Object.keys(linkMap).length,
@@ -786,6 +867,15 @@ async function analyzeSingleUrl(url) {
     };
 
     return {
+      schemaGenerator,
+aiAutopilot: [
+  !hasFAQ && { task: "Add FAQ Schema", impact: "+15", effort: "15 mins", priority: "CRITICAL" },
+  !hasAuthor && { task: "Add Author Bio", impact: "+8", effort: "10 mins", priority: "HIGH" },
+  !hasEmail && { task: "Add Email Address", impact: "+5", effort: "2 mins", priority: "MEDIUM" },
+  internalLinkData.weakLinking && { task: "Fix Internal Linking", impact: "+12", effort: "20 mins", priority: "HIGH" },
+  !hasLastModified && { task: "Add Last Modified Date", impact: "+6", effort: "5 mins", priority: "MEDIUM" },
+  imagesWithoutAlt > 0 && { task: `Add ALT text to ${imagesWithoutAlt} images`, impact: "+7", effort: "10 mins", priority: "MEDIUM" }
+].filter(Boolean),
       url, title, h1, metaDescription, wordCount, lastModified,
       score: seoScore,
       status: seoStatus,

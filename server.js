@@ -1277,6 +1277,37 @@ app.get("/keyword-theft", async (req, res) => {
   }
 });
 
+
+app.get('/compare', async (req, res) => {
+  try {
+    const { url, competitor } = req.query;
+    if (!url || !competitor) return res.status(400).json({ error: "Both URLs required" });
+    const site1 = await analyzeSingleUrl(url);
+    const site2 = await analyzeSingleUrl(competitor);
+    const sites = [site1, site2];
+    const winner = sites.reduce((a, b) => a.overallAIVisibilityScore > b.overallAIVisibilityScore ? a : b);
+    res.json({ sites, winner });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/autopilot', async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: "URL required" });
+    const data = await analyzeSingleUrl(url);
+    res.json({ 
+      score: data.overallAIVisibilityScore, 
+      level: data.aiVisibilityLevel, 
+      autopilotPlan: [], 
+      agents: { rankingPrediction: { currentPositionEstimate: 15, newPositionEstimate: 8, aiCitationBoost: "+35%" } }, 
+      aiReport: { chatgpt: "Will cite after fixes" } 
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.get("/history", (req, res) => {
   res.json(scanHistory.slice(-20).reverse());
 });

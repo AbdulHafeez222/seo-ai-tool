@@ -124,13 +124,23 @@ function analyzeInternalLinks($, url, h2s) {
   
   $("a").each((i, el) => {
     const href = $(el).attr("href");
-    if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
-    
+    if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+
     try {
-      const fullUrl = href.startsWith('/') ? new URL(href, url).href : href;
+      let fullUrl;
+      if (href === '/') {
+        fullUrl = url;
+      } else if (href.startsWith('/')) {
+        fullUrl = new URL(href, url).href;
+      } else {
+        fullUrl = href;
+      }
+
       const linkHostname = new URL(fullUrl).hostname;
-      
-      if (linkHostname === baseHostname || linkHostname === 'www.' + baseHostname) {
+      const cleanBase = baseHostname.replace('www.', '');
+      const cleanLink = linkHostname.replace('www.', '');
+
+      if (cleanLink === cleanBase) {
         internalLinks++;
         const clean = fullUrl.split('#')[0].split('?')[0];
         linkMap[clean] = (linkMap[clean] || 0) + 1;
@@ -364,9 +374,9 @@ async function analyzeSingleUrl(url) {
     const phone = phoneMatch? phoneMatch[0] : null;
     const hasEmail =!!email;
     const hasPhone =!!phone;
-
-    const allText = bodyText.toLowerCase();
-    const hasPrivacyPolicy = allText.includes("privacy policy") || allText.includes("privacy");
+   const phone = hasPhone? (bodyText.match(/(\+92|0092|03)\d{2}[-\s]?\d{7}/) || [''])[0] : null;  const email = hasEmail? (bodyText.match(/[\w.-]+@[\w.-]+\.\w+/) || [''])[0] : null;
+  const allText = bodyText.toLowerCase();
+  const hasPrivacyPolicy = allText.includes("privacy policy") || allText.includes("privacy");
     const hasAboutPage = allText.includes("about us") || allText.includes("about");
     const hasContactPage = allText.includes("contact us") || allText.includes("contact");
 
@@ -447,7 +457,17 @@ async function analyzeSingleUrl(url) {
     if (hasSchemaMarkup) aeoScore += 15;
     if (h1 && metaDescription) aeoScore += 10;
     const aeoStatus = aeoScore >= 80? "ChatGPT Ready" : aeoScore >= 50? "AI Friendly" : "Needs Work";
-
+const aeoSignals = [];
+if (hasPrivacyPolicy) aeoSignals.push('Privacy Policy');
+if (hasAboutPage) aeoSignals.push('About Page');
+if (hasContactPage) aeoSignals.push('Contact Page');
+if (hasAuthor) aeoSignals.push('Author Bio');
+if (hasPhone) aeoSignals.push('Phone Number');
+if (hasEmail) aeoSignals.push('Email Address');
+if (hasFacebook) aeoSignals.push('Facebook');
+if (hasLinkedIn) aeoSignals.push('LinkedIn');
+if (hasYouTube) aeoSignals.push('YouTube');
+if (hasTwitter) aeoSignals.push('Twitter/X');
     const featuredSnippetChance = Math.min(
       100,
       (hasDirectAnswer? 40 : 0) +

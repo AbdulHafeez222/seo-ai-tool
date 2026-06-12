@@ -469,6 +469,20 @@ async function scan() {
   document.getElementById("result").innerHTML = "";
   ["aiSimulationCard","aeoReadinessCard","fixSuggestionsCard","realCitationCard","competitorCard","gapCard","roadmapCard","keywordTheftCard","briefCard","autopilotCard"].forEach(id => {
     document.getElementById(id).style.display = "none";
+            ${data.schemaGenerator && Object.keys(data.schemaGenerator).length > 0 ? `
+        <h3>📋 Schema Generator - Copy Paste Karo</h3>
+        ${Object.entries(data.schemaGenerator).map(([key, val]) => {
+          const escapedCode = val.code.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const copyCode = val.code.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+          return `
+          <div class="ai-box" style="background: #1e293b; color: #e2e8f0; margin: 10px 0;">
+            <b style="color: #60a5fa;">${val.title}</b>
+            <textarea readonly style="width:100%; height:120px; font-family:monospace; font-size:11px; margin:8px 0; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #334155;">${escapedCode}</textarea>
+            <button onclick="navigator.clipboard.writeText(\`${copyCode}\`); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy Code',2000)" style="background:#10b981;font-size:12px;">Copy Code</button>
+          </div>
+          `;
+        }).join('')}
+        ` : ''}
   });
   
   try {

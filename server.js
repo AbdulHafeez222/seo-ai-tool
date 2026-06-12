@@ -710,7 +710,7 @@ async function analyzeSingleUrl(url) {
     }
 
       const aiRecommendations = [];
-    if (!hasFAQ) aiRecommendations.push({
+       if (!hasFAQ) aiRecommendations.push({
       priority: "CRITICAL",
       action: "Add FAQ Schema",
       impact: "+15% ChatGPT Citation",

@@ -1289,6 +1289,4 @@ app.get("/ai-snippet-generator", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform v4.0 running on port ${PORT}`);
   console.log(`📊 Features: SEO/AEO/AI Visibility | Entity Extraction | Citation Simulator v3 | Internal Link Intelligence | E-E-A-T Advanced`);
-});tion",
-      effort: "15 mins",
-     code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[]}</script>`
+});

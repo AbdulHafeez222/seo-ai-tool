@@ -386,7 +386,10 @@ details summary {
     </div>
     <div id="roadmapSteps"></div>
   </div>
-
+  <div id="schema-section"></div>
+  <div id="autopilot-section"></div>
+  <div id="trust-signals"></div>
+  <div id="result"></div>
   <div id="keywordTheftCard" class="card" style="display:none;">
     <h3>💎 Competitor Keyword Theft</h3>
     <div id="keywordTheftResults"></div>
@@ -474,7 +477,69 @@ async function scan() {
     const data = fixData(rawData); // 🔥 Apply universal fix
     
     document.getElementById("loading").style.display = "none";
-    
+        // Schema Generator Render
+    if (data.schemaGenerator) {
+      const schemaHTML = Object.entries(data.schemaGenerator)
+        .filter(([key, val]) => val && val.recommended)
+        .map(([type, val]) => `
+          <div class="card" style="border-left: 4px solid #ff4757;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <h4>📋 ${type} Schema</h4>
+              <span class="badge badge-red">MISSING</span>
+            </div>
+            <p style="color:#666; font-size:13px;">Add this to your &lt;head&gt; section</p>
+            <textarea readonly style="width:100%; height:100px; font-family:monospace; font-size:11px; margin:8px 0; padding:8px;">${val.code}</textarea>
+            <button onclick="navigator.clipboard.writeText(\`${val.code.replace(/`/g, '\\`')}\`); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy Code',2000)" 
+                    style="background:#2ed573; font-size:12px; padding:6px 12px;">
+              Copy Code
+            </button>
+          </div>
+        `).join('');
+      
+      document.getElementById('schema-section').innerHTML = schemaHTML ? 
+        `<h3>🔧 Schema Generator - Copy & Paste Ready</h3>${schemaHTML}` : '';
+    }
+
+    // AI Autopilot Render
+    if (data.aiAutopilot && data.aiAutopilot.length > 0) {
+      const tasksHTML = data.aiAutopilot.map(task => {
+        const color = task.priority === 'CRITICAL' ? '#dc2626' : task.priority === 'HIGH' ? '#f59e0b' : '#2563eb';
+        return `
+          <div style="display:flex; justify-content:space-between; padding:12px; border-left:4px solid ${color}; background:#f8f9fa; margin:8px 0; border-radius:6px;">
+            <div>
+              <strong>${task.task}</strong>
+              <div style="font-size:12px; color:#666; margin-top:4px;">Effort: ${task.effort}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="color:${color}; font-weight:bold; font-size:16px;">${task.impact}</div>
+              <div style="font-size:11px; background:${color}; color:#fff; padding:2px 8px; border-radius:3px; display:inline-block; margin-top:4px;">${task.priority}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      document.getElementById('autopilot-section').innerHTML = `
+        <div class="card">
+          <h3>🚀 AI Autopilot - Quick Wins</h3>
+          <p style="color:#666; font-size:13px; margin-bottom:12px;">Fix these to boost score instantly</p>
+          ${tasksHTML}
+        </div>
+      `;
+    }
+
+    // Trust Signals Fix
+    if (data.aeoSignals && data.aeoSignals.length > 0) {
+      const signalsHTML = data.aeoSignals.map(s => 
+        `<span class="badge badge-green" style="margin:3px; display:inline-block;">✓ ${s}</span>`
+      ).join('');
+      
+      document.getElementById('trust-signals').innerHTML = `
+        <div class="card">
+          <h3>🛡️ Trust Signals Found: ${data.aeoSignals.length}</h3>
+          <div style="margin-top:10px;">${signalsHTML}</div>
+        </div>
+      `;
+    }
     if (data.error) {
       document.getElementById("result").innerHTML = `<div class="card">❌ ${data.error}</div>`;
       return;
@@ -578,7 +643,9 @@ async function scan() {
 
     const readabilityColor = data.readabilityScore >= 60 ? "#16a34a" : data.readabilityScore >= 30 ? "#f97316" : "#dc2626";
 
-    document.getElementById("result").innerHTML = `
+     document.getElementById("schema-section").innerHTML = "";
+  document.getElementById("autopilot-section").innerHTML = "";
+  document.getElementById("trust-signals").innerHTML = "";
       <div class="card" id="report">
         <h3>🎯 AI Visibility Score - MAIN FEATURE</h3>
         <div class="ai-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">

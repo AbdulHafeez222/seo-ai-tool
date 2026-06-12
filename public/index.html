@@ -1039,7 +1039,7 @@ async function compareCompetitor() {
 
   document.getElementById("loading").style.display = "block";
   try { 
-    const res = await fetch(`/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
+    const res = await fetch(`/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`)
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
 

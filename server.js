@@ -763,10 +763,10 @@ app.get("/compare", async (req, res) => {
   try {
     const { url, competitor } = req.query;
     if (!url ||!competitor) return res.status(400).json({ error: "Both URLs required" });
-    const [site1, site2] = await Promise.all([
-      scanWebsite(url.startsWith('http')? url : 'https://' + url),
-      scanWebsite(competitor.startsWith('http')? competitor : 'https://' + competitor)
-    ]);
+  const [site1, site2] = await Promise.all([
+  analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url),
+  analyzeSingleUrl(competitor.startsWith('http')? competitor : 'https://' + competitor)
+]);
     const sites = [
       { brand: getBrandName(site1.url), aiVisibilityScore: site1.overallAIVisibilityScore, seoScore: site1.score, aeoScore: site1.aeoScore },
       { brand: getBrandName(site2.url), aiVisibilityScore: site2.overallAIVisibilityScore, seoScore: site2.score, aeoScore: site2.aeoScore }
@@ -781,7 +781,7 @@ app.get("/roadmap", async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: "URL required" });
-    const data = await scanWebsite(url);
+    const data = await analyzeSingleUrl(url);
     const roadmap = data.aiAutopilot.map((task, i) => ({
       step: i + 1, task: task.task, priority: task.priority,
       why: task.priority === 'CRITICAL'? 'Blocks AI citations' : 'Improves trust',
@@ -803,9 +803,9 @@ app.get("/gap-analysis", async (req, res) => {
     const { url, competitor } = req.query;
     if (!url ||!competitor) return res.status(400).json({ error: "Both URLs required" });
     const [userData, compData] = await Promise.all([
-      scanWebsite(url.startsWith('http')? url : 'https://' + url),
-      scanWebsite(competitor.startsWith('http')? competitor : 'https://' + competitor)
-    ]);
+  analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url),
+  analyzeSingleUrl(competitor.startsWith('http')? competitor : 'https://' + competitor)
+]);
     const checks = [
       { key: 'hasFAQ', label: 'FAQ Schema' }, { key: 'hasHowTo', label: 'HowTo Schema' },
       { key: 'hasAuthor', label: 'Author Bio' }, { key: 'hasDirectAnswer', label: 'Direct Answer' },
@@ -826,10 +826,10 @@ app.get("/keyword-theft", async (req, res) => {
   try {
     const { url, competitor } = req.query;
     if (!url ||!competitor) return res.status(400).json({ error: "Both URLs required" });
-    const [userData, compData] = await Promise.all([
-      scanWebsite(url.startsWith('http')? url : 'https://' + url),
-      scanWebsite(competitor.startsWith('http')? competitor : 'https://' + competitor)
-    ]);
+   const [userData, compData] = await Promise.all([
+  analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url),
+  analyzeSingleUrl(competitor.startsWith('http')? competitor : 'https://' + competitor)
+]);
     const yourKeywords = new Set(userData.keywords || []);
     const compKeywords = new Set(compData.keywords || []);
     const missingKeywords = [...compKeywords].filter(k =>!yourKeywords.has(k));

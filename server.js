@@ -865,6 +865,20 @@ async function analyzeSingleUrl(url) {
       afterSchema: Math.min(100, overallAIVisibilityScore + (hasSchemaMarkup? 0 : 8)),
       afterAll: Math.min(100, overallAIVisibilityScore + recommendationScore)
     };
+function getKeywordDifficulty(keyword) {
+  const len = keyword.split(' ').length;
+  if (len === 1) return 85;
+  if (len === 2) return 65;
+  if (len === 3) return 45;
+  return 25;
+}
+    const schemaGenerator = {
+  FAQPage: schemas.FAQPage.present ? null : {
+    recommended: autoFAQ.length > 0,
+    code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[${autoFAQ.map(f => `{"@type":"Question","name":"${f.q}","acceptedAnswer":{"@type":"Answer","text":"${f.a}"}}`).join(',')}]}</script>`
+  }
+};
+
 
     return {
       schemaGenerator,

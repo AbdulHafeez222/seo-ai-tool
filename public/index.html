@@ -467,17 +467,16 @@ async function scan() {
   
   document.getElementById("loading").style.display = "block";
   document.getElementById("result").innerHTML = "";
-  ["aiSimulationCard","aeoReadinessCard","fixSuggestionsCard","realCitationCard","competitorCard","gapCard","roadmapCard","keywordTheftCard","briefCard"].forEach(id => {
+  ["aiSimulationCard","aeoReadinessCard","fixSuggestionsCard","realCitationCard","competitorCard","gapCard","roadmapCard","keywordTheftCard","briefCard","autopilotCard"].forEach(id => {
     document.getElementById(id).style.display = "none";
   });
   
   try {
-    const res = await fetch(`/scan?url=${encodeURIComponent(url)}`);
+    const res = await fetch(`${API_BASE}/scan?url=${encodeURIComponent(url)}`);
     const rawData = await res.json();
-    const data = fixData(rawData); // 🔥 Apply universal fix
+    const data = fixData(rawData);
     
     document.getElementById("loading").style.display = "none";
-        // Schema Generator Render
     if (data.schemaGenerator) {
       const schemaHTML = Object.entries(data.schemaGenerator)
         .filter(([key, val]) => val && val.recommended)
@@ -500,7 +499,6 @@ async function scan() {
         `<h3>🔧 Schema Generator - Copy & Paste Ready</h3>${schemaHTML}` : '';
     }
 
-    // AI Autopilot Render
     if (data.aiAutopilot && data.aiAutopilot.length > 0) {
       const tasksHTML = data.aiAutopilot.map(task => {
         const color = task.priority === 'CRITICAL' ? '#dc2626' : task.priority === 'HIGH' ? '#f59e0b' : '#2563eb';
@@ -527,7 +525,6 @@ async function scan() {
       `;
     }
 
-    // Trust Signals Fix
     if (data.aeoSignals && data.aeoSignals.length > 0) {
       const signalsHTML = data.aeoSignals.map(s => 
         `<span class="badge badge-green" style="margin:3px; display:inline-block;">✓ ${s}</span>`
@@ -642,11 +639,8 @@ async function scan() {
     }
 
     const readabilityColor = data.readabilityScore >= 60 ? "#16a34a" : data.readabilityScore >= 30 ? "#f97316" : "#dc2626";
-document.getElementById("result").innerHTML = `
-<div class="card" id="report">
-   ...
-</div>
-`;
+    document.getElementById("result").innerHTML = `
+      <div class="card" id="report">
         <h3>🎯 AI Visibility Score - MAIN FEATURE</h3>
         <div class="ai-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
           <div style="font-size: 48px; font-weight: 700; text-align: center; margin: 10px 0;">
@@ -706,7 +700,7 @@ document.getElementById("result").innerHTML = `
 
         <h3>🚀 AI Citation Probability</h3>
         <p><b>ChatGPT Citation Chance:</b> ${data.citationChatGPT}% <span class="badge badge-${data.citationChatGPT >= 80? 'green' : data.citationChatGPT >= 50? 'orange' : 'red'}">${data.citationChatGPT >= 80? 'High' : data.citationChatGPT >= 50? 'Medium' : 'Low'}</span></p>
-        <p><b>Gemini Citation Chance:</b> ${data.citationGemini}% <span class="badge badge-${data.citationGemini >= 80? 'green' : data.citationGemini >= 50? 'orange' : 'red'}">${data.citationGemini >= 80? 'High' : data.citationGemini >= 50? 'Medium' : 'Low'}</span></p>
+              <p><b>Gemini Citation Chance:</b> ${data.citationGemini}% <span class="badge badge-${data.citationGemini >= 80? 'green' : data.citationGemini >= 50? 'orange' : 'red'}">${data.citationGemini >= 80? 'High' : data.citationGemini >= 50? 'Medium' : 'Low'}</span></p>
         <p><b>Perplexity Citation Chance:</b> ${data.citationPerplexity}% <span class="badge badge-${data.citationPerplexity >= 80? 'green' : data.citationPerplexity >= 50? 'orange' : 'red'}">${data.citationPerplexity >= 80? 'High' : data.citationPerplexity >= 50? 'Medium' : 'Low'}</span></p>
 
         <h3>🤖 AI Answer Extraction Test</h3>
@@ -745,7 +739,7 @@ document.getElementById("result").innerHTML = `
           ${data.topicAuthority?.missing?.map(t => `❌ ${t}`).join('<br>') || 'None'}
         </div>
 
-               <h3>💰 Business Value Estimator</h3>
+        <h3>💰 Business Value Estimator</h3>
         <div class="ai-box">
           <p><b>Traffic Increase:</b> ${data.businessValue?.trafficIncrease || 'N/A'}</p>
           <p><b>Leads Increase:</b> ${data.businessValue?.leadsIncrease || 'N/A'}</p>
@@ -833,166 +827,10 @@ document.getElementById("result").innerHTML = `
     document.getElementById("result").innerHTML = `<div class="card">❌ Server Error: ${err.message}</div>`;
   }
 }
-async function citationSimulation() {
-  const url = document.getElementById("url").value;
-  const query = document.getElementById("keyword").value || "general topic";
-  if (!url) return alert("Enter URL first");
 
-  document.getElementById("loading").style.display = "block";
-  try {
-    const res = await fetch(`/citation-simulation?url=${encodeURIComponent(url)}&query=${encodeURIComponent(query)}`);
-    const data = await res.json();
-    document.getElementById("loading").style.display = "none";
-
-    document.getElementById("result").innerHTML = `
-      <div class="card">
-        <h3>📊 Real Citation Simulation</h3>
-        <div class="grid-3">
-          <div class="metric-box">
-            <div class="metric-value">${data.chatGPTCitationChance}%</div>
-            <div class="metric-label">ChatGPT Will Cite</div>
-          </div>
-          <div class="metric-box">
-            <div class="metric-value">${data.geminiCitationChance}%</div>
-            <div class="metric-label">Gemini Will Cite</div>
-          </div>
-          <div class="metric-box">
-            <div class="metric-value">${data.perplexityCitationChance}%</div>
-            <div class="metric-label">Perplexity Will Cite</div>
-          </div>
-        </div>
-        <p style="text-align:center;margin:15px 0;"><b>Estimated:</b> ${data.estimatedCitationsPer1000} citations per 1000 AI queries</p>
-        <h4>Why:</h4>
-        <ul>${data.reasoning.map(r => `<li>${r}</li>`).join('')}</ul>
-        <div class="ai-box" style="margin-top:15px;">
-          <b>💡 Recommendation:</b> ${data.recommendation}
-        </div>
-      </div>
-    `;
-  } catch (err) {
-    document.getElementById("loading").style.display = "none";
-    alert("Error: " + err.message);
-  }
-}
-
-async function intentCluster() {
-  const keyword = document.getElementById("keyword").value;
-  if (!keyword) return alert("Enter a keyword first");
-
-  document.getElementById("loading").style.display = "block";
-  try {
-    const res = await fetch(`/intent-cluster?keyword=${encodeURIComponent(keyword)}`);
-    const data = await res.json();
-    document.getElementById("loading").style.display = "none";
-
-    document.getElementById("result").innerHTML = `
-      <div class="card">
-        <h3>🎯 Keyword Intent Clustering</h3>
-        <p><b>Primary Intent:</b> <span class="badge badge-purple">${data.primaryIntent}</span></p>
-        <p><b>Recommended Content:</b> ${data.recommendedContent}</p>
-
-        <h4>Intent Clusters:</h4>
-        ${Object.entries(data.clusters).map(([intent, queries]) =>
-          queries.length? `
-            <div style="margin:10px 0;">
-              <b>${intent}:</b><br>
-              ${queries.map(q => `<span class="badge badge-green" style="margin:2px;">${q}</span>`).join('')}
-            </div>
-          ` : ''
-        ).join('')}
-
-        <h4>AI-Generated Answer Preview:</h4>
-        <div class="ai-box" style="white-space: pre-wrap;">${data.aiGeneratedAnswer}</div>
-      </div>
-    `;
-  } catch (err) {
-    document.getElementById("loading").style.display = "none";
-    alert("Error: " + err.message);
-  }
-}
-
-async function competitorGapAI() {
-  const url = document.getElementById("url").value;
-  const comp = document.getElementById("competitorUrl").value;
-  if (!url ||!comp) return alert("Enter both URLs");
-
-  document.getElementById("loading").style.display = "block";
-  try {
-    const res = await fetch(`/competitor-gap-ai?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
-    const data = await res.json();
-    document.getElementById("loading").style.display = "none";
-
-    document.getElementById("result").innerHTML = `
-      <div class="card">
-        <h3>🔍 Competitor Gap AI Scoring</h3>
-        <div style="text-align:center;margin:15px 0;">
-          <div style="font-size:32px;font-weight:bold;color:#dc2626;">${data.totalGaps} Gaps</div>
-          <div>${data.criticalGaps} Critical | Est. ${data.estimatedCitationLoss} Citation Loss</div>
-        </div>
-
-        <h4>🚨 Top Missing FAQs (Steal These):</h4>
-        ${data.missingFAQs.slice(0,5).map(faq => `
-          <div class="ai-box" style="margin:8px 0;border-left:4px solid #dc2626;">
-            <b>${faq.question}</b><br>
-            <small>Importance: ${faq.importance}/100 | ${faq.impact}</small>
-          </div>
-        `).join('')}
-
-        <h4>📋 Schema Gaps:</h4>
-        ${data.schemaGaps.map(s => `<p>• Missing <b>${s.schema}</b> → ${s.impact}</p>`).join('')}
-
-        <div class="ai-box" style="background:#fef3c7;margin-top:15px;">
-          <b>🎯 Priority Fix:</b> ${data.priorityFix}
-        </div>
-
-        <p style="margin-top:10px;"><b>Competitor Status:</b> ${data.competitorAdvantage}</p>
-      </div>
-    `;
-  } catch (err) {
-    document.getElementById("loading").style.display = "none";
-    alert("Error: " + err.message);
-  }
-}
-
-async function predictAIAnswer() {
-  const query = document.getElementById("keyword").value;
-  const url = document.getElementById("url").value;
-  if (!query) return alert("Enter a query/keyword first");
-
-  document.getElementById("loading").style.display = "block";
-  try {
-    const res = await fetch(`/predict-ai-answer?query=${encodeURIComponent(query)}&url=${encodeURIComponent(url)}`);
-    const data = await res.json();
-    document.getElementById("loading").style.display = "none";
-
-    document.getElementById("result").innerHTML = `
-      <div class="card">
-        <h3>🤖 ChatGPT-Style Answer Prediction</h3>
-        <p><b>Query:</b> "${data.query}"</p>
-        <p><b>Confidence:</b> ${data.confidence}% <span class="badge badge-${data.confidence > 70? 'green' : data.confidence > 50? 'orange' : 'red'}">${data.confidence > 70? 'High' : data.confidence > 50? 'Medium' : 'Low'}</span></p>
-
-        <h4>Predicted AI Answer:</h4>
-        <div class="ai-box" style="white-space: pre-wrap;background:#e0e7ff;border-left:4px solid #6366f1;">
-          ${data.predictedAnswer}
-        </div>
-
-        <p style="margin-top:15px;"><b>Format:</b> ${data.format} | <b>Will Cite You:</b> ${data.willCiteYou}</p>
-
-        <h4>Sources AI Will Use:</h4>
-        <ul>${data.sourcesUsed.map(s => `<li>${s}</li>`).join('')}</ul>
-
-        <h4>🔧 Optimization Tips:</h4>
-        <ul>${data.optimization.map(o => `<li>${o}</li>`).join('')}</ul>
-      </div>
-    `;
-  } catch (err) {
-    document.getElementById("loading").style.display = "none";
-    alert("Error: " + err.message);
-  }
-}
 async function loadHistory() {
   try {
-    const res = await fetch(`/history`);
+    const res = await fetch(`${API_BASE}/history`);
     const data = await res.json();
     document.getElementById("result").innerHTML = `
       <h3>📊 Scan History</h3>
@@ -1039,7 +877,7 @@ async function compareCompetitor() {
 
   document.getElementById("loading").style.display = "block";
   try { 
-    const res = await fetch(`/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`)
+    const res = await fetch(`${API_BASE}/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
 
@@ -1069,7 +907,7 @@ async function generateRoadmap() {
   if (!url) return alert("Enter URL first");
   document.getElementById("loading").style.display = "block";
   try {
-    const res = await fetch(`/roadmap?url=${encodeURIComponent(url)}`);
+    const res = await fetch(`${API_BASE}/roadmap?url=${encodeURIComponent(url)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
     document.getElementById("roadmapCard").style.display = "block";
@@ -1094,7 +932,7 @@ async function gapAnalysis() {
   if (!url || !comp) return alert("Enter both URLs");
   document.getElementById("loading").style.display = "block";
   try {
-    const res = await fetch(`/gap-analysis?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
+    const res = await fetch(`${API_BASE}/gap-analysis?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
     document.getElementById("gapCard").style.display = "block";
@@ -1113,7 +951,7 @@ async function keywordTheft() {
   if (!url || !comp) return alert("Enter both URLs");
   document.getElementById("loading").style.display = "block";
   try {
-    const res = await fetch(`/keyword-theft?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
+    const res = await fetch(`${API_BASE}/keyword-theft?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
     document.getElementById("keywordTheftCard").style.display = "block";
@@ -1134,7 +972,7 @@ async function contentBrief() {
   if (!keyword) return alert("Enter a keyword");
   document.getElementById("loading").style.display = "block";
   try {
-   const res = await fetch(`/content-brief?keyword=${encodeURIComponent(keyword)}`);
+   const res = await fetch(`${API_BASE}/content-brief?keyword=${encodeURIComponent(keyword)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
     document.getElementById("briefCard").style.display = "block";
@@ -1152,7 +990,7 @@ async function runAutopilot() {
   document.getElementById("loading").style.display = "block";
   document.getElementById("autopilotCard").style.display = "none";
   try {
-    const res = await fetch(`/autopilot?url=${encodeURIComponent(url)}&keyword=${encodeURIComponent(keyword)}`);
+    const res = await fetch(`${API_BASE}/autopilot?url=${encodeURIComponent(url)}&keyword=${encodeURIComponent(keyword)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
     document.getElementById("autopilotCard").style.display = "block";

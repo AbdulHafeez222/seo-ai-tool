@@ -520,9 +520,7 @@ async function scan() {
     alert("Error: " + err.message);
   }
 }
-      document.getElementById('schema-section').innerHTML = schemaHTML ? 
-        `<h3>🔧 Schema Generator - Copy & Paste Ready</h3>${schemaHTML}` : '';
-    }
+
 
     if (data.aiAutopilot && data.aiAutopilot.length > 0) {
       const tasksHTML = data.aiAutopilot.map(task => {

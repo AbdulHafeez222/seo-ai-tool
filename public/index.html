@@ -443,9 +443,9 @@ async function scan() {
   try {
     const res = await fetch(`${API_BASE}/scan?url=${encodeURIComponent(url)}`);
     const rawData = await res.json();
-    const data = fixData(rawData);
-    document.getElementById("loading").style.display = "none";
-
+const data = fixData(rawData);
+lastScanData = data; 
+document.getElementById("loading").style.display = "none";
     if (data.error) {
       document.getElementById("result").innerHTML = `<div class="card">❌ ${data.error}</div>`;
       return;
@@ -766,16 +766,19 @@ function toggleDarkMode() {
 }
 
 async function compareCompetitor() {
+  if (!lastScanData) return alert("Pehle Scan Website karo!");
   const url = document.getElementById("url").value;
   const comp = document.getElementById("competitorUrl").value;
-  if (!url || !comp) return alert("Enter both URLs");
-
+  if (!comp) return alert("Competitor URL dalo");
+  
   document.getElementById("loading").style.display = "block";
   try { 
     const res = await fetch(`${API_BASE}/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
-
+    
+    if (data.error) return alert(data.error);
+    
     document.getElementById("competitorCard").style.display = "block";
     if (comparisonChart) comparisonChart.destroy();
     comparisonChart = new Chart(document.getElementById("comparisonChart"), {
@@ -793,22 +796,26 @@ async function compareCompetitor() {
     `;
   } catch (err) {
     document.getElementById("loading").style.display = "none";
-    alert("Error: " + err.message);
+    alert("API Error: " + err.message);
   }
 }
 
 async function generateRoadmap() {
-  const url = document.getElementById("url").value;
-  if (!url) return alert("Enter URL first");
+  if (!lastScanData) return alert("Pehle Scan Website karo!");
+  
   document.getElementById("loading").style.display = "block";
   try {
+    const url = document.getElementById("url").value;
     const res = await fetch(`${API_BASE}/roadmap?url=${encodeURIComponent(url)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
+    
+    if (data.error) return alert(data.error);
+    
     document.getElementById("roadmapCard").style.display = "block";
     document.getElementById("currentScore").textContent = data.currentScore;
     document.getElementById("potentialScore").textContent = data.potentialScore;
-    document.getElementById("roadmapSteps").innerHTML = data.roadmap.map(r => `
+    document.getElementById("roadmapSteps").innerHTML = (data.roadmap || []).map(r => `
       <div class="ai-box" style="border-left: 4px solid ${r.priority === 'CRITICAL'? '#dc2626' : '#f59e0b'};">
         <b>Step ${r.step}: ${r.task}</b><span class="badge badge-${r.priority === 'CRITICAL'? 'red' : 'orange'}">${r.priority}</span>
         <p style="margin: 8px 0 0; font-size: 13px;">${r.why}</p>
@@ -817,79 +824,119 @@ async function generateRoadmap() {
       </div>`).join('') + `<p style="text-align: center; margin-top: 15px; font-weight: 600;">⏱️ Total Time: ${data.estimatedTime}</p>`;
   } catch (err) {
     document.getElementById("loading").style.display = "none";
-    alert("Error: " + err.message);
+    alert("API Error: " + err.message);
   }
 }
 
 async function gapAnalysis() {
+  if (!lastScanData) return alert("Pehle Scan Website karo!");
   const url = document.getElementById("url").value;
   const comp = document.getElementById("competitorUrl").value;
-  if (!url || !comp) return alert("Enter both URLs");
+  if (!comp) return alert("Competitor URL dalo");
+  
   document.getElementById("loading").style.display = "block";
   try {
     const res = await fetch(`${API_BASE}/gap-analysis?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
+    
+    if (data.error) return alert(data.error);
+    
     document.getElementById("gapCard").style.display = "block";
-    document.getElementById("competitorHas").innerHTML = data.competitor.has.map(h => `✓ ${h}`).join('<br>');
-    document.getElementById("youMissing").innerHTML = data.you.missing.map(m => `✗ ${m}`).join('<br>') || 'None!';
-    document.getElementById("gapImpact").innerHTML = `<div class="badge badge-red">${data.you.missing.length} Gaps Found</div>`;
+    document.getElementById("competitorHas").innerHTML = (data.competitor?.has || []).map(h => `✓ ${h}`).join('<br>');
+    document.getElementById("youMissing").innerHTML = (data.you?.missing || []).map(m => `✗ ${m}`).join('<br>') || 'None!';
+    document.getElementById("gapImpact").innerHTML = `<div class="badge badge-red">${data.you?.missing?.length || 0} Gaps Found</div>`;
   } catch (err) {
     document.getElementById("loading").style.display = "none";
-    alert("Error: " + err.message);
+    alert("API Error: " + err.message);
   }
 }
 
 async function keywordTheft() {
+  if (!lastScanData) return alert("Pehle Scan Website karo!");
   const url = document.getElementById("url").value;
   const comp = document.getElementById("competitorUrl").value;
-  if (!url || !comp) return alert("Enter both URLs");
+  if (!comp) return alert("Competitor URL dalo");
+  
   document.getElementById("loading").style.display = "block";
   try {
     const res = await fetch(`${API_BASE}/keyword-theft?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
+    
+    if (data.error) return alert(data.error);
+    
     document.getElementById("keywordTheftCard").style.display = "block";
     document.getElementById("keywordTheftResults").innerHTML = `
       <div class="grid-3">
-        <div><h4>🔥 Top Keywords:</h4>${data.topCompetitorKeywords.map(k => `<span class="badge badge-red" style="margin: 2px;">${k}</span>`).join('')}</div>
-        <div><h4>💎 Missing:</h4>${data.missingKeywords.map(k => `<span class="badge badge-orange" style="margin: 2px;">${k}</span>`).join('') || 'None!'}</div>
-        <div><h4>✅ Shared:</h4>${data.sharedKeywords.map(k => `<span class="badge badge-green" style="margin: 2px;">${k}</span>`).join('')}</div>
+        <div><h4>🔥 Top Keywords:</h4>${(data.topCompetitorKeywords || []).map(k => `<span class="badge badge-red" style="margin: 2px;">${k}</span>`).join('')}</div>
+        <div><h4>💎 Missing:</h4>${(data.missingKeywords || []).map(k => `<span class="badge badge-orange" style="margin: 2px;">${k}</span>`).join('') || 'None!'}</div>
+        <div><h4>✅ Shared:</h4>${(data.sharedKeywords || []).map(k => `<span class="badge badge-green" style="margin: 2px;">${k}</span>`).join('')}</div>
       </div><p style="margin-top: 15px; text-align: center; font-weight: 600;">${data.opportunity}</p>`;
   } catch (err) {
     document.getElementById("loading").style.display = "none";
-    alert("Error: " + err.message);
+    alert("API Error: " + err.message);
   }
 }
 
 async function contentBrief() {
   const keyword = document.getElementById("keyword").value;
-  if (!keyword) return alert("Enter a keyword");
+  if (!keyword) return alert("Keyword dalo");
+  
   document.getElementById("loading").style.display = "block";
   try {
    const res = await fetch(`${API_BASE}/content-brief?keyword=${encodeURIComponent(keyword)}`);
     const data = await res.json();
     document.getElementById("loading").style.display = "none";
+    
+    if (data.error) return alert(data.error);
+    
     document.getElementById("briefCard").style.display = "block";
-    document.getElementById("briefResults").innerHTML = `<h4>H1: ${data.h1}</h4><h4>H2s:</h4><ul>${data.h2s.map(h => `<li>${h}</li>`).join('')}</ul><h4>FAQs:</h4>${data.faqs.map(f => `<p><b>Q: ${f.q}</b><br>A: ${f.a}</p>`).join('')}`;
+    document.getElementById("briefResults").innerHTML = `<h4>H1: ${data.h1}</h4><h4>H2s:</h4><ul>${(data.h2s || []).map(h => `<li>${h}</li>`).join('')}</ul><h4>FAQs:</h4>${(data.faqs || []).map(f => `<p><b>Q: ${f.q}</b><br>A: ${f.a}</p>`).join('')}`;
   } catch (err) {
     document.getElementById("loading").style.display = "none";
-    alert("Error: " + err.message);
+    alert("API Error: " + err.message);
   }
 }
 
 async function runAutopilot() {
-  const url = document.getElementById("url").value;
-  const keyword = document.getElementById("keyword").value;
-  if (!url) return alert("Enter URL first");
+  if (!lastScanData) return alert("Pehle Scan Website karo!");
+  
   document.getElementById("loading").style.display = "block";
   document.getElementById("autopilotCard").style.display = "none";
   try {
-    const res = await fetch(`${API_BASE}/autopilot?url=${encodeURIComponent(url)}&keyword=${encodeURIComponent(keyword)}`);
-    const data = await res.json();
+    const data = lastScanData;
     document.getElementById("loading").style.display = "none";
     document.getElementById("autopilotCard").style.display = "block";
-    document.getElementById("autopilotResults").innerHTML = `<div style="text-align:center;margin:20px 0;"><div style="font-size:48px;font-weight:bold;color:#10b981;">${data.score}/100</div><div style="font-size:18px;">${data.level}</div></div>`;
+    
+    if (data.aiAutopilot && data.aiAutopilot.length > 0) {
+      const tasksHTML = data.aiAutopilot.map(task => {
+        const color = task.priority === 'CRITICAL' ? '#dc2626' : task.priority === 'HIGH' ? '#f59e0b' : '#2563eb';
+        return `
+          <div style="display:flex; justify-content:space-between; padding:12px; border-left:4px solid ${color}; background:#f8f9fa; margin:8px 0; border-radius:6px;">
+            <div>
+              <strong>${task.task}</strong>
+              <div style="font-size:12px; color:#666; margin-top:4px;">Effort: ${task.effort}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="color:${color}; font-weight:bold; font-size:16px;">${task.impact}</div>
+              <div style="font-size:11px; background:${color}; color:#fff; padding:2px 8px; border-radius:3px; display:inline-block; margin-top:4px;">${task.priority}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      document.getElementById('autopilotResults').innerHTML = `
+        <div style="text-align:center;margin:20px 0;">
+          <div style="font-size:48px;font-weight:bold;color:#10b981;">${data.score}/100</div>
+          <div style="font-size:18px;">${data.aiVisibilityLevel || 'Good'}</div>
+        </div>
+        <h3>🚀 AI Autopilot - Quick Wins</h3>
+        ${tasksHTML}
+      `;
+    } else {
+      document.getElementById('autopilotResults').innerHTML = `<div class="card">No autopilot tasks found. Score already high!</div>`;
+    }
   } catch (err) {
     document.getElementById("loading").style.display = "none";
     alert("Error: " + err.message);

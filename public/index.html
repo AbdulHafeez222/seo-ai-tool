@@ -642,11 +642,11 @@ async function scan() {
     }
 
     const readabilityColor = data.readabilityScore >= 60 ? "#16a34a" : data.readabilityScore >= 30 ? "#f97316" : "#dc2626";
-
-     document.getElementById("schema-section").innerHTML = "";
-  document.getElementById("autopilot-section").innerHTML = "";
-  document.getElementById("trust-signals").innerHTML = "";
-      <div class="card" id="report">
+document.getElementById("result").innerHTML = `
+<div class="card" id="report">
+   ...
+</div>
+`;
         <h3>🎯 AI Visibility Score - MAIN FEATURE</h3>
         <div class="ai-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
           <div style="font-size: 48px; font-weight: 700; text-align: center; margin: 10px 0;">

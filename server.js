@@ -146,7 +146,7 @@ async function analyzeSingleUrl(url) {
         const raw = $(el).html();
         if (!raw) return;
         const json = JSON.parse(raw);
-        const items = Array.isArray(json)? json : ;
+        const items = Array.isArray(json)? json : [json];
 
         items.forEach(item => {
           if (item['@graph'] && Array.isArray(item['@graph'])) {

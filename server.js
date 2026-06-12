@@ -79,7 +79,7 @@ function detectAllSchemas($, html) {
       const raw = $(el).html();
       if (!raw) return;
       const json = JSON.parse(raw);
-     const items = Array.isArray(json)? json : [];
+    const items = Array.isArray(json)? json : [];
       const processItem = (item) => {
         if (item['@graph'] && Array.isArray(item['@graph'])) {
           item['@graph'].forEach(processItem);
@@ -157,66 +157,7 @@ function analyzeInternalLinks($, url, h2s) {
       suggestions.push(`Add internal link to section: ${h2}`);
     });
   }
-const schemaGenerator = {
-  FAQPage: schemas.FAQPage.present ? null : {
-    recommended: faqQuestions.length > 0,
-    code: `&lt;script type="application/ld+json"&gt;{
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [${autoFAQ.map(f => `{
-    "@type": "Question",
-    "name": "${f.q}",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "${f.a}"
-    }
-  }`).join(',')}]
-}&lt;/script&gt;`
-  },
-  HowTo: {
-    recommended: bodyText.includes('step') || bodyText.includes('how to'),
-    code: `&lt;script type="application/ld+json"&gt;{
-  "@context": "https://schema.org",
-  "@type": "HowTo",
-  "name": "${h1}",
-  "step": [${h2s.slice(0,5).map((h, i) => `{
-    "@type": "HowToStep",
-    "position": ${i+1},
-    "name": "${h}",
-    "text": "Follow this step"
-  }`).join(',')}]
-}&lt;/script&gt;`
-  },
-  LocalBusiness: {
-    recommended: !schemas.LocalBusiness.present && (hasPhone || hasContactPage),
-    code: `&lt;script type="application/ld+json"&gt;{
-  "@context": "https://schema.org",
-  "@type": "LocalBusiness",
-  "name": "${getBrandName(url)}",
-  "url": "${url}",
-  ${hasPhone ? `"telephone": "${phone}",` : ''}
-  ${hasEmail ? `"email": "${email}",` : ''}
-  "address": {
-    "@type": "PostalAddress",
-    "addressCountry": "PK"
-  }
-}&lt;/script&gt;`
-  },
-  Article: {
-    recommended: !schemas.Article.present && hasAuthor,
-    code: `&lt;script type="application/ld+json"&gt;{
-  "@context": "https://schema.org",
-  "@type": "Article",
-  "headline": "${title}",
-  "author": {
-    "@type": "Person",
-    "name": "Author Name"
-  },
-  "datePublished": "${new Date().toISOString()}",
-  "dateModified": "${new Date().toISOString()}"
-}&lt;/script&gt;`
-  }
-};
+
   return {
     totalInternalLinks: internalLinks,
     externalLinks,
@@ -228,18 +169,6 @@ const schemaGenerator = {
     suggestions,
     linkDistribution: linkMap,
     score: Math.max(0, 100 - (orphanPages.length * 20) - (weakLinking ? 30 : 0) - (avgDepth > 4 ? 20 : 0))
-  };
-}
-  return {
-    totalInternalLinks: internalLinks.length,
-    uniquePages: Object.keys(linkMap).length,
-    orphanPages,
-    avgLinkDepth: parseFloat(avgDepth),
-    authorityFlow,
-    weakLinking,
-    suggestions,
-    linkDistribution: linkMap,
-    score: Math.max(0, 100 - (orphanPages.length * 20) - (weakLinking? 30 : 0) - (avgDepth > 4? 20 : 0))
   };
 }
 

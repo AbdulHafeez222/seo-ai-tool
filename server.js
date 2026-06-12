@@ -710,12 +710,12 @@ async function analyzeSingleUrl(url) {
     }
 
       const aiRecommendations = [];
-       if (!hasFAQ) aiRecommendations.push({
+           if (!hasFAQ) aiRecommendations.push({
       priority: "CRITICAL",
       action: "Add FAQ Schema",
       impact: "+15% ChatGPT Citation",
       effort: "15 mins",
-      code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is ${mainTopic}?","acceptedAnswer":{"@type":"Answer","text":"${metaDescription}"}}]}</script>`
+      code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[]}</script>`
     });
 
     if (!hasAuthor) aiRecommendations.push({

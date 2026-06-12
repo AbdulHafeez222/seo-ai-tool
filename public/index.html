@@ -278,9 +278,6 @@ details summary {
 <body>
 <div class="box">
   <h2>🚀 AI Visibility Intelligence Platform</h2>
-  <div style="background:#fef3c7;padding:10px;border-radius:8px;margin:10px 0;font-size:13px;">
-    
-  </div>
   <button onclick="toggleDarkMode()">🌙 Dark Mode</button>
   <input id="url" placeholder="Enter website URL" value="hafeezdigitalstudio.com">
   <br>
@@ -348,7 +345,6 @@ details summary {
         <div class="metric-value" id="realPerplexity">0%</div>
         <div class="metric-label">Perplexity</div>
       </div>
-    </div>
     <div id="citationReasonsList" style="margin-top: 15px; font-size: 13px; padding: 10px; background: #f0f0f0; border-radius: 5px;"></div>
   </div>
 
@@ -400,9 +396,9 @@ details summary {
     <div id="briefResults"></div>
   </div>
   <div id="autopilotCard" class="card" style="display:none;">
-  <h3>🚀 AI SEO AUTOPILOT v5</h3>
-  <div id="autopilotResults"></div>
-</div>
+    <h3>🚀 AI SEO AUTOPILOT v5</h3>
+    <div id="autopilotResults"></div>
+  </div>
   <div id="result"></div>
 </div>
 
@@ -410,44 +406,17 @@ details summary {
 const API_BASE = "https://seo-ai-tool-s47q.onrender.com";
 let seoChart, aeoChart, comparisonChart;
 
-// 🔥 UNIVERSAL FIX: Safe data mapper - yahi sabse important hai
 const fixData = (data) => ({
   ...data,
-  // Fix 1: Overall AI Visibility Score - 3 names check karo
-  overallAIVisibilityScore: 
-    data.overallAIVisibilityScore ?? 
-    data.overall ?? 
-    data.aiVisibilityScore ?? 
-    0,
-  
-  // Fix 2: Answer Quality - 2 names check karo  
-  answerQuality: 
-    data.answerQuality ?? 
-    data.answerQualityScore ?? 
-    50,
-  
-  // Fix 3: Mobile/Desktop scores with fallback
-  mobileScore: 
-    data.mobileScore ?? 
-    (data.mobileFriendly ? data.score : Math.max(0, (data.score || 0) - 20)) ?? 
-    0,
-  
-  desktopScore: 
-    data.desktopScore ?? 
-    data.score ?? 
-    0,
-
-  // SERP Preview safety
+  overallAIVisibilityScore: data.overallAIVisibilityScore ?? data.overall ?? data.aiVisibilityScore ?? 0,
+  answerQuality: data.answerQuality ?? data.answerQualityScore ?? 50,
+  mobileScore: data.mobileScore ?? (data.mobileFriendly ? data.score : Math.max(0, (data.score || 0) - 20)) ?? 0,
+  desktopScore: data.desktopScore ?? data.score ?? 0,
   serpPreview: {
     title: data.serpPreview?.title || data.title || "No title",
-    displayUrl: data.serpPreview?.displayUrl || 
-      (data.url ? data.url.replace(/^https?:\/\//, '').replace(/\/$/, '') : ""),
-    description: data.serpPreview?.description || 
-      data.metaDescription || 
-      "No description available"
+    displayUrl: data.serpPreview?.displayUrl || (data.url ? data.url.replace(/^https?:\/\//, '').replace(/\/$/, '') : ""),
+    description: data.serpPreview?.description || data.metaDescription || "No description available"
   },
-
-  // All other fields with defaults
   score: data.score ?? 0,
   aeoScore: data.aeoScore ?? 0,
   aiTrustScore: data.aiTrustScore ?? 0,
@@ -476,6 +445,11 @@ async function scan() {
     const rawData = await res.json();
     const data = fixData(rawData);
     document.getElementById("loading").style.display = "none";
+
+    if (data.error) {
+      document.getElementById("result").innerHTML = `<div class="card">❌ ${data.error}</div>`;
+      return;
+    }
     
     document.getElementById("result").innerHTML = `
         ${data.schemaGenerator && Object.keys(data.schemaGenerator).length > 0 ? `
@@ -495,7 +469,6 @@ async function scan() {
         <h3>📊 SEO Status: ${data.status} <span class="badge badge-${data.score >= 80 ? 'green' : data.score >= 60 ? 'orange' : 'red'}">${data.score}/100</span></h3>
     `;
     
-    // ✅ Copy button ka event listener - ye zaroori hai
     document.querySelectorAll('.copy-schema-btn').forEach(btn => {
       btn.addEventListener('click', function() {
         const code = decodeURIComponent(this.getAttribute('data-code'));
@@ -505,66 +478,8 @@ async function scan() {
         });
       });
     });
-    
-    // Baqi cards show karne ka code
-    if (data.aiSearchSimulation) {
-      document.getElementById('aiSimulationCard').style.display = 'block';
-      const simText = typeof data.aiSearchSimulation === 'object' 
-        ? data.aiSearchSimulation.answer || JSON.stringify(data.aiSearchSimulation, null, 2)
-        : data.aiSearchSimulation;
-      document.getElementById('aiSimulationText').textContent = simText;
-    }
-    
-  } catch (err) {
-    document.getElementById("loading").style.display = "none";
-    alert("Error: " + err.message);
-  }
-}
 
-
-    if (data.aiAutopilot && data.aiAutopilot.length > 0) {
-      const tasksHTML = data.aiAutopilot.map(task => {
-        const color = task.priority === 'CRITICAL' ? '#dc2626' : task.priority === 'HIGH' ? '#f59e0b' : '#2563eb';
-        return `
-          <div style="display:flex; justify-content:space-between; padding:12px; border-left:4px solid ${color}; background:#f8f9fa; margin:8px 0; border-radius:6px;">
-            <div>
-              <strong>${task.task}</strong>
-              <div style="font-size:12px; color:#666; margin-top:4px;">Effort: ${task.effort}</div>
-            </div>
-            <div style="text-align:right;">
-              <div style="color:${color}; font-weight:bold; font-size:16px;">${task.impact}</div>
-              <div style="font-size:11px; background:${color}; color:#fff; padding:2px 8px; border-radius:3px; display:inline-block; margin-top:4px;">${task.priority}</div>
-            </div>
-          </div>
-        `;
-      }).join('');
-      
-      document.getElementById('autopilot-section').innerHTML = `
-        <div class="card">
-          <h3>🚀 AI Autopilot - Quick Wins</h3>
-          <p style="color:#666; font-size:13px; margin-bottom:12px;">Fix these to boost score instantly</p>
-          ${tasksHTML}
-        </div>
-      `;
-    }
-
-    if (data.aeoSignals && data.aeoSignals.length > 0) {
-      const signalsHTML = data.aeoSignals.map(s => 
-        `<span class="badge badge-green" style="margin:3px; display:inline-block;">✓ ${s}</span>`
-      ).join('');
-      
-      document.getElementById('trust-signals').innerHTML = `
-        <div class="card">
-          <h3>🛡️ Trust Signals Found: ${data.aeoSignals.length}</h3>
-          <div style="margin-top:10px;">${signalsHTML}</div>
-        </div>
-      `;
-    }
-    if (data.error) {
-      document.getElementById("result").innerHTML = `<div class="card">❌ ${data.error}</div>`;
-      return;
-    }
-
+    // SEO Chart
     let seoColor = data.score >= 80 ? "#16a34a" : data.score >= 50 ? "#f97316" : "#dc2626";
     if (seoChart) seoChart.destroy();
     seoChart = new Chart(document.getElementById("seoChart"), {
@@ -588,6 +503,7 @@ async function scan() {
     document.getElementById("seoScore").innerHTML = `${data.score}<span>SEO ${seoGrade}</span>`;
     document.getElementById("seoScore").style.color = seoColor;
 
+    // AEO Chart
     let aeoColor = data.aeoScore >= 80 ? "#16a34a" : data.aeoScore >= 50 ? "#f97316" : "#dc2626";
     if (aeoChart) aeoChart.destroy();
     aeoChart = new Chart(document.getElementById("aeoChart"), {
@@ -610,10 +526,13 @@ async function scan() {
     let aeoGrade = data.aeoScore >= 90 ? "A+" : data.aeoScore >= 80 ? "A" : data.aeoScore >= 60 ? "B" : data.aeoScore >= 40 ? "C" : "D";
     document.getElementById("aeoScore").innerHTML = `${data.aeoScore}<span>AEO ${aeoGrade}</span>`;
     document.getElementById("aeoScore").style.color = aeoColor;
-
+    
     if (data.aiSearchSimulation) {
       document.getElementById('aiSimulationCard').style.display = 'block';
-      document.getElementById('aiSimulationText').textContent = data.aiSearchSimulation.answer || data.aiSearchSimulation;
+      const simText = typeof data.aiSearchSimulation === 'object' 
+        ? data.aiSearchSimulation.answer || JSON.stringify(data.aiSearchSimulation, null, 2)
+        : data.aiSearchSimulation;
+      document.getElementById('aiSimulationText').textContent = simText;
     }
 
     if (data.aeoReadiness) {
@@ -648,6 +567,45 @@ async function scan() {
       });
     }
 
+    if (data.aiAutopilot && data.aiAutopilot.length > 0) {
+      document.getElementById('autopilotCard').style.display = 'block';
+      const tasksHTML = data.aiAutopilot.map(task => {
+        const color = task.priority === 'CRITICAL' ? '#dc2626' : task.priority === 'HIGH' ? '#f59e0b' : '#2563eb';
+        return `
+          <div style="display:flex; justify-content:space-between; padding:12px; border-left:4px solid ${color}; background:#f8f9fa; margin:8px 0; border-radius:6px;">
+            <div>
+              <strong>${task.task}</strong>
+              <div style="font-size:12px; color:#666; margin-top:4px;">Effort: ${task.effort}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="color:${color}; font-weight:bold; font-size:16px;">${task.impact}</div>
+              <div style="font-size:11px; background:${color}; color:#fff; padding:2px 8px; border-radius:3px; display:inline-block; margin-top:4px;">${task.priority}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      document.getElementById('autopilotResults').innerHTML = `
+        <div class="card">
+          <h3>🚀 AI Autopilot - Quick Wins</h3>
+          <p style="color:#666; font-size:13px; margin-bottom:12px;">Fix these to boost score instantly</p>
+          ${tasksHTML}
+        </div>
+      `;
+    }
+
+    if (data.aeoSignals && data.aeoSignals.length > 0) {
+      const signalsHTML = data.aeoSignals.map(s => 
+        `<span class="badge badge-green" style="margin:3px; display:inline-block;">✓ ${s}</span>`
+      ).join('');
+      
+      document.getElementById('trust-signals').innerHTML = `
+        <div class="card">
+          <h3>🛡️ Trust Signals Found: ${data.aeoSignals.length}</h3>
+          <div style="margin-top:10px;">${signalsHTML}</div>
+        </div>
+      `;
+    }
+
     if (data.realCitationChatGPT !== undefined) {
       document.getElementById('realCitationCard').style.display = 'block';
       document.getElementById('realChatGPT').textContent = data.realCitationChatGPT + '%';
@@ -660,194 +618,108 @@ async function scan() {
         reasonsList.innerHTML += `• ${reason}<br>`;
       });
     }
+    
+  } catch (err) {
+    document.getElementById("loading").style.display = "none";
+    alert("Error: " + err.message);
+  }
+}
 
-    const readabilityColor = data.readabilityScore >= 60 ? "#16a34a" : data.readabilityScore >= 30 ? "#f97316" : "#dc2626";
+async function loadHistory() {
+  try {
+    const res = await fetch(`${API_BASE}/history`);
+    const data = await res.json();
     document.getElementById("result").innerHTML = `
-      <div class="card" id="report">
-        <h3>🎯 AI Visibility Score - MAIN FEATURE</h3>
-        <div class="ai-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
-          <div style="font-size: 48px; font-weight: 700; text-align: center; margin: 10px 0;">
-            ${data.overallAIVisibilityScore}/100
-          </div>
-          <div style="font-size: 14px; text-align: center; opacity: 0.9;">
-            Level: ${data.aiVisibilityLevel}
-          </div>
-          <div style="font-size: 12px; text-align: center; margin-top: 8px; opacity: 0.8;">
-            Combined: SEO ${data.score} + AEO ${data.aeoScore} + Trust ${data.aiTrustScore} + Readability ${data.readabilityScore} + Schema ${data.schemaCoverage}%
-          </div>
+      <h3>📊 Scan History</h3>
+      ${data.map(item => `
+        <div class="card">
+          <p><b>URL:</b> ${item.url}</p>
+          <p><b>AI Visibility:</b> ${item.aiVisibilityScore || 0}/100</p>
+          <p><b>SEO Score:</b> ${item.seoScore} | <b>AEO Score:</b> ${item.aeoScore || 0} | <b>Trust:</b> ${item.aiTrustScore || 0}/100</p>
+          <p><b>Overall AI Visibility:</b> ${item.overallAIVisibility || 0}/100 | <b>Readability:</b> ${item.readabilityScore || 0}/100</p>
+          <p><b>AI Citation:</b> ChatGPT ${item.citationChatGPT || 0}% | Gemini ${item.citationGemini || 0}% | Perplexity ${item.citationPerplexity || 0}%</p>
+          <p><b>Featured Snippet:</b> ${item.featuredSnippetChance || 0}% | <b>Structure:</b> ${item.contentStructureScore || 0}/100</p>
+          <p><b>Answer Quality:</b> ${item.answerQuality || 0}/100 | <b>Mobile:</b> ${item.mobileScore || 0} | <b>Desktop:</b> ${item.desktopScore || 0}</p>
+          <p><b>AEO Readiness:</b> ${item.aeoReadiness || 0}/100</p>
+          <p><b>Scanned:</b> ${new Date(item.timestamp).toLocaleString()}</p>
         </div>
+      `).join("")}
+    `;
+  } catch (err) {
+    document.getElementById("result").innerHTML = `<div class="card">❌ Failed to load history</div>`;
+  }
+}
 
-        <h3>📊 Basic Info</h3>
-        <p><b>Website:</b> ${data.url}</p>
-        <p><b>Title:</b> ${data.title || 'Not found'}</p>
-        <p><b>H1:</b> ${data.h1 || 'Not found'}</p>
-        <p><b>Meta Description:</b> ${data.metaDescription || 'Not found'}</p>
-        <p><b>Word Count:</b> ${data.wordCount}</p>
-        <p><b>Last Modified:</b> ${data.lastModified || 'Not found'}</p>
-        
-        <h3>📖 Content Quality</h3>
-        <p><b>Readability Score:</b> ${data.readabilityScore}/100 <span class="badge" style="background:${readabilityColor}20;color:${readabilityColor}">${data.readabilityStatus || 'Unknown'}</span></p>
-        <p><b>Author Found:</b> ${data.hasAuthor? '<span class="badge badge-green">✅ Yes - EEAT Boost</span>' : '<span class="badge badge-red">❌ No</span>'}</p>
+function downloadPDF() {
+  const el = document.getElementById("report");
+  if (!el) return alert("Scan first!");
+  const opt = {
+    margin: 10,
+    filename: 'ai-visibility-report.pdf',
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+  html2pdf().from(el).set(opt).save();
+}
 
-        <h3>🏆 AI Trust Score</h3>
-        <p><b>AI Trust Score:</b> ${data.aiTrustScore}/100 <span class="badge badge-${data.aiTrustScore >= 80? 'green' : data.aiTrustScore >= 50? 'orange' : 'red'}">${data.aiTrustScore >= 80? 'Excellent' : data.aiTrustScore >= 50? 'Good' : 'Poor'}</span></p>
-        <div style="font-size: 13px; margin-left: 20px; margin-top: 8px;">
-          <b>Trust Signals:</b><br>
-          ${data.aiTrustSignals?.map(s => `• ${s}`).join('<br>') || 'No signals found'}
-        </div>
-        <p style="margin-top: 10px;"><b>Privacy Policy:</b> ${data.hasPrivacyPolicy? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
-        <p><b>About Page:</b> ${data.hasAboutPage? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
-        <p><b>Contact Page:</b> ${data.hasContactPage? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
+function toggleDarkMode() {
+  document.body.classList.toggle("dark");
+}
 
-        <h3>🎯 Featured Snippet Predictor</h3>
-        <p><b>Featured Snippet Chance:</b> ${data.featuredSnippetChance}% <span class="badge badge-${data.featuredSnippetChance >= 80? 'green' : data.featuredSnippetChance >= 50? 'orange' : 'red'}">${data.featuredSnippetChance >= 80? 'High' : data.featuredSnippetChance >= 50? 'Medium' : 'Low'}</span></p>
-        <div style="font-size: 13px; margin-left: 20px; margin-top: 8px;">
-          <b>Reason:</b><br>
-          ${data.snippetReasons?.map(r => `• ${r}`).join('<br>') || 'No data'}
-        </div>
+async function compareCompetitor() {
+  const url = document.getElementById("url").value;
+  const comp = document.getElementById("competitorUrl").value;
+  if (!url || !comp) return alert("Enter both URLs");
 
-        <h3>📊 Content Structure Score</h3>
-        <p><b>Content Structure:</b> ${data.contentStructureScore}/100 <span class="badge badge-${data.contentStructureScore >= 80? 'green' : data.contentStructureScore >= 50? 'orange' : 'red'}">${data.contentStructureScore >= 80? 'Excellent' : data.contentStructureScore >= 50? 'Good' : 'Poor'}</span></p>
-        <table>
-          <tr><td><b>H1:</b></td><td>${data.h1Count || 1} ${data.h1Count === 1? '<span class="badge badge-green">✅</span>' : '<span class="badge badge-red">❌</span>'}</td></tr>
-          <tr><td><b>H2:</b></td><td>${data.h2Count || 0} ${data.h2Count >= 3? '<span class="badge badge-green">✅</span>' : '<span class="badge badge-orange">⚠️</span>'}</td></tr>
-          <tr><td><b>H3:</b></td><td>${data.h3Count || 0} ${data.h3Count >= 5? '<span class="badge badge-green">✅</span>' : '<span class="badge badge-orange">⚠️</span>'}</td></tr>
-          <tr><td><b>Lists:</b></td><td>${data.listCount || 0} ${data.listCount >= 2? '<span class="badge badge-green">✅</span>' : '<span class="badge badge-orange">⚠️</span>'}</td></tr>
-          <tr><td><b>Tables:</b></td><td>${data.tableCount || 0} ${data.tableCount >= 1? '<span class="badge badge-green">✅</span>' : '<span class="badge badge-red">❌</span>'}</td></tr>
-        </table>
-        
-        <h3>🏆 AI Citation Simulator - UNIQUE</h3>
-        <div class="ai-box" style="white-space: pre-wrap; background: #dbeafe; border-left: 4px solid #3b82f6;">
-          <b>${data.citationSimulator || 'No simulation available'}</b>
-        </div>
+  document.getElementById("loading").style.display = "block";
+  try { 
+    const res = await fetch(`${API_BASE}/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
+    const data = await res.json();
+    document.getElementById("loading").style.display = "none";
 
-        <h3>🚀 AI Citation Probability</h3>
-        <p><b>ChatGPT Citation Chance:</b> ${data.citationChatGPT}% <span class="badge badge-${data.citationChatGPT >= 80? 'green' : data.citationChatGPT >= 50? 'orange' : 'red'}">${data.citationChatGPT >= 80? 'High' : data.citationChatGPT >= 50? 'Medium' : 'Low'}</span></p>
-              <p><b>Gemini Citation Chance:</b> ${data.citationGemini}% <span class="badge badge-${data.citationGemini >= 80? 'green' : data.citationGemini >= 50? 'orange' : 'red'}">${data.citationGemini >= 80? 'High' : data.citationGemini >= 50? 'Medium' : 'Low'}</span></p>
-        <p><b>Perplexity Citation Chance:</b> ${data.citationPerplexity}% <span class="badge badge-${data.citationPerplexity >= 80? 'green' : data.citationPerplexity >= 50? 'orange' : 'red'}">${data.citationPerplexity >= 80? 'High' : data.citationPerplexity >= 50? 'Medium' : 'Low'}</span></p>
-
-        <h3>🤖 AI Answer Extraction Test</h3>
-        <div class="ai-box" style="white-space: pre-wrap; background: #fef3c7; border-left: 4px solid #f59e0b;">
-          <b>AI Will Extract:</b><br><br>${data.aiExtractedAnswer || 'No answer found'}
-        </div>
-
-        <h3>🤖 AI Answer Quality Checker</h3>
-        <p><b>Answer Quality:</b> ${data.answerQuality}/100 <span class="badge badge-${data.answerQuality >= 80? 'green' : data.answerQuality >= 50? 'orange' : 'red'}">${data.answerQuality >= 80? 'Excellent' : data.answerQuality >= 50? 'Good' : 'Poor'}</span></p>
-        <div style="font-size: 13px; margin-left: 20px; margin-top: 8px;">
-          ${data.answerQualityChecks?.map(c => `• ${c}`).join('<br>') || 'No data'}
-        </div>
-
-        <h3>🧾 FAQ Generator - AUTO</h3>
-        <div class="ai-box">
-          ${data.autoFAQ?.map(f => `<p><b>Q: ${f.q}</b><br>A: ${f.a}</p>`).join('') || 'No FAQ generated'}
-        </div>
-
-        <h3>🔥 SERP Preview</h3>
-        <div class="ai-box" style="background: white; border: 1px solid #e2e8f0;">
-          <div style="color: #1a0dab; font-size: 18px; margin-bottom: 4px;">${data.serpPreview?.title}</div>
-          <div style="color: #006621; font-size: 14px; margin-bottom: 4px;">${data.serpPreview?.displayUrl}</div>
-          <div style="color: #545454; font-size: 13px;">${data.serpPreview?.description}</div>
-        </div>
-
-        <h3>📱 Mobile vs Desktop SEO Score</h3>
-        <p><b>Mobile Score:</b> ${data.mobileScore} | <b>Desktop Score:</b> ${data.desktopScore}</p>
-        <p><b>Difference:</b> ${Math.abs(data.mobileScore - data.desktopScore) < 10? '<span class="badge badge-green">Minimal (Good)</span>' : '<span class="badge badge-orange">Needs Work</span>'}</p>
-
-        <h3>📊 Topic Authority Map</h3>
-        <p><b>Main Topic:</b> ${data.topicAuthority?.mainTopic}</p>
-        <div style="font-size: 13px; margin-left: 20px;">
-          <b>Sub Topics Found:</b><br>
-          ${data.topicAuthority?.found?.map(t => `✔ ${t}`).join('<br>') || 'None'}
-          <br><br><b>Missing Topics:</b><br>
-          ${data.topicAuthority?.missing?.map(t => `❌ ${t}`).join('<br>') || 'None'}
-        </div>
-
-        <h3>💰 Business Value Estimator</h3>
-        <div class="ai-box">
-          <p><b>Traffic Increase:</b> ${data.businessValue?.trafficIncrease || 'N/A'}</p>
-          <p><b>Leads Increase:</b> ${data.businessValue?.leadsIncrease || 'N/A'}</p>
-          <p><b>Revenue Impact:</b> ${data.businessValue?.revenueImpact || 'N/A'}</p>
-        </div>
-        
-        <h3>🔍 SEO Status</h3>
-        <p><b>SEO Score:</b> ${data.score}/100 <span class="badge badge-${data.score >= 80 ? 'green' : data.score >= 50 ? 'orange' : 'red'}">${data.status}</span></p>
-        <p><b>Images:</b> ${data.totalImages} total, ${data.imagesWithoutAlt} missing ALT text ${data.imagesWithoutAlt > 0 ? '<span class="badge badge-red">⚠️ Fix Needed</span>' : '<span class="badge badge-green">✅ Perfect</span>'}</p>
-        <p><b>Internal Links:</b> ${data.internalLinks} | <b>External Links:</b> ${data.externalLinks}</p>
-        <p><b>Mobile Friendly:</b> ${data.mobileFriendly? '<span class="badge badge-green">✅ Optimized</span>' : '<span class="badge badge-red">❌ Not Optimized</span>'}</p>
-        <p><b>HTTPS:</b> ${data.isHttps? '<span class="badge badge-green">✅ Secure</span>' : '<span class="badge badge-red">❌ Not Secure</span>'}</p>
-        <p><b>Load Time:</b> ${data.loadTime}ms ${data.loadTime < 3000? '<span class="badge badge-green">✅ Fast</span>' : '<span class="badge badge-red">⚠️ Slow</span>'}</p>
-        <p><b>Broken Links:</b> ${data.brokenLinks === 0? '<span class="badge badge-green">✅ None</span>' : `<span class="badge badge-red">❌ ${data.brokenLinks} Found</span>`}</p>
-        <p><b>Schema Markup:</b> ${data.hasSchemaMarkup? '<span class="badge badge-green">✅ Present</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
-        <p><b>Robots.txt:</b> ${data.robotsExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
-        <p><b>Sitemap.xml:</b> ${data.sitemapExists ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
-        <p><b>Canonical URL:</b> ${data.hasCanonical ? `<span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.canonical || ''}</small>` : '<span class="badge badge-red">❌ Missing</span>'}</p>
-        <p><b>Favicon:</b> ${data.hasFavicon ? `<span class="badge badge-green">✅ Found</span>` : '<span class="badge badge-red">❌ Missing</span>'}</p>
-        <p><b>Open Graph:</b> ${data.hasOGTags? '<span class="badge badge-green">✅ Complete - Social Ready</span>' : '<span class="badge badge-red">❌ Missing</span>'}</p>
-        ${data.hasOGTags? `
-          <p style="font-size: 12px; margin-left: 20px; margin-top: -10px;">
-            <b>OG Title:</b> ${data.ogTitle || 'N/A'}<br>
-            <b>OG Description:</b> ${(data.ogDescription || 'N/A').substring(0, 60)}...<br>
-            <b>OG Image:</b> ${data.ogImage? '✅ Found' : '❌ Missing'}
-          </p>
-        ` : ''}
-        
-        <h3>📱 Social Media Presence</h3>
-        <p><b>Facebook:</b> ${data.hasFacebook ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Not Found</span>'}</p>
-        <p><b>LinkedIn:</b> ${data.hasLinkedIn ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Not Found</span>'}</p>
-        <p><b>YouTube:</b> ${data.hasYouTube ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Not Found</span>'}</p>
-        <p><b>Twitter/X:</b> ${data.hasTwitter ? '<span class="badge badge-green">✅ Found</span>' : '<span class="badge badge-red">❌ Not Found</span>'}</p>
-        
-        <h3>📞 Contact Information</h3>
-        <p><b>Email:</b> ${data.hasEmail ? `<span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.email}</small>` : '<span class="badge badge-red">❌ Not Found</span>'}</p>
-        <p><b>Phone:</b> ${data.hasPhone ? `<span class="badge badge-green">✅ Found</span><br><small style="margin-left:20px;color:#666">${data.phone}</small>` : '<span class="badge badge-red">❌ Not Found</span>'}</p>
-        
-        <h3>🤖 AEO Status - ChatGPT Ready?</h3>
-        <p><b>AEO Score:</b> ${data.aeoScore}/100 <span class="badge badge-${data.aeoScore >= 80 ? 'green' : data.aeoScore >= 50 ? 'orange' : 'red'}">${data.aeoStatus}</span></p>
-        <p><b>FAQ Schema:</b> ${data.hasFAQ ? '<span class="badge badge-green">✅ Yes - ChatGPT Will Quote</span>' : '<span class="badge badge-red">❌ No</span>'}</p>
-        <p><b>HowTo Schema:</b> ${data.hasHowTo ? '<span class="badge badge-green">✅ Yes</span>' : '<span class="badge badge-red">❌ No</span>'}</p>
-        <p><b>Direct Answer:</b> ${data.hasDirectAnswer ? '<span class="badge badge-green">✅ Yes - Featured Snippet Ready</span>' : '<span class="badge badge-red">❌ No</span>'}</p>
-        <p><b>Schemas Found:</b> ${(data.schemas || []).length ? data.schemas.join(', ') : 'None'}</p>
-        
-        <h3>🔑 Suggested Keywords</h3>
-        <ul>${(data.keywords || []).map(k => `<li>${k}</li>`).join("") || '<li>No keywords found</li>'}</ul>
-        
-        <h3>💡 SEO Tips</h3>
-        <ul>${(data.tips || []).map(t => `<li>${t}</li>`).join("")}</ul>
-        
-        <h3>🚨 Priority Fixes</h3>
-        ${data.criticalIssues && data.criticalIssues.length > 0 ? `
-        <div class="ai-box" style="background: #fee2e2; border-left: 4px solid #dc2626;">
-          <b style="color: #991b1b;">🔴 Critical:</b>
-          <ul style="margin-top: 8px;">${data.criticalIssues.map(i => `<li>${i}</li>`).join("")}</ul>
-        </div>
-        ` : ''}
-        
-        ${data.importantIssues && data.importantIssues.length > 0 ? `
-        <div class="ai-box" style="background: #ffedd5; border-left: 4px solid #f97316; margin-top: 10px;">
-          <b style="color: #9a3412;">🟠 Important:</b>
-          <ul style="margin-top: 8px;">${data.importantIssues.map(i => `<li>${i}</li>`).join("")}</ul>
-        </div>
-        ` : ''}
-        
-        ${data.minorIssues && data.minorIssues.length > 0 ? `
-        <div class="ai-box" style="background: #fef3c7; border-left: 4px solid #f59e0b; margin-top: 10px;">
-          <b style="color: #92400e;">🟡 Minor:</b>
-          <ul style="margin-top: 8px;">${data.minorIssues.map(i => `<li>${i}</li>`).join("")}</ul>
-        </div>
-        ` : ''}
-        
-        <h3>⚡ Instant Fix Suggestions</h3>
-        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-          ${data.instantFixes?.map(f => `<button style="background:#10b981;font-size:12px;padding:8px 12px;">${f}</button>`).join('') || 'No fixes needed'}
-        </div>
-        
-        <h3>🤖 AI Report</h3>
-        <div class="ai-box" style="white-space: pre-wrap;">${data.aiReport || "No AI Report"}</div>
-      </div>
+    document.getElementById("competitorCard").style.display = "block";
+    if (comparisonChart) comparisonChart.destroy();
+    comparisonChart = new Chart(document.getElementById("comparisonChart"), {
+      type: "bar",
+      data: {
+        labels: data.sites.map(s => s.brand),
+        datasets: [{ label: "AI Visibility Score", data: data.sites.map(s => s.aiVisibilityScore), backgroundColor: ["#2563eb", "#dc2626"] }]
+      },
+      options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+    });
+    document.getElementById("comparisonDetails").innerHTML = `
+      <table style="margin-top: 15px;"><tr><th>Site</th><th>AI Score</th><th>SEO</th><th>AEO</th></tr>
+      ${data.sites.map(s => `<tr><td><b>${s.brand}</b></td><td>${s.aiVisibilityScore}</td><td>${s.seoScore}</td><td>${s.aeoScore}</td></tr>`).join('')}
+      </table><p style="margin-top: 10px;"><b>Winner:</b> ${data.winner.brand} (${data.winner.aiVisibilityScore}/100)</p>
     `;
   } catch (err) {
     document.getElementById("loading").style.display = "none";
-    document.getElementById("result").innerHTML = `<div class="card">❌ Server Error: ${err.message}</div>`;
+    alert("Error: " + err.message);
+  }
+}
+
+async function generateRoadmap() {
+  const url = document.getElementById("url").value;
+  if (!url) return alert("Enter URL first");
+  document.getElementById("loading").style.display = "block";
+  try {
+    const res = await fetch(`${API_BASE}/roadmap?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("roadmapCard").style.display = "block";
+    document.getElementById("currentScore").textContent = data.currentScore;
+    document.getElementById("potentialScore").textContent = data.potentialScore;
+    document.getElementById("roadmapSteps").innerHTML = data.roadmap.map(r => `
+      <div class="ai-box" style="border-left: 4px solid ${r.priority === 'CRITICAL'? '#dc2626' : '#f59e0b'};">
+        <b>Step ${r.step}: ${r.task}</b><span class="badge badge-${r.priority === 'CRITICAL'? 'red' : 'orange'}">${r.priority}</span>
+        <p style="margin: 8px 0 0; font-size: 13px;">${r.why}</p>
+        <details style="margin-top: 8px;"><summary style="cursor: pointer; font-size: 12px; color: #2563eb;">Show Code</summary>
+        <pre style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 5px; margin-top: 5px; font-size: 11px; overflow-x: auto;"><code>${r.code}</code></pre></details>
+      </div>`).join('') + `<p style="text-align: center; margin-top: 15px; font-weight: 600;">⏱️ Total Time: ${data.estimatedTime}</p>`;
+} catch (err) {
+    document.getElementById("loading").style.display = "none";
+    alert("Error: " + err.message);
   }
 }
 

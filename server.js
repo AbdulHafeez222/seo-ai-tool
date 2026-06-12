@@ -17,7 +17,7 @@ async function safeFetch(url, options = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), options.timeout || 10000);
     const res = await fetch(url, {
-  ...options,
+     ...options,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; SEO-AEO-Bot/3.0)",...options.headers },
       signal: controller.signal
     });
@@ -56,7 +56,6 @@ function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
   if (hasFAQ) score++;
   if (hasSchema) score++;
   if (keyword.split(' ').length > 2) score++;
-
   if (score >= 2) return "High";
   if (score === 1) return "Medium";
   return "Low";
@@ -80,7 +79,7 @@ function detectAllSchemas($, html) {
       const raw = $(el).html();
       if (!raw) return;
       const json = JSON.parse(raw);
-      const items = Array.isArray(json)? json : ;
+      const items = Array.isArray(json)? json : [];
 
       const processItem = (item) => {
         if (item['@graph'] && Array.isArray(item['@graph'])) {
@@ -252,8 +251,8 @@ function extractEntitiesFromContent(text, headings = "") {
 
   const brandRegex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
   const brands = [...new Set((text + ' ' + headings).match(brandRegex) || [])]
- .filter(e => e.length > 3 &&!['The', 'This', 'That', 'With', 'From', 'What', 'How', 'Why'].includes(e))
- .slice(0, 5);
+.filter(e => e.length > 3 &&!['The', 'This', 'That', 'With', 'From', 'What', 'How', 'Why'].includes(e))
+.slice(0, 5);
 
   const locationKeywords = ['USA','UK','Canada','Pakistan','India','Australia','Germany','France','UAE','Dubai','London','New York','Karachi','Lahore'];
   const locations = [...new Set(locationKeywords.filter(loc =>
@@ -548,7 +547,7 @@ async function analyzeSingleUrl(url) {
       `${mainTopic} vs Alternatives`
     ];
     const missingSubtopics = expectedSubtopics.filter(exp =>
-    !subtopics.some(sub => sub.toLowerCase().includes(exp.toLowerCase().split(' ')[0]))
+   !subtopics.some(sub => sub.toLowerCase().includes(exp.toLowerCase().split(' ')[0]))
     );
     const topicCoverage = Math.round(((expectedSubtopics.length - missingSubtopics.length) / expectedSubtopics.length) * 100);
 
@@ -604,21 +603,21 @@ async function analyzeSingleUrl(url) {
       query: `What is ${mainTopic}?`,
       chatgpt: {
         answer: hasDirectAnswer
-        ? `${brands[0] || getBrandName(url)} offers ${services[0] || mainTopic}${prices[0]? ' starting at ' + prices[0] : ''}. ${metaDescription.substring(0, 100)}`
+       ? `${brands[0] || getBrandName(url)} offers ${services[0] || mainTopic}${prices[0]? ' starting at ' + prices[0] : ''}. ${metaDescription.substring(0, 100)}`
           : `Based on available data, ${mainTopic} relates to ${keywords.slice(0,3).join(', ')}. For specific details, check the official website.`,
         sources: hasAuthor? ["Official Website", "Author Profile"] : ["Official Website"],
         willCite: hasDirectAnswer && hasFAQ && listCount >= 2
       },
       gemini: {
         answer: hasSchemaMarkup
-        ? `According to structured data: ${title}. Key services include ${services.slice(0,2).join(' and ')}. ${hasLastModified? 'Last updated: ' + lastModified : ''}`
+       ? `According to structured data: ${title}. Key services include ${services.slice(0,2).join(' and ')}. ${hasLastModified? 'Last updated: ' + lastModified : ''}`
           : `${title}. ${metaDescription.substring(0, 120)}`,
         sources: hasSchemaMarkup? ["Schema.org Data", "Website"] : ["Website"],
         willCite: hasSchemaMarkup && tableCount > 0 && hasAuthor
       },
       perplexity: {
         answer: hasLastModified
-        ? `${aiExtractedAnswer} [Updated ${lastModified}]`
+       ? `${aiExtractedAnswer} [Updated ${lastModified}]`
           : aiExtractedAnswer,
         sources: hasLastModified? ["Official Site (2026)", "Cited Sources"] : ["Official Site"],
         willCite: hasDirectAnswer && hasLastModified && externalLinks > 3
@@ -705,19 +704,19 @@ async function analyzeSingleUrl(url) {
       aiCitationSimulator.perplexity.improvements.push("Add <meta property='article:modified_time'>");
     }
 
-      if (externalLinks > 3) aiCitationSimulator.perplexity.reasons.push("✓ External citations present");
+    if (externalLinks > 3) aiCitationSimulator.perplexity.reasons.push("✓ External citations present");
     else {
       aiCitationSimulator.perplexity.reasons.push("✗ Few trust signals");
       aiCitationSimulator.perplexity.improvements.push("Add links to Wikipedia,.gov, research papers");
     }
 
-    const aiRecommendations = [];
+      const aiRecommendations = [];
     if (!hasFAQ) aiRecommendations.push({
       priority: "CRITICAL",
       action: "Add FAQ Schema",
       impact: "+15% ChatGPT Citation",
       effort: "15 mins",
-      code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[...]}</script>`
+      code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is ${mainTopic}?","acceptedAnswer":{"@type":"Answer","text":"${metaDescription}"}}]}</script>`
     });
 
     if (!hasAuthor) aiRecommendations.push({
@@ -765,7 +764,7 @@ async function analyzeSingleUrl(url) {
       action: "Add Organization Schema",
       impact: "+10% EEAT Score",
       effort: "20 mins",
-      code: `<script type="application/ld+json">{"@type":"Organization","name":"...","url":"..."}</script>`
+      code: `<script type="application/ld+json">{"@type":"Organization","name":"${getBrandName(url)}","url":"${url}"}</script>`
     });
 
     if (!schemas.LocalBusiness.present && (allText.includes('service') || allText.includes('agency'))) aiRecommendations.push({
@@ -773,7 +772,7 @@ async function analyzeSingleUrl(url) {
       action: "Add LocalBusiness Schema",
       impact: "+8% Local AI Citations",
       effort: "25 mins",
-      code: `<script type="application/ld+json">{"@type":"LocalBusiness","address":{...}}</script>`
+      code: `<script type="application/ld+json">{"@type":"LocalBusiness","name":"${getBrandName(url)}","address":{"@type":"PostalAddress","addressCountry":"PK"}}</script>`
     });
 
     const recommendationScore = Math.max(0, 100 - (aiRecommendations.length * 12));
@@ -1008,7 +1007,7 @@ app.get("/competitor-gap-ai", async (req, res) => {
     const compH2s = compData.topicAuthority?.subtopics || [];
 
     const missingH2s = compH2s.filter(h2 =>
-  !yourH2s.some(y => y.toLowerCase().includes(h2.toLowerCase().split(' ')[0]))
+!yourH2s.some(y => y.toLowerCase().includes(h2.toLowerCase().split(' ')[0]))
     );
 
     const yourKeywords = new Set(yourData.keywords);
@@ -1256,9 +1255,9 @@ app.get("/citation-simulator-v2", async (req, res) => {
       gemini: data.aiCitationSimulator.gemini,
       perplexity: data.aiCitationSimulator.perplexity,
       criticalFix: [
-     !data.hasFAQ? "Add FAQ Schema" : null,
-     !data.hasAuthor? "Add Author Bio" : null,
-     !data.hasLastModified? "Add Last Modified Date" : null,
+   !data.hasFAQ? "Add FAQ Schema" : null,
+   !data.hasAuthor? "Add Author Bio" : null,
+   !data.hasLastModified? "Add Last Modified Date" : null,
         data.entities.prices.length === 0? "Add Statistics/Pricing" : null
       ].filter(Boolean)[0] || "Content is AI-ready"
     });
@@ -1291,4 +1290,6 @@ app.get("/ai-snippet-generator", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform v4.0 running on port ${PORT}`);
   console.log(`📊 Features: SEO/AEO/AI Visibility | Entity Extraction | Citation Simulator v3 | Internal Link Intelligence | E-E-A-T Advanced`);
-});
+});tion",
+      effort: "15 mins",
+      code: `<script type="application/ld+json">{"@context":"https://schema.org","

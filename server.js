@@ -703,13 +703,7 @@ async function analyzeSingleUrl(url) {
       };
     }
 
-    // Auto FAQ
-    const autoFAQ = [];
-    if (h1) autoFAQ.push({ q: `What is ${h1}?`, a: metaDescription || bodyText.substring(0, 120) });
-    if (prices.length > 0) autoFAQ.push({ q: `How much does ${services[0] || 'the service'} cost?`, a: `Pricing starts at ${prices[0]}. Contact us for custom quotes.` });
-    if (locations.length > 0) autoFAQ.push({ q: `Do you serve ${locations[0]}?`, a: `Yes, we serve clients in ${locations.slice(0, 3).join(', ')}.` });
-    if (allText.includes('delivery') || allText.includes('days')) autoFAQ.push({ q: `What is your delivery time?`, a: `Typical delivery is 7 days for standard projects.` });
-
+    
     // AI Autopilot Tasks
     const aiAutopilot = [
    !hasFAQ && { task: "Add FAQ Schema", impact: "+15", effort: "15 mins", priority: "CRITICAL" },

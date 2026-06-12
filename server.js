@@ -399,7 +399,7 @@ async function analyzeSingleUrl(url) {
     if(hasLastModified) aiTrustSignals.push("Recently Updated");
     if(hasCanonical) aiTrustSignals.push("Canonical URL");
     if(hasFavicon) aiTrustSignals.push("Favicon");
-
+    const aeoSignals = [...aiTrustSignals]; 
     const sentences = bodyText.split(/[.!?]+/).length || 1;
     const avgWordsPerSentence = wordCount / sentences;
     let readabilityScore = 50;
@@ -808,12 +808,66 @@ async function analyzeSingleUrl(url) {
       afterAll: Math.min(100, overallAIVisibilityScore + recommendationScore)
     };
 
-    const schemaGenerator = {
-      FAQPage: schemas.FAQPage.present? null : {
-        recommended: autoFAQ.length > 0,
-        code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[${autoFAQ.map(f => `{"@type":"Question","name":"${f.q}","acceptedAnswer":{"@type":"Answer","text":"${f.a}"}}`).join(',')}]}</script>`
-      }
-    };
+    // ========== SCHEMA GENERATOR FIX ==========
+    const schemaGenerator = {};
+    
+    // FAQPage Schema
+    if (!schemas.FAQPage.present && autoFAQ.length > 0) {
+      const faqSchema = {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": autoFAQ.map(f => ({
+          "@type": "Question",
+          "name": f.q,
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": f.a
+          }
+        }))
+      };
+      schemaGenerator.FAQPage = {
+        recommended: true,
+        code: JSON.stringify(faqSchema, null, 2),
+        title: "FAQ Schema - ChatGPT ke liye zaroori"
+      };
+    }
+
+    // Article Schema
+    if (!schemas.Article.present) {
+      const articleSchema = {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": title || h1,
+        "description": metaDescription,
+        "author": {
+          "@type": "Person",
+          "name": "Your Name"
+        },
+        "datePublished": new Date().toISOString(),
+        "dateModified": new Date().toISOString()
+      };
+      schemaGenerator.Article = {
+        recommended: true,
+        code: JSON.stringify(articleSchema, null, 2),
+        title: "Article Schema - AI Visibility ke liye"
+      };
+    }
+
+    // Organization Schema
+    if (!schemas.Organization.present) {
+      const orgSchema = {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": getBrandName(url),
+        "url": url,
+        "logo": favicon || `${url}/logo.png`
+      };
+      schemaGenerator.Organization = {
+        recommended: true,
+        code: JSON.stringify(orgSchema, null, 2),
+        title: "Organization Schema - Trust Signal"
+      };
+    }
 
     return {
       schemaGenerator,
@@ -828,6 +882,8 @@ async function analyzeSingleUrl(url) {
       url, title, h1, metaDescription, wordCount, lastModified,
       score: seoScore,
       status: seoStatus,
+      aiTrustSignals,
+      aeoSignals,
       overallAIVisibilityScore,
       aiVisibilityLevel,
       breakdown: {

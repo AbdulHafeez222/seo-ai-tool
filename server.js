@@ -234,6 +234,7 @@ function extractEntitiesFromContent(text, headings = "") {
 
 // ========== MAIN ANALYZER ==========
 async function analyzeSingleUrl(url) {
+  try
   const startTime = Date.now();
   const html = await safeFetch(url);
   const loadTime = Date.now() - startTime;

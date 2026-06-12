@@ -374,7 +374,7 @@ async function analyzeSingleUrl(url) {
     const phone = phoneMatch? phoneMatch[0] : null;
     const hasEmail =!!email;
     const hasPhone =!!phone;
-   const phone = hasPhone? (bodyText.match(/(\+92|0092|03)\d{2}[-\s]?\d{7}/) || [''])[0] : null;  const email = hasEmail? (bodyText.match(/[\w.-]+@[\w.-]+\.\w+/) || [''])[0] : null;
+  
   const allText = bodyText.toLowerCase();
   const hasPrivacyPolicy = allText.includes("privacy policy") || allText.includes("privacy");
     const hasAboutPage = allText.includes("about us") || allText.includes("about");

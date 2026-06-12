@@ -248,6 +248,7 @@ async function analyzeSingleUrl(url) {
   const bodyText = $("p, li, h2, h3, h4, td").text().replace(/\s+/g, " ").trim();
   const wordCount = bodyText.split(/\s+/).filter(Boolean).length;
   const h2s = $("h2").map((i, el) => $(el).text().trim()).get().filter(Boolean);
+  const h3s = $("h3").map((i, el) => $(el).text().trim()).get().filter(Boolean);
 
   const schemas = detectAllSchemas($, html);
   const uniqueSchemas = Object.keys(schemas).filter(k => schemas[k].present);

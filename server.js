@@ -751,7 +751,7 @@ app.get("/scan", async (req, res) => {
   const url = req.query.url;
   if (!url) return res.status(400).json({ error: "URL required" });
   try {
-    const data = await scanWebsite(url.startsWith('http')? url : 'https://' + url);
+    const data = await analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: "Scan failed", message: err.message });

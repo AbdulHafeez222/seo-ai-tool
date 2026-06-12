@@ -79,8 +79,7 @@ function detectAllSchemas($, html) {
       const raw = $(el).html();
       if (!raw) return;
       const json = JSON.parse(raw);
-      const items = Array.isArray(json)? json : [];
-
+     const items = Array.isArray(json)? json : [];
       const processItem = (item) => {
         if (item['@graph'] && Array.isArray(item['@graph'])) {
           item['@graph'].forEach(processItem);
@@ -1292,4 +1291,4 @@ app.listen(PORT, () => {
   console.log(`📊 Features: SEO/AEO/AI Visibility | Entity Extraction | Citation Simulator v3 | Internal Link Intelligence | E-E-A-T Advanced`);
 });tion",
       effort: "15 mins",
-      code: `<script type="application/ld+json">{"@context":"https://schema.org","
+     code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[]}</script>`

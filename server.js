@@ -1077,7 +1077,7 @@ app.get("/history", (req, res) => {
   res.json([]);
 });
 // NEW MODULE START: v5.1 Additional Features
-const cheerio = require('cheerio');
+
 const axios = require('axios');
 
 // Helper: Safe execution wrapper

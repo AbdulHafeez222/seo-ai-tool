@@ -80,7 +80,36 @@ details summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
 }
 .opp-item {
   border-radius: 4px;
+}}
+.opp-item {
+  border-radius: 4px;
 }
+
+/* FAQ Boxes Ka Fix - Yahan Paste Karo */
+.faq-box, .ai-faq-box, .question-box {
+  background: #2a2a2a!important;
+  color: #ffffff!important;
+  padding: 16px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  border: 1px solid #444;
+}
+
+.faq-box strong, .faq-box b, 
+.ai-faq-box strong, .ai-faq-box b {
+  color: #00ff88!important;
+  font-weight: 700;
+}
+
+.faq-box p, .ai-faq-box p {
+  color: #e0e0e0!important;
+  margin: 8px 0 0 0;
+}
+
+</style>
+</head>
+<body>
+<div class="box">
 </style>
 </head>
 <body>
@@ -709,7 +738,29 @@ function renderCharts(data) {
   seoChart = new Chart(document.getElementById("seoChart"), {
     type: "doughnut",
     data: { datasets: [{ data: [seoScore, 100 - seoScore], backgroundColor: [seoColor, "#e5e7eb"], borderWidth: 0 }] },
-    options: { cutout: "75%", plugins: { legend: { display: false }, tooltip: { enabled: false } } }
+   options: {
+  cutout: '70%',
+  plugins: {
+    legend: { display: false },
+    tooltip: { enabled: false }
+  }
+},
+plugins: [{
+  id: 'centerText',
+  beforeDraw: function(chart) {
+    let ctx = chart.ctx;
+    ctx.restore();
+    ctx.font = "bold 20px Arial";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#ffffff"; // White text hamesha
+    let score = Math.round(chart.data.datasets[0].data[0]); // 29% dikhega
+    let text = score + "%";
+    let textX = Math.round((chart.width - ctx.measureText(text).width) / 2);
+    let textY = chart.height / 2;
+    ctx.fillText(text, textX, textY);
+    ctx.save();
+  }
+}]
   });
   let seoGrade = seoScore >= 90? "A+" : seoScore >= 80? "A" : seoScore >= 60? "B" : seoScore >= 40? "C" : "D";
   document.getElementById("seoScore").innerHTML = `${seoScore}<span>SEO ${seoGrade}</span>`;

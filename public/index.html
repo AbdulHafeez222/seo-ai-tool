@@ -53,27 +53,34 @@ details summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
 .dark p { color: #cbd5e1; }
 .dark small { color: #94a3b8 !important; }
 .dark #citationReasonsList { background: #0f172a !important; color: #e2e8f0 !important; }
-  feature-card {
-      background: #1a1a1a;
-      border: 1px solid #333;
-      border-radius: 8px;
-      padding: 20px;
-      margin: 15px 0;
-    }
-    .score-circle {
-      width: 100px;
-      height: 100px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-      font-weight: bold;
-      margin: 10px auto;
-    }
-    .opp-item {
-      border-radius: 4px;
-    }
+  /* v5.1 STYLES START */
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
+.metric-box { text-align: center; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; color: white; }
+.metric-value { font-size: 24px; font-weight: bold; }
+.metric-label { font-size: 12px; opacity: 0.9; margin-top: 4px; }
+.badge { display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-green { background: #dcfce7; color: #166534; }
+.badge-orange { background: #ffedd5; color: #9a3412; }
+.badge-red { background: #fee2e2; color: #991b1b; }
+.badge-purple { background: #f3e8ff; color: #6b21a8; }
+/* v5.1 STYLES END */
+ .card {
+  text-align: left; margin-top: 20px; background: #f9f9f9; padding: 18px; border-radius: 10px;
+}
+.score-circle {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: bold;
+  margin: 10px auto;
+}
+.opp-item {
+  border-radius: 4px;
+}
 </style>
 </head>
 <body>
@@ -293,14 +300,50 @@ details summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
   <h3>📋 Schema Opportunity Finder</h3>
   <div id="schemaOppContent"></div>
 </div>
-<!-- NEW FEATURE END -->
+
 
 <!-- NEW FEATURE START: Local SEO -->
 <div id="localSEOCard" class="card" style="display:none">
   <h3>📍 Local SEO Analyzer</h3>
   <div id="localSEOContent"></div>
 </div>
-<!-- NEW FEATURE END -->
+<!-- v5.1 FEATURES START -->
+<div id="brokenLinksCard" class="card" style="display:none">
+  <h3>🔗 Broken Link Checker</h3>
+  <div id="brokenLinksContent"></div>
+</div>
+
+<div id="coreWebVitalsCard" class="card" style="display:none">
+  <h3>⚡ Core Web Vitals</h3>
+  <div id="coreWebVitalsContent"></div>
+</div>
+
+<div id="linkOpportunityCard" class="card" style="display:none">
+  <h3>🔍 Internal Link Opportunities</h3>
+  <div id="linkOpportunityContent"></div>
+</div>
+
+<div id="contentDecayCard" class="card" style="display:none">
+  <h3>📉 Content Decay Detector</h3>
+  <div id="contentDecayContent"></div>
+</div>
+
+<div id="featuredSnippetCard" class="card" style="display:none">
+  <h3>🎯 Featured Snippet Generator</h3>
+  <div id="featuredSnippetContent"></div>
+</div>
+
+<div id="peopleAlsoAskCard" class="card" style="display:none">
+  <h3>❓ People Also Ask Generator</h3>
+  <div id="peopleAlsoAskContent"></div>
+</div>
+
+<div id="visibilityTrendCard" class="card" style="display:none">
+  <h3>📈 AI Visibility Trend</h3>
+  <canvas id="trendChart" style="max-height:200px;"></canvas>
+  <div id="visibilityTrendContent"></div>
+</div>
+<!-- v5.1 FEATURES END -->
 <script>
 const API_BASE = "https://seo-ai-tool-s47q.onrender.com";
 let seoChart, aeoChart, comparisonChart;
@@ -325,7 +368,110 @@ function copySnippet(type) {
 
 async function scan() {
   // ... existing scan code
-  lastScanData = data; // ← Is line ke baad render code aayega
+  lastScanData = data; // v5.1 FEATURES RENDER START
+if (data.v51Features) {
+  const v51 = data.v51Features;
+
+  // Broken Links
+  if (v51.brokenLinks) {
+    document.getElementById('brokenLinksCard').style.display = 'block';
+    document.getElementById('brokenLinksContent').innerHTML = `
+      <div class="score-circle" style="background: conic-gradient(${v51.brokenLinks.healthScore > 80? '#00ff88' : '#ffaa00'} 0% ${v51.brokenLinks.healthScore}%, #333 ${v51.brokenLinks.healthScore}% 100%)">
+        <span>${v51.brokenLinks.healthScore}</span>
+      </div>
+      <p><strong>Total Checked:</strong> ${v51.brokenLinks.totalChecked}</p>
+      <p><strong>Broken:</strong> <span style="color:#ff0000">${v51.brokenLinks.brokenCount}</span></p>
+      ${v51.brokenLinks.brokenLinks.slice(0, 5).map(l => `<div style="font-size:12px;color:#ff6666">✗ ${l.url}</div>`).join('')}
+    `;
+  }
+
+  // Core Web Vitals
+  if (v51.coreWebVitals) {
+    document.getElementById('coreWebVitalsCard').style.display = 'block';
+    const cwv = v51.coreWebVitals;
+    document.getElementById('coreWebVitalsContent').innerHTML = `
+      <div class="grid-3">
+        <div class="metric-box"><div class="metric-value">${cwv.lcp}ms</div><div class="metric-label">LCP <span class="badge badge-${cwv.lcpGrade === 'Good'? 'green' : 'orange'}">${cwv.lcpGrade}</span></div></div>
+        <div class="metric-box"><div class="metric-value">${cwv.cls}</div><div class="metric-label">CLS <span class="badge badge-${cwv.clsGrade === 'Good'? 'green' : 'orange'}">${cwv.clsGrade}</span></div></div>
+        <div class="metric-box"><div class="metric-value">${cwv.performanceScore}</div><div class="metric-label">Performance</div></div>
+      </div>
+      <p style="margin-top:10px"><strong>Fix:</strong> ${cwv.recommendations}</p>
+    `;
+  }
+
+  // Internal Link Opportunities
+  if (v51.internalLinkOpportunities) {
+    document.getElementById('linkOpportunityCard').style.display = 'block';
+    document.getElementById('linkOpportunityContent').innerHTML = `
+      <p><strong>Opportunities Found:</strong> ${v51.internalLinkOpportunities.totalFound}</p>
+      ${v51.internalLinkOpportunities.opportunities.map(o => `
+        <div class="opp-item" style="margin:8px 0;padding:8px;background:#222;border-left:3px solid ${o.priority === 'HIGH'? '#ff0000' : '#ffaa00'}">
+          Link "<strong>${o.keyword}</strong>" to <strong>${o.targetHeading}</strong><br>
+          <span style="color:#aaa;font-size:12px">${o.reason}</span>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  // Content Decay
+  if (v51.contentDecay) {
+    document.getElementById('contentDecayCard').style.display = 'block';
+    const cd = v51.contentDecay;
+    document.getElementById('contentDecayContent').innerHTML = `
+      <div class="score-circle" style="background: conic-gradient(${cd.decayScore > 80? '#00ff88' : '#ffaa00'} 0% ${cd.decayScore}%, #333 ${cd.decayScore}% 100%)">
+        <span>${cd.decayScore}</span>
+      </div>
+      <p><strong>Status:</strong> <span class="badge badge-${cd.status === 'Fresh'? 'green' : 'orange'}">${cd.status}</span></p>
+      <p><strong>Last Updated:</strong> ${cd.daysSinceUpdate} days ago</p>
+      ${cd.recommendations.map(r => `<div style="color:#ffaa00">• ${r}</div>`).join('')}
+    `;
+  }
+
+  // Featured Snippet
+  if (v51.featuredSnippet) {
+    document.getElementById('featuredSnippetCard').style.display = 'block';
+    const fs = v51.featuredSnippet;
+    document.getElementById('featuredSnippetContent').innerHTML = `
+      <p><strong>Best Format:</strong> <span class="badge badge-purple">${fs.bestFormat}</span></p>
+      ${fs.paragraph? `<div style="background:#222;padding:10px;margin:5px 0"><strong>Q:</strong> ${fs.paragraph.question}<br><strong>A:</strong> ${fs.paragraph.answer}</div>` : ''}
+      ${fs.list? `<div style="background:#222;padding:10px;margin:5px 0"><strong>List:</strong> ${fs.list.question}<br>${fs.list.items.map((i, idx) => `${idx+1}. ${i}`).join('<br>')}</div>` : ''}
+      <button onclick="navigator.clipboard.writeText(\`${fs.implementation.replace(/`/g, '\\`')}\`)">📋 Copy Implementation Code</button>
+    `;
+  }
+
+  // People Also Ask
+  if (v51.peopleAlsoAsk) {
+    document.getElementById('peopleAlsoAskCard').style.display = 'block';
+    const paa = v51.peopleAlsoAsk;
+    document.getElementById('peopleAlsoAskContent').innerHTML = `
+      <p><strong>Generated Questions:</strong> ${paa.totalGenerated}</p>
+      ${paa.questions.slice(0, 6).map(q => `<div style="background:#222;padding:8px;margin:4px 0">❓ ${q}</div>`).join('')}
+      <button onclick="navigator.clipboard.writeText(\`${paa.schemaCode.replace(/`/g, '\\`')}\`)">📋 Copy FAQ Schema</button>
+    `;
+  }
+
+  // Visibility Trend
+  if (v51.visibilityTrend) {
+    document.getElementById('visibilityTrendCard').style.display = 'block';
+    const vt = v51.visibilityTrend;
+    document.getElementById('visibilityTrendContent').innerHTML = `
+      <p><strong>Trend:</strong> <span style="color:${vt.direction === 'improving'? '#00ff88' : vt.direction === 'declining'? '#ff0000' : '#ffaa00'}">${vt.trend}</span> (${vt.direction})</p>
+      <p><strong>7-Day Average:</strong> ${vt.average}/100</p>
+    `;
+
+    // Render trend chart
+    const ctx = document.getElementById('trendChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: vt.history.map(h => h.date),
+        datasets: [{ label: 'AI Visibility Score', data: vt.history.map(h => h.score), borderColor: '#00ff88', tension: 0.4 }]
+      },
+      options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+    });
+  }
+}
+// v5.1 FEATURES RENDER END// ← Is line ke baad render code aayega
 }
 
 // ✅ FIX 1: Prevent undefined errors
@@ -359,7 +505,10 @@ function hideAllCards() {
   ["aiSimulationCard","seoAuditCard","titleAnalyzerCard","metaAnalyzerCard","headingCard",
    "internalLinkCard","imageSeoCard","entityCard","eeatCard","schemaCard","aeoReadinessCard",
    "realCitationCard","competitorCard","gapCard","roadmapCard","keywordTheftCard",
-   "briefCard","autopilotCard","aiVisibilityCard"].forEach(id => {
+   "briefCard","autopilotCard","aiVisibilityCard","topicalAuthorityCard","semanticSEOCard",
+   "citationOppCard","faqExpansionCard","aiSnippetsCard","trustSignalsCard","schemaOppCard",
+   "localSEOCard","brokenLinksCard","coreWebVitalsCard","linkOpportunityCard",
+   "contentDecayCard","featuredSnippetCard","peopleAlsoAskCard","visibilityTrendCard"].forEach(id => {
     document.getElementById(id).style.display = "none";
   });
 }

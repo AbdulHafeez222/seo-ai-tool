@@ -106,10 +106,17 @@ details summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
   margin: 8px 0 0 0;
 }
 
-</style>
-</head>
-<body>
-<div class="box">
+
+div[style*="background-color: rgb(26"] div,
+div[style*="background-color:#1"] div,
+div[style*="background: #2"] div {
+  color: #ffffff!important;
+}
+
+/* Impact green, Fix orange */
+div[style*="Impact"] { color: #00ff88!important; }
+div[style*="Fix"] { color: #ffaa00!important; }
+
 </style>
 </head>
 <body>
@@ -490,18 +497,44 @@ if (data.v51Features) {
 
     // Render trend chart
     const ctx = document.getElementById('trendChart').getContext('2d');
-    new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: vt.history.map(h => h.date),
-        datasets: [{ label: 'AI Visibility Score', data: vt.history.map(h => h.score), borderColor: '#00ff88', tension: 0.4 }]
-      },
-      options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
-    });
-  }
-}
-// v5.1 FEATURES RENDER END// ← Is line ke baad render code aayega
-}
+ new Chart(ctx, {
+  type: 'doughnut',
+  data: {
+    datasets: [{
+      data: [73.33, 26.67], // 2 decimal tak rakho
+      backgroundColor: ['#00ff88', '#1a1a1a'],
+      borderWidth: 0
+    }]
+  },
+  options: {
+    cutout: '75%', // Circle ko patla karo
+    plugins: {
+      legend: { display: false },
+      tooltip: { enabled: false }
+    }
+  },
+  plugins: [{
+    id: 'centerText',
+    beforeDraw: function(chart) {
+      let width = chart.width,
+          height = chart.height,
+          ctx = chart.ctx;
+
+      ctx.restore();
+      ctx.font = "bold 18px Arial";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#ffffff"; // White text
+
+      let score = chart.data.datasets[0].data[0];
+      let text = Math.round(score) + "%"; // Ab 73% dikhega
+      let textX = Math.round((width - ctx.measureText(text).width) / 2);
+      let textY = height / 2;
+
+      ctx.fillText(text, textX, textY);
+      ctx.save();
+    }
+  }]
+})
 
 // ✅ FIX 1: Prevent undefined errors
 const fixData = (data) => ({

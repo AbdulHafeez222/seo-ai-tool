@@ -989,20 +989,53 @@ app.get("/roadmap", async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: "URL required" });
+    
     const data = await analyzeSingleUrl(url);
-    const roadmap = data.aiAutopilot.map((task, i) => ({
-      step: i + 1, task: task.task, priority: task.priority,
-      why: task.priority === 'CRITICAL'? 'Blocks AI citations' : 'Improves trust',
-      code: task.task.includes('Schema')? '<script type="application/ld+json">...</script>' : 'HTML changes needed'
+    
+    // ✅ FIX: Null check + fallback agar aiAutopilot missing hai
+    const autopilotTasks = data.aiAutopilot || [];
+    
+    if (autopilotTasks.length === 0) {
+      return res.json({
+        currentScore: data.overallAIVisibilityScore || data.score || 0,
+        potentialScore: data.overallAIVisibilityScore || data.score || 0,
+        roadmap: [{
+          step: 1,
+          task: "No Critical Issues Found",
+          priority: "LOW",
+          why: "Your site already has good AI visibility. Maintain current optimizations.",
+          code: "No action needed"
+        }],
+        estimatedTime: "0 hours"
+      });
+    }
+    
+    const roadmap = autopilotTasks.map((task, i) => ({
+      step: i + 1, 
+      task: task.task || 'Unknown Task', 
+      priority: task.priority || 'MEDIUM',
+      why: task.priority === 'CRITICAL'? 'Blocks AI citations' : 
+           task.priority === 'HIGH'? 'Improves trust signals' : 'Minor optimization',
+      code: task.task?.includes('Schema')? 
+        '<script type="application/ld+json">{"@context":"https://schema.org"}</script>' : 
+        'HTML/CSS changes needed',
+      impact: task.impact || '+5',
+      effort: task.effort || '15 mins'
     }));
+    
+    const currentScore = data.overallAIVisibilityScore || data.score || 0;
+    const totalImpact = autopilotTasks.reduce((sum, t) => sum + (parseInt(t.impact) || 5), 0);
+    
     res.json({
-      currentScore: data.overallAIVisibilityScore,
-      potentialScore: Math.min(100, data.overallAIVisibilityScore + 40),
+      currentScore: currentScore,
+      potentialScore: Math.min(100, currentScore + totalImpact),
       roadmap,
-      estimatedTime: `${roadmap.length * 2} hours`
+      estimatedTime: `${Math.ceil(roadmap.length * 0.5)} hours`
     });
+    
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Roadmap error:', err);
+    res.status(500).json({ error: 'Roadmap failed: ' + err.message });
   }
 });
 

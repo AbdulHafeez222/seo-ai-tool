@@ -53,6 +53,27 @@ details summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
 .dark p { color: #cbd5e1; }
 .dark small { color: #94a3b8 !important; }
 .dark #citationReasonsList { background: #0f172a !important; color: #e2e8f0 !important; }
+  feature-card {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 15px 0;
+    }
+    .score-circle {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: bold;
+      margin: 10px auto;
+    }
+    .opp-item {
+      border-radius: 4px;
+    }
 </style>
 </head>
 <body>
@@ -223,11 +244,89 @@ details summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
 
   <div id="result"></div>
 </div>
+  <!-- Existing 20 features ke baad ye 8 naye sections add karo -->
 
+<!-- NEW FEATURE START: Topical Authority -->
+<div id="topicalAuthorityCard" class="card" style="display:none">
+  <h3>📚 Topical Authority Score</h3>
+  <div id="topicalAuthorityContent"></div>
+</div>
+<!-- NEW FEATURE END -->
+
+<!-- NEW FEATURE START: Semantic SEO -->
+<div id="semanticSEOCard" class="card" style="display:none">
+  <h3>🧠 Semantic SEO Analysis</h3>
+  <div id="semanticSEOContent"></div>
+</div>
+<!-- NEW FEATURE END -->
+
+<!-- NEW FEATURE START: Citation Opportunities -->
+<div id="citationOppCard" class="card" style="display:none">
+  <h3>🤖 AI Citation Opportunities</h3>
+  <div id="citationOppContent"></div>
+</div>
+<!-- NEW FEATURE END -->
+
+<!-- NEW FEATURE START: FAQ Expansion -->
+<div id="faqExpansionCard" class="card" style="display:none">
+  <h3>❓ AI-Friendly FAQ Expansion</h3>
+  <div id="faqExpansionContent"></div>
+</div>
+<!-- NEW FEATURE END -->
+
+<!-- NEW FEATURE START: AI Snippets -->
+<div id="aiSnippetsCard" class="card" style="display:none">
+  <h3>✨ AI Snippet Generator</h3>
+  <div id="aiSnippetsContent"></div>
+</div>
+<!-- NEW FEATURE END -->
+
+<!-- NEW FEATURE START: Trust Signals -->
+<div id="trustSignalsCard" class="card" style="display:none">
+  <h3>🛡️ Trust Signal Scanner</h3>
+  <div id="trustSignalsContent"></div>
+</div>
+<!-- NEW FEATURE END -->
+
+<!-- NEW FEATURE START: Schema Opportunities -->
+<div id="schemaOppCard" class="card" style="display:none">
+  <h3>📋 Schema Opportunity Finder</h3>
+  <div id="schemaOppContent"></div>
+</div>
+<!-- NEW FEATURE END -->
+
+<!-- NEW FEATURE START: Local SEO -->
+<div id="localSEOCard" class="card" style="display:none">
+  <h3>📍 Local SEO Analyzer</h3>
+  <div id="localSEOContent"></div>
+</div>
+<!-- NEW FEATURE END -->
 <script>
 const API_BASE = "https://seo-ai-tool-s47q.onrender.com";
 let seoChart, aeoChart, comparisonChart;
 let lastScanData = null; // ✅ FIX 1 & 2: Global variable
+
+
+// NEW FEATURE START: Copy Functions
+function copyFAQs() {
+  if (!lastScanData?.faqExpansion) return;
+  const text = lastScanData.faqExpansion.map((f, i) => `Q${i+1}: ${f.q}\nA: ${f.a}`).join('\n\n');
+  navigator.clipboard.writeText(text);
+  alert('FAQs copied!');
+}
+
+function copySnippet(type) {
+  if (!lastScanData?.aiSnippets) return;
+  const text = type === 'direct'? lastScanData.aiSnippets.directAnswer : lastScanData.aiSnippets.featuredSnippet;
+  navigator.clipboard.writeText(text);
+  alert('Snippet copied!');
+}
+// NEW FEATURE END
+
+async function scan() {
+  // ... existing scan code
+  lastScanData = data; // ← Is line ke baad render code aayega
+}
 
 // ✅ FIX 1: Prevent undefined errors
 const fixData = (data) => ({
@@ -304,7 +403,112 @@ async function scan() {
     lastScanData = data; // ✅ FIX 2
     saveToHistory(data);
     hideLoading();
-    
+    // NEW FEATURE START: Render New Features
+if (data.topicalAuthority) {
+  document.getElementById('topicalAuthorityCard').style.display = 'block';
+  document.getElementById('topicalAuthorityContent').innerHTML = `
+    <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${data.topicalAuthority.score}%, #333 ${data.topicalAuthority.score}% 100%)">
+      <span>${data.topicalAuthority.score}</span>
+    </div>
+    <p><strong>Depth:</strong> ${data.topicalAuthority.depth}</p>
+    <p><strong>Topics Covered:</strong> ${data.topicalAuthority.topicsCovered}/9</p>
+    <div><strong>Missing Subtopics:</strong> ${data.topicalAuthority.missingSubtopics.join(', ') || 'None'}</div>
+  `;
+}
+
+if (data.semanticSEO) {
+  document.getElementById('semanticSEOCard').style.display = 'block';
+  document.getElementById('semanticSEOContent').innerHTML = `
+    <p><strong>NLP Score:</strong> ${data.semanticSEO.nlpScore}/100</p>
+    <p><strong>Entities Found:</strong> ${data.semanticSEO.entities.join(', ') || 'None'}</p>
+    <p><strong>Semantic Gaps:</strong> ${data.semanticSEO.semanticGaps.join(', ') || 'None'}</p>
+    <p><strong>Semantic HTML:</strong> ${data.semanticSEO.hasSemanticHTML? '✓ Yes' : '✗ No'}</p>
+  `;
+}
+
+if (data.citationOpportunities) {
+  document.getElementById('citationOppCard').style.display = 'block';
+  document.getElementById('citationOppContent').innerHTML = data.citationOpportunities.map(opp => `
+    <div class="opp-item" style="margin:10px 0; padding:10px; background:#222; border-left:3px solid #00ff88">
+      <strong>${opp.engine}:</strong> ${opp.reason}<br>
+      <span style="color:#00ff88">Impact: ${opp.impact}</span> | 
+      <span style="color:#ffaa00">Fix: ${opp.fix}</span>
+    </div>
+  `).join('');
+}
+
+if (data.faqExpansion) {
+  document.getElementById('faqExpansionCard').style.display = 'block';
+  document.getElementById('faqExpansionContent').innerHTML = data.faqExpansion.map((faq, i) => `
+    <div style="margin:10px 0; padding:10px; background:#222">
+      <strong>Q${i+1}: ${faq.q}</strong><br>
+      <span style="color:#aaa">A: ${faq.a}</span>
+    </div>
+  `).join('') + `<button onclick="copyFAQs()">📋 Copy All FAQs</button>`;
+}
+
+if (data.aiSnippets) {
+  document.getElementById('aiSnippetsCard').style.display = 'block';
+  document.getElementById('aiSnippetsContent').innerHTML = `
+    <div style="margin:10px 0">
+      <strong>Direct Answer (${data.aiSnippets.wordCount} words):</strong>
+      <div style="background:#222; padding:10px; margin:5px 0">${data.aiSnippets.directAnswer}</div>
+      <button onclick="copySnippet('direct')">Copy Direct Answer</button>
+    </div>
+    <div style="margin:10px 0">
+      <strong>Featured Snippet Block:</strong>
+      <pre style="background:#222; padding:10px; white-space:pre-wrap">${data.aiSnippets.featuredSnippet}</pre>
+      <button onclick="copySnippet('featured')">Copy Featured Snippet</button>
+    </div>
+  `;
+}
+
+if (data.trustSignals) {
+  document.getElementById('trustSignalsCard').style.display = 'block';
+  const signals = data.trustSignals;
+  document.getElementById('trustSignalsContent').innerHTML = `
+    <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${signals.trustScore}%, #333 ${signals.trustScore}% 100%)">
+      <span>${signals.trustScore}</span>
+    </div>
+    <p><strong>Signals Found:</strong> ${signals.totalSignals}/7</p>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px">
+      ${signals.hasAuthor? '✓' : '✗'} Author 
+      ${signals.hasContact? '✓' : '✗'} Contact 
+      ${signals.hasAbout? '✓' : '✗'} About 
+      ${signals.hasPrivacyPolicy? '✓' : '✗'} Privacy Policy 
+      ${signals.hasSocialProfiles? '✓' : '✗'} Social Profiles 
+      ${signals.hasReviews? '✓' : '✗'} Reviews 
+      ${signals.hasTestimonials? '✓' : '✗'} Testimonials
+    </div>
+  `;
+}
+
+if (data.schemaOpportunities) {
+  document.getElementById('schemaOppCard').style.display = 'block';
+  document.getElementById('schemaOppContent').innerHTML = data.schemaOpportunities.map(opp => `
+    <div style="margin:10px 0; padding:10px; background:#222; border-left:3px solid ${opp.priority==='CRITICAL'?'#ff0000':opp.priority==='HIGH'?'#ffaa00':'#00ff88'}">
+      <strong>${opp.type}</strong> <span style="color:#ffaa00">[${opp.priority}]</span><br>
+      ${opp.reason}<br>
+      <span style="color:#00ff88">Impact: ${opp.impact}</span>
+    </div>
+  `).join('');
+}
+
+if (data.localSEO) {
+  document.getElementById('localSEOCard').style.display = 'block';
+  const local = data.localSEO;
+  document.getElementById('localSEOContent').innerHTML = `
+    <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${local.localScore}%, #333 ${local.localScore}% 100%)">
+      <span>${local.localScore}</span>
+    </div>
+    <p><strong>NAP Status:</strong> ${local.napConsistency}</p>
+    <p><strong>LocalBusiness Schema:</strong> ${local.hasLocalBusiness? '✓ Present' : '✗ Missing'}</p>
+    <p><strong>Google Maps:</strong> ${local.hasMap? '✓ Embedded' : '✗ Missing'}</p>
+    <p><strong>City Signals:</strong> ${local.hasCity? '✓ Found' : '✗ Missing'}</p>
+    ${local.recommendations.length > 0? `<div style="color:#ffaa00">Recommendations: ${local.recommendations.join(', ')}</div>` : ''}
+  `;
+}
+// NEW FEATURE END
     if (data.error) {
       document.getElementById("result").innerHTML = `<div class="card">❌ ${data.error}</div>`;
       return;

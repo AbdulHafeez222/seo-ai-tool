@@ -1,7 +1,7 @@
 import express from "express";
 import * as cheerio from "cheerio";
 import cors from "cors";
-
+import axios from "axios";
 const app = express();
 const PORT = process.env.PORT || 10000;
 const scanHistory = [];
@@ -1078,7 +1078,7 @@ app.get("/history", (req, res) => {
 });
 // NEW MODULE START: v5.1 Additional Features
 
-const axios = require('axios');
+
 
 // Helper: Safe execution wrapper
 const safeRun = async (fn, fallback = null) => {

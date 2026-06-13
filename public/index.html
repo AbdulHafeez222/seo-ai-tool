@@ -81,9 +81,7 @@ details summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
 .opp-item {
   border-radius: 4px;
 }
-.opp-item {
-  border-radius: 4px;
-}
+
 
 /* FAQ Boxes Ka Fix - Yahan Paste Karo */
 .faq-box, .ai-faq-box, .question-box {
@@ -402,11 +400,12 @@ function copySnippet(type) {
 }
 // NEW FEATURE END
 
-async function scan() {
-  // ... existing scan code
-  lastScanData = data; // v5.1 FEATURES RENDER START
-if (data.v51Features) {
-  const v51 = data.v51Features;
+
+
+  showLoading(); // ✅ FIX 19
+  hideAllCards();
+  document.getElementById("result").innerHTML = "";
+
 
   // Broken Links
   if (v51.brokenLinks) {

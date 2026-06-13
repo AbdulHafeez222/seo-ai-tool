@@ -15,7 +15,7 @@ app.use(express.static("public"));
 async function safeFetch(url, options = {}) {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+   const timeout = setTimeout(() => controller.abort(), 30000);
     const res = await fetch(url, {
     ...options,
       headers: {

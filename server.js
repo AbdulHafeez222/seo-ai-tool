@@ -238,6 +238,9 @@ const safeArray = (arr) => Array.isArray(arr)? arr : [];
 // NEW FEATURE END
 // ========== MAIN ANALYZER ==========
 async function analyzeSingleUrl(url) {
+   url = String(url).trim();
+  if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
+  url = url.replace(/\s+/g, '');
   try  {  
   const startTime = Date.now();
   const html = await safeFetch(url);

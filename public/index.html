@@ -80,7 +80,7 @@ details summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
 }
 .opp-item {
   border-radius: 4px;
-}}
+}
 .opp-item {
   border-radius: 4px;
 }
@@ -730,9 +730,9 @@ if (data.localSEO) {
   } catch (err) { // ✅ FIX 18
     hideLoading();
     document.getElementById("result").innerHTML = `<div class="card">❌ Error: ${err.message}</div>`;
-  }
+  
 }
-
+  
 function renderAllResults(data) {
   renderCharts(data);
   renderBasicResults(data);

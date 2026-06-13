@@ -1076,7 +1076,333 @@ app.get("/content-brief", async (req, res) => {
 app.get("/history", (req, res) => {
   res.json([]);
 });
+// NEW MODULE START: v5.1 Additional Features
+const cheerio = require('cheerio');
+const axios = require('axios');
 
+// Helper: Safe execution wrapper
+const safeRun = async (fn, fallback = null) => {
+  try { return await fn(); } catch (e) { console.error('Feature error:', e.message); return fallback; }
+};
+
+// 1. REAL BROKEN LINK CHECKER
+async function checkBrokenLinks($, baseUrl) {
+  return safeRun(async () => {
+    const links = [];
+    $('a[href]').each((i, el) => {
+      const href = $(el).attr('href');
+      if (href &&!href.startsWith('#') &&!href.startsWith('mailto:') &&!href.startsWith('tel:')) {
+        links.push(new URL(href, baseUrl).href);
+      }
+    });
+
+    const uniqueLinks = [...new Set(links)].slice(0, 50); // Limit for performance
+    const results = await Promise.allSettled(
+      uniqueLinks.map(async (url) => {
+        try {
+          const res = await axios.head(url, { timeout: 5000, validateStatus: () => true });
+          return { url, status: res.status, broken: res.status >= 400 };
+        } catch { return { url, status: 0, broken: true }; }
+      })
+    );
+
+    const checked = results.map(r => r.value || r.reason).filter(Boolean);
+    return {
+      totalChecked: checked.length,
+      brokenLinks: checked.filter(l => l.broken),
+      brokenCount: checked.filter(l => l.broken).length,
+      healthScore: Math.round(((checked.length - checked.filter(l => l.broken).length) / checked.length) * 100) || 100
+    };
+  }, { totalChecked: 0, brokenLinks: [], brokenCount: 0, healthScore: 100 });
+}
+
+// 2. CORE WEB VITALS ANALYSIS
+async function analyzeCoreWebVitals(url) {
+  return safeRun(async () => {
+    // Using Google PageSpeed Insights API - free tier
+    const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=mobile&category=performance`;
+    const res = await axios.get(apiUrl, { timeout: 15000 });
+    const lighthouse = res.data.lighthouseResult;
+    const audits = lighthouse.audits;
+
+    return {
+      lcp: Math.round(audits['largest-contentful-paint']?.numericValue || 0), // ms
+      fid: Math.round(audits['max-potential-fid']?.numericValue || 0), // ms
+      cls: audits['cumulative-layout-shift']?.numericValue || 0,
+      performanceScore: Math.round((lighthouse.categories.performance?.score || 0) * 100),
+      lcpGrade: audits['largest-contentful-paint']?.numericValue < 2500? 'Good' : audits['largest-contentful-paint']?.numericValue < 4000? 'Needs Improvement' : 'Poor',
+      clsGrade: audits['cumulative-layout-shift']?.numericValue < 0.1? 'Good' : audits['cumulative-layout-shift']?.numericValue < 0.25? 'Needs Improvement' : 'Poor',
+      recommendations: audits['largest-contentful-paint']?.details?.items?.[0]?.node?.explanation || 'Optimize images and server response time'
+    };
+  }, { lcp: 0, fid: 0, cls: 0, performanceScore: 0, lcpGrade: 'Unknown', clsGrade: 'Unknown', recommendations: 'Unable to fetch Core Web Vitals' });
+}
+
+// 3. TOPICAL AUTHORITY SCORE - Enhanced
+function calculateTopicalAuthority($, html, entities) {
+  return safeRun(() => {
+    const wordCount = $('body').text().split(/\s+/).length;
+    const h2Count = $('h2').length;
+    const h3Count = $('h3').length;
+    const entityCount = entities.brands?.length + entities.services?.length + entities.locations?.length || 0;
+
+    // Depth indicators
+    const hasGuides = /guide|tutorial|how to|complete/i.test(html);
+    const hasComparisons = /vs|versus|compare|best/i.test(html);
+    const hasExamples = /example|case study|for instance/i.test(html);
+    const hasStats = /\d+%|\$\d+|\d+x/i.test(html);
+
+    let score = 0;
+    if (wordCount > 2000) score += 30; else if (wordCount > 1000) score += 20; else if (wordCount > 500) score += 10;
+    if (h2Count >= 5) score += 20; else if (h2Count >= 3) score += 10;
+    if (entityCount >= 10) score += 20; else if (entityCount >= 5) score += 10;
+    if (hasGuides) score += 10; if (hasComparisons) score += 10; if (hasExamples) score += 5; if (hasStats) score += 5;
+
+    return {
+      score: Math.min(score, 100),
+      wordCount,
+      headingDepth: h2Count + h3Count,
+      entityDensity: entityCount,
+      contentSignals: {
+        hasGuides, hasComparisons, hasExamples, hasStats
+      },
+      missingElements: [
+       !hasGuides && 'Add comprehensive guides',
+       !hasComparisons && 'Add comparison content',
+       !hasStats && 'Add statistics and data',
+        wordCount < 1500 && 'Expand content depth'
+      ].filter(Boolean),
+      depth: score > 80? 'Expert' : score > 60? 'Intermediate' : score > 40? 'Basic' : 'Shallow'
+    };
+  }, { score: 0, wordCount: 0, headingDepth: 0, entityDensity: 0, contentSignals: {}, missingElements: [], depth: 'Unknown' });
+}
+
+// 4. AI ENTITY EXTRACTION - Enhanced
+function extractAIEntities($, html) {
+  return safeRun(() => {
+    const text = $('body').text();
+
+    // Brands: Capitalized words, company names
+    const brands = [...new Set((text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g) || [])
+     .filter(w => w.length > 3 &&!['The', 'This', 'Your', 'Our', 'WordPress'].includes(w)))].slice(0, 15);
+
+    // Services: Action words + service/product
+    const services = [...new Set((text.match(/\b(?:website|seo|design|development|marketing|branding|logo|hosting)\s+(?:design|service|services|optimization|development)/gi) || []))].slice(0, 15);
+
+    // Locations: Countries, cities
+    const locations = [...new Set((text.match(/\b(?:USA|UK|Canada|Pakistan|India|UAE|Australia|London|New York|Dubai|Karachi|Lahore)\b/gi) || []))];
+
+    // People: Mr/Mrs/Dr + Name patterns
+    const people = [...new Set((text.match(/\b(?:Mr|Mrs|Ms|Dr)\.?\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b/g) || []))];
+
+    return { brands, services, locations, people, totalEntities: brands.length + services.length + locations.length + people.length };
+  }, { brands: [], services: [], locations: [], people: [], totalEntities: 0 });
+}
+
+// 5. INTERNAL LINK OPPORTUNITY FINDER
+function findInternalLinkOpportunities($, html) {
+  return safeRun(() => {
+    const headings = [];
+    $('h2, h3').each((i, el) => {
+      headings.push({
+        text: $(el).text().trim(),
+        level: el.tagName,
+        anchor: $(el).text().trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      });
+    });
+
+    const bodyText = $('body').text().toLowerCase();
+    const opportunities = [];
+
+    headings.forEach(h => {
+      const keywords = h.text.toLowerCase().split(' ').filter(w => w.length > 4);
+      keywords.forEach(keyword => {
+        const mentions = (bodyText.match(new RegExp(keyword, 'g')) || []).length;
+        if (mentions >= 2) { // Keyword appears multiple times but not linked
+          opportunities.push({
+            keyword,
+            targetHeading: h.text,
+            anchor: `#${h.anchor}`,
+            priority: mentions > 3? 'HIGH' : 'MEDIUM',
+            reason: `Keyword "${keyword}" mentioned ${mentions} times. Link to ${h.text}`
+          });
+        }
+      });
+    });
+
+    return {
+      opportunities: opportunities.slice(0, 10),
+      totalFound: opportunities.length,
+      linkScore: Math.max(0, 100 - (opportunities.length * 5))
+    };
+  }, { opportunities: [], totalFound: 0, linkScore: 100 });
+}
+
+// 6. CONTENT DECAY DETECTOR
+function detectContentDecay($, html, lastModified) {
+  return safeRun(() => {
+    const currentYear = new Date().getFullYear();
+    const text = $('body').text();
+
+    // Check for outdated years
+    const yearsFound = text.match(/\b(20[1-2][0-9])\b/g) || [];
+    const outdatedYears = yearsFound.filter(y => parseInt(y) < currentYear - 1);
+
+    // Check for outdated stats/claims
+    const hasOutdatedStats = /in 202[0-3]|last year|recently/i.test(text);
+
+    // Check last modified date
+    const daysSinceUpdate = lastModified? Math.floor((Date.now() - new Date(lastModified)) / (1000 * 60 * 60 * 24)) : 999;
+
+    let decayScore = 100;
+    if (outdatedYears.length > 0) decayScore -= outdatedYears.length * 10;
+    if (hasOutdatedStats) decayScore -= 15;
+    if (daysSinceUpdate > 365) decayScore -= 20; else if (daysSinceUpdate > 180) decayScore -= 10;
+
+    return {
+      decayScore: Math.max(0, decayScore),
+      daysSinceUpdate,
+      outdatedYears: [...new Set(outdatedYears)],
+      hasOutdatedStats,
+      recommendations: [
+        outdatedYears.length > 0 && `Update ${outdatedYears.length} outdated year references`,
+        hasOutdatedStats && 'Refresh statistics and claims',
+        daysSinceUpdate > 180 && 'Update content - last modified > 6 months ago'
+      ].filter(Boolean),
+      status: decayScore > 80? 'Fresh' : decayScore > 60? 'Aging' : 'Decayed'
+    };
+  }, { decayScore: 100, daysSinceUpdate: 0, outdatedYears: [], hasOutdatedStats: false, recommendations: [], status: 'Unknown' });
+}
+
+// 7. FEATURED SNIPPET GENERATOR
+function generateFeaturedSnippet($, title, metaDescription, h1) {
+  return safeRun(() => {
+    const question = h1 || title;
+    const answer = metaDescription || $('p').first().text().substring(0, 300);
+
+    // Generate paragraph snippet
+    const paragraphSnippet = {
+      type: 'paragraph',
+      question: `What is ${question}?`,
+      answer: answer,
+      wordCount: answer.split(' ').length,
+      optimal: answer.split(' ').length >= 40 && answer.split(' ').length <= 60
+    };
+
+    // Generate list snippet from H2s
+    const listItems = [];
+    $('h2').slice(0, 5).each((i, el) => listItems.push($(el).text().trim()));
+    const listSnippet = {
+      type: 'list',
+      question: `How to ${question.toLowerCase()}?`,
+      items: listItems,
+      count: listItems.length,
+      optimal: listItems.length >= 3 && listItems.length <= 8
+    };
+
+    // Generate table snippet if tables exist
+    const tableData = [];
+    $('table tr').slice(0, 5).each((i, row) => {
+      const cells = [];
+      $(row).find('td, th').each((j, cell) => cells.push($(cell).text().trim()));
+      if (cells.length) tableData.push(cells);
+    });
+
+    return {
+      paragraph: paragraphSnippet,
+      list: listSnippet,
+      table: tableData.length > 0? { type: 'table', data: tableData, optimal: true } : null,
+      bestFormat: listItems.length >= 3? 'list' : paragraphSnippet.optimal? 'paragraph' : 'none',
+      implementation: `Add this HTML above the fold:\n<div itemscope itemtype="https://schema.org/Question">\n <h2 itemprop="name">${paragraphSnippet.question}</h2>\n <div itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">\n <p itemprop="text">${paragraphSnippet.answer}</p>\n </div>\n</div>`
+    };
+  }, { paragraph: null, list: null, table: null, bestFormat: 'none', implementation: '' });
+}
+
+// 8. PEOPLE ALSO ASK GENERATOR
+function generatePeopleAlsoAsk($, keywords, title) {
+  return safeRun(() => {
+    const mainTopic = title || keywords[0] || 'this topic';
+    const baseQuestions = [
+      `What is ${mainTopic}?`,
+      `How does ${mainTopic} work?`,
+      `Why is ${mainTopic} important?`,
+      `How much does ${mainTopic} cost?`,
+      `What are the benefits of ${mainTopic}?`,
+      `How long does ${mainTopic} take?`,
+      `Is ${mainTopic} worth it?`,
+      `What is the best ${mainTopic}?`,
+      `How to choose ${mainTopic}?`,
+      `Where to get ${mainTopic}?`
+    ];
+
+    // Add keyword-specific questions
+    keywords.slice(0, 3).forEach(kw => {
+      baseQuestions.push(`What is ${kw}?`, `How to use ${kw}?`);
+    });
+
+    return {
+      questions: baseQuestions.slice(0, 12),
+      totalGenerated: 12,
+      schemaCode: `{\n "@context": "https://schema.org",\n "@type": "FAQPage",\n "mainEntity": [\n${baseQuestions.slice(0, 5).map(q => ` {\n "@type": "Question",\n "name": "${q}",\n "acceptedAnswer": {\n "@type": "Answer",\n "text": "Answer about ${q.toLowerCase()}..."\n }\n }`).join(',\n')}\n ]\n}`,
+      implementation: 'Add FAQPage schema to capture PAA boxes in Google'
+    };
+  }, { questions: [], totalGenerated: 0, schemaCode: '', implementation: '' });
+}
+
+// 9. AI VISIBILITY TREND TRACKING - Server side storage
+const trendDB = {}; // In-memory for demo. Use Redis/DB in production
+
+function trackAIVisibilityTrend(url, currentScore) {
+  return safeRun(() => {
+    const key = Buffer.from(url).toString('base64');
+    if (!trendDB[key]) trendDB[key] = [];
+
+    trendDB[key].push({
+      score: currentScore,
+      timestamp: new Date().toISOString(),
+      date: new Date().toISOString().split('T')[0]
+    });
+
+    // Keep last 30 entries
+    if (trendDB[key].length > 30) trendDB[key] = trendDB[key].slice(-30);
+
+    const history = trendDB[key];
+    const trend = history.length > 1?
+      history[history.length - 1].score - history[0].score : 0;
+
+    return {
+      current: currentScore,
+      history: history.slice(-7), // Last 7 scans
+      trend: trend > 0? `+${trend}` : trend.toString(),
+      direction: trend > 0? 'improving' : trend < 0? 'declining' : 'stable',
+      average: Math.round(history.reduce((sum, h) => sum + h.score, 0) / history.length)
+    };
+  }, { current: currentScore, history: [], trend: '0', direction: 'stable', average: currentScore });
+}
+
+// INTEGRATE INTO EXISTING SCAN ENDPOINT
+// Find your existing /scan endpoint and add this BEFORE res.json(data):
+/*
+  // Append v5.1 features - DO NOT MODIFY EXISTING DATA
+  const $ = cheerio.load(html);
+  const entities = extractAIEntities($, html);
+
+  data.v51Features = {
+    brokenLinks: await checkBrokenLinks($, url),
+    coreWebVitals: await analyzeCoreWebVitals(url),
+    topicalAuthority: calculateTopicalAuthority($, html, entities),
+    aiEntities: entities,
+    internalLinkOpportunities: findInternalLinkOpportunities($, html),
+    contentDecay: detectContentDecay($, html, data.lastModified),
+    featuredSnippet: generateFeaturedSnippet($, data.title, data.metaDescription, data.h1),
+    peopleAlsoAsk: generatePeopleAlsoAsk($, data.keywords, data.title),
+    visibilityTrend: trackAIVisibilityTrend(url, data.overallAIVisibilityScore)
+  };
+
+  // Keep backward compatibility - merge into root for old frontend
+  data.brokenLinkCount = data.v51Features.brokenLinks.brokenCount;
+  data.lcpScore = data.v51Features.coreWebVitals.lcp;
+*/
+// NEW MODULE END
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform v5.0 running on port ${PORT}`);
   console.log(`📊 All 20 features enabled | Empty HTML fix applied | Error handling active`);

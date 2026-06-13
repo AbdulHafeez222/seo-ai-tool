@@ -231,7 +231,11 @@ function extractEntitiesFromContent(text, headings = "") {
 
   return { keywords, entities, prices, locations, services, brands };
 }
-
+// NEW FEATURE START: Production Stability Helpers
+const safe = (val, fallback = '') => val!== undefined && val!== null? val : fallback;
+const clamp = (num, min = 0, max = 100) => Math.min(max, Math.max(min, isNaN(num)? 0 : num));
+const safeArray = (arr) => Array.isArray(arr)? arr : [];
+// NEW FEATURE END
 // ========== MAIN ANALYZER ==========
 async function analyzeSingleUrl(url) {
   try  {  
@@ -715,7 +719,177 @@ async function analyzeSingleUrl(url) {
    !hasLastModified && { task: "Add Last Modified Date", impact: "+6", effort: "5 mins", priority: "MEDIUM" },
       imagesWithoutAlt > 0 && { task: `Add ALT to ${imagesWithoutAlt} images`, impact: "+7", effort: "10 mins", priority: "MEDIUM" }
     ].filter(Boolean);
+// NEW FEATURE START: Topical Authority Score
+const calculateTopicalAuthority = ($, keywords, h2s, h3s) => {
+  const allHeadings = [...safeArray(h2s),...safeArray(h3s)].map(h => h.toLowerCase());
+  const keywordSet = new Set(safeArray(keywords).map(k => k.toLowerCase()));
 
+  const coreTopics = ['what', 'why', 'how', 'best', 'guide', 'tutorial', 'examples', 'tips', 'benefits'];
+  const topicsCovered = coreTopics.filter(topic =>
+    allHeadings.some(h => h.includes(topic))
+  ).length;
+
+  const depthScore = clamp((topicsCovered / coreTopics.length) * 60);
+  const keywordCoverage = clamp((keywordSet.size / 10) * 40);
+  const score = clamp(depthScore + keywordCoverage);
+
+  const missingSubtopics = coreTopics.filter(topic =>
+   !allHeadings.some(h => h.includes(topic))
+  );
+
+  return { score, topicsCovered, missingSubtopics, depth: topicsCovered >= 6? 'Deep' : topicsCovered >= 3? 'Medium' : 'Shallow' };
+};
+// NEW FEATURE END
+
+// NEW FEATURE START: Semantic SEO Analyzer
+const analyzeSemanticSEO = ($, bodyText) => {
+  const text = safe(bodyText).toLowerCase();
+  const entities = [];
+  const nlpKeywords = ['comprehensive', 'expert', 'proven', 'data-driven', 'results', 'strategy', 'solution', 'professional'];
+
+  // Detect entities: Capitalized words that aren't sentence starts
+  const entityRegex = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g;
+  const matches = safe(bodyText).match(entityRegex) || [];
+  matches.forEach(m => {
+    if (m.length > 3 &&!['The', 'This', 'That', 'Your'].includes(m)) entities.push(m);
+  });
+
+  const nlpCoverage = nlpKeywords.filter(k => text.includes(k)).length;
+  const semanticGaps = nlpKeywords.filter(k =>!text.includes(k)).slice(0, 5);
+
+  return {
+    entities: [...new Set(entities)].slice(0, 15),
+    nlpScore: clamp((nlpCoverage / nlpKeywords.length) * 100),
+    semanticGaps,
+    hasSemanticHTML: $('article, section, aside, nav').length > 0
+  };
+};
+// NEW FEATURE END
+
+// NEW FEATURE START: AI Citation Opportunity Finder
+const findCitationOpportunities = (data) => {
+  const opportunities = [];
+  const { hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatData } = data;
+
+  if (!hasFAQ) opportunities.push({ engine: 'ChatGPT', reason: 'Missing FAQ Schema - ChatGPT loves Q&A format', impact: '+20', fix: 'Add FAQ Schema with 3+ questions' });
+  if (!hasDirectAnswer) opportunities.push({ engine: 'Perplexity', reason: 'No direct answer in first 100 words', impact: '+15', fix: 'Add 50-word summary at top' });
+  if (!hasAuthor) opportunities.push({ engine: 'Gemini', reason: 'No author bio - Gemini checks E-E-A-T', impact: '+12', fix: 'Add author with credentials' });
+  if (!hasHowTo) opportunities.push({ engine: 'All', reason: 'Missing HowTo Schema for tutorials', impact: '+10', fix: 'Add HowTo Schema if applicable' });
+  if (wordCount < 1500) opportunities.push({ engine: 'All', reason: 'Content depth below 1500 words', impact: '+8', fix: 'Expand content to 2000+ words' });
+  if (safe(eeatData?.score) < 70) opportunities.push({ engine: 'Gemini', reason: 'Low E-E-A-T score', impact: '+18', fix: 'Add reviews, testimonials, social proof' });
+
+  return opportunities;
+};
+// NEW FEATURE END
+
+// NEW FEATURE START: Competitor Content Gap Engine
+const competitorContentGap = (userData, compData) => {
+  const userHeadings = [...safeArray(userData.h2s),...safeArray(userData.h3s)];
+  const compHeadings = [...safeArray(compData.h2s),...safeArray(compData.h3s)];
+  const userKeywords = new Set(safeArray(userData.keywords));
+  const compKeywords = new Set(safeArray(compData.keywords));
+
+  const headingGaps = compHeadings.filter(h =>!userHeadings.some(uh => uh.toLowerCase().includes(h.toLowerCase().substring(0, 10))));
+  const keywordGaps = [...compKeywords].filter(k =>!userKeywords.has(k));
+
+  const schemaGaps = [];
+  if (compData.hasFAQ &&!userData.hasFAQ) schemaGaps.push('FAQ');
+  if (compData.hasHowTo &&!userData.hasHowTo) schemaGaps.push('HowTo');
+  if (compData.hasAuthor &&!userData.hasAuthor) schemaGaps.push('Author');
+
+  return {
+    headingGaps: headingGaps.slice(0, 10),
+    keywordGaps: keywordGaps.slice(0, 15),
+    schemaGaps,
+    contentLengthDiff: safe(compData.wordCount, 0) - safe(userData.wordCount, 0),
+    competitorHasMore: safe(compData.wordCount, 0) > safe(userData.wordCount, 0)
+  };
+};
+// NEW FEATURE END
+
+// NEW FEATURE START: FAQ Expansion Generator
+const generateFAQExpansion = (keywords, h2s, brand) => {
+  const mainKeyword = safeArray(keywords)[0] || safe(brand, 'service');
+  const faqs = [
+    { q: `What is ${mainKeyword}?`, a: `${mainKeyword} is a professional solution designed to help businesses achieve measurable results through expert strategies.` },
+    { q: `How does ${mainKeyword} work?`, a: `${mainKeyword} works by analyzing your needs and implementing data-driven tactics tailored to your goals.` },
+    { q: `Why choose ${safe(brand, 'us')} for ${mainKeyword}?`, a: `We combine 10+ years expertise with proven results and transparent reporting for ${mainKeyword}.` },
+    { q: `How much does ${mainKeyword} cost?`, a: `${mainKeyword} pricing depends on scope. We offer custom quotes after free consultation.` },
+    { q: `How long does ${mainKeyword} take to show results?`, a: `Most clients see initial ${mainKeyword} results in 30-90 days with consistent growth.` },
+    { q: `Is ${mainKeyword} suitable for small businesses?`, a: `Yes, ${mainKeyword} scales for all business sizes with flexible packages.` },
+    { q: `What makes ${mainKeyword} different?`, a: `Our ${mainKeyword} approach focuses on ROI, transparency, and long-term partnerships.` },
+    { q: `Do you provide ${mainKeyword} reports?`, a: `Yes, monthly detailed ${mainKeyword} reports with rankings, traffic, and conversions.` },
+    { q: `Can I cancel ${mainKeyword} anytime?`, a: `Yes, we offer flexible month-to-month ${mainKeyword} plans with no lock-in.` },
+    { q: `Where do you provide ${mainKeyword}?`, a: `We serve clients globally for ${mainKeyword} with focus on Pakistan, UK, USA markets.` }
+  ];
+  return faqs;
+};
+// NEW FEATURE END
+
+// NEW FEATURE START: AI Snippet Generator
+const generateAISnippets = (h1, metaDescription, keywords) => {
+  const keyword = safeArray(keywords)[0] || 'service';
+  const directAnswer = `Quick Answer: ${safe(h1, keyword)} helps businesses ${safe(metaDescription, 'achieve results').substring(0, 100)}. Our proven approach delivers measurable outcomes in 30-90 days.`;
+
+  const featuredSnippet = `## ${safe(h1, `What is ${keyword}?`)}\n\n${safe(metaDescription, keyword)} is a strategic approach that combines expert analysis with data-driven execution. Key benefits include:\n\n1. Improved visibility and rankings\n2. Qualified traffic growth\n3. Higher conversion rates\n4. Transparent ROI reporting`;
+
+  return { directAnswer, featuredSnippet, wordCount: directAnswer.split(' ').length };
+};
+// NEW FEATURE END
+
+// NEW FEATURE START: Trust Signal Scanner
+const scanTrustSignals = ($) => {
+  const bodyText = $('body').text().toLowerCase();
+  const signals = {
+    hasAuthor: $('[itemprop="author"],.author,.author-bio').length > 0 || bodyText.includes('written by'),
+    hasContact: $('a[href^="tel:"], a[href^="mailto:"],.contact').length > 0 || bodyText.includes('contact us'),
+    hasAbout: $('a[href*="about"]').length > 0 || bodyText.includes('about us'),
+    hasPrivacyPolicy: $('a[href*="privacy"]').length > 0 || bodyText.includes('privacy policy'),
+    hasSocialProfiles: $('a[href*="facebook.com"], a[href*="linkedin.com"], a[href*="twitter.com"]').length > 0,
+    hasReviews: $('.review,.testimonial, [itemprop="review"]').length > 0 || bodyText.includes('review'),
+    hasTestimonials: $('.testimonial,.client-feedback').length > 0 || bodyText.includes('testimonial')
+  };
+
+  const score = Object.values(signals).filter(Boolean).length;
+  return {...signals, trustScore: clamp((score / 7) * 100), totalSignals: score };
+};
+// NEW FEATURE END
+
+// NEW FEATURE START: Schema Opportunity Finder
+const findSchemaOpportunities = (data) => {
+  const opportunities = [];
+  const { hasFAQ, hasHowTo, hasAuthor, hasOrganization, wordCount, hasImages } = data;
+
+  if (!hasFAQ) opportunities.push({ type: 'FAQPage', priority: 'CRITICAL', reason: 'ChatGPT prefers Q&A format', impact: '+20' });
+  if (!hasHowTo && wordCount > 800) opportunities.push({ type: 'HowTo', priority: 'HIGH', reason: 'Tutorial content detected', impact: '+15' });
+  if (!hasAuthor) opportunities.push({ type: 'Person', priority: 'HIGH', reason: 'Missing author E-E-A-T signal', impact: '+12' });
+  if (!hasOrganization) opportunities.push({ type: 'Organization', priority: 'MEDIUM', reason: 'Brand trust signal', impact: '+8' });
+  if (hasImages) opportunities.push({ type: 'ImageObject', priority: 'LOW', reason: 'Enhance image SEO', impact: '+5' });
+  opportunities.push({ type: 'BreadcrumbList', priority: 'LOW', reason: 'Improve navigation signals', impact: '+5' });
+
+  return opportunities;
+};
+// NEW FEATURE END
+
+// NEW FEATURE START: Local SEO Analyzer
+const analyzeLocalSEO = ($, bodyText) => {
+  const text = safe(bodyText);
+  const hasNAP = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(text) || text.includes('address') || text.includes('phone');
+  const hasLocalBusiness = $('[itemtype*="LocalBusiness"]').length > 0;
+  const hasMap = $('iframe[src*="google.com/maps"], iframe[src*="maps"]').length > 0;
+  const hasCity = /\b(Karachi|Lahore|Islamabad|London|New York|Dubai)\b/i.test(text);
+
+  const signals = { hasNAP, hasLocalBusiness, hasMap, hasCity };
+  const score = Object.values(signals).filter(Boolean).length;
+
+  return {
+   ...signals,
+    localScore: clamp((score / 4) * 100),
+    napConsistency: hasNAP? 'Detected' : 'Missing',
+    recommendations:!hasLocalBusiness? ['Add LocalBusiness Schema'] : []
+  };
+};
+// NEW FEATURE END
     return {
       schemaGenerator, aiAutopilot, url, title, h1, h2s, h3s, metaDescription, wordCount, lastModified,
       score: seoScore, status: seoScore >= 80? "Excellent" : seoScore >= 60? "Good" : "Fair",
@@ -736,9 +910,26 @@ async function analyzeSingleUrl(url) {
       hasPrivacyPolicy, hasAboutPage, hasContactPage, hasAuthor, hasFacebook, hasLinkedIn, hasYouTube, hasTwitter,
       hasEmail, hasPhone, email, phone, hasLastModified, autoFAQ, aiSearchSimulation,
       realCitationChatGPT: citationChatGPT, realCitationGemini: citationGemini, realCitationPerplexity: citationPerplexity,
-      criticalIssues, importantIssues, minorIssues, aiRecommendations, recommendationScore, visibilityForecast
-    };
-
+      criticalIssues, importantIssues, minorIssues, aiRecommendations, recommendationScore, visibilityForecast,topicalAuthority: calculateTopicalAuthority($, keywords, h2s, h3s),
+ semanticSEO: analyzeSemanticSEO($, bodyText),
+citationOpportunities: findCitationOpportunities({
+  hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatData
+}),
+faqExpansion: generateFAQExpansion(keywords, h2s, getBrandName(url)), // ← FIXED
+aiSnippets: generateAISnippets(h1, metaDescription, keywords),
+trustSignals: scanTrustSignals($),
+schemaOpportunities: findSchemaOpportunities({ 
+  hasFAQ, 
+  hasHowTo, 
+  hasAuthor, 
+  hasOrganization: schemas.Organization?.present, 
+  wordCount, 
+  hasImages: totalImages > 0 
+}),
+localSEO: analyzeLocalSEO($, bodyText)
+ 
+};
+   
   } catch (mainError) {
     console.error("Analysis error:", mainError.message);
     throw new Error(`Failed to analyze ${url}: ${mainError.message}`);
@@ -776,7 +967,24 @@ app.get("/compare", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// NEW FEATURE START: Competitor Content Gap Engine Endpoint
+app.get("/content-gap", async (req, res) => {
+  try {
+    const { url, competitor } = req.query;
+    if (!url ||!competitor) return res.status(400).json({ error: "Both URLs required" });
 
+    const [userData, compData] = await Promise.all([
+      analyzeSingleUrl(url.startsWith('http')? url : 'https://' + url),
+      analyzeSingleUrl(competitor.startsWith('http')? competitor : 'https://' + competitor)
+    ]);
+
+    const gapData = competitorContentGap(userData, compData);
+    res.json(gapData);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// NEW FEATURE END
 app.get("/roadmap", async (req, res) => {
   try {
     const { url } = req.query;

@@ -987,23 +987,23 @@ app.get("/content-gap", async (req, res) => {
 // NEW FEATURE END
 app.get("/roadmap", async (req, res) => {
   try {
-    const { url } = req.query;
+    let { url } = req.query;
     if (!url) return res.status(400).json({ error: "URL required" });
     
+    // Don't normalize here - analyzeSingleUrl will do it
     const data = await analyzeSingleUrl(url);
     
-    // ✅ FIX: Null check + fallback agar aiAutopilot missing hai
     const autopilotTasks = data.aiAutopilot || [];
     
     if (autopilotTasks.length === 0) {
       return res.json({
-        currentScore: data.overallAIVisibilityScore || data.score || 0,
-        potentialScore: data.overallAIVisibilityScore || data.score || 0,
+        currentScore: data.overallAIVisibilityScore || 0,
+        potentialScore: data.overallAIVisibilityScore || 0,
         roadmap: [{
           step: 1,
           task: "No Critical Issues Found",
           priority: "LOW",
-          why: "Your site already has good AI visibility. Maintain current optimizations.",
+          why: "Site already optimized",
           code: "No action needed"
         }],
         estimatedTime: "0 hours"
@@ -1012,13 +1012,10 @@ app.get("/roadmap", async (req, res) => {
     
     const roadmap = autopilotTasks.map((task, i) => ({
       step: i + 1, 
-      task: task.task || 'Unknown Task', 
+      task: task.task || 'Unknown', 
       priority: task.priority || 'MEDIUM',
-      why: task.priority === 'CRITICAL'? 'Blocks AI citations' : 
-           task.priority === 'HIGH'? 'Improves trust signals' : 'Minor optimization',
-      code: task.task?.includes('Schema')? 
-        '<script type="application/ld+json">{"@context":"https://schema.org"}</script>' : 
-        'HTML/CSS changes needed',
+      why: task.priority === 'CRITICAL'? 'Blocks AI citations' : 'Improves score',
+      code: task.task?.includes('Schema')? '<script type="application/ld+json">...</script>' : 'HTML changes needed',
       impact: task.impact || '+5',
       effort: task.effort || '15 mins'
     }));
@@ -1027,18 +1024,17 @@ app.get("/roadmap", async (req, res) => {
     const totalImpact = autopilotTasks.reduce((sum, t) => sum + (parseInt(t.impact) || 5), 0);
     
     res.json({
-      currentScore: currentScore,
+      currentScore,
       potentialScore: Math.min(100, currentScore + totalImpact),
       roadmap,
       estimatedTime: `${Math.ceil(roadmap.length * 0.5)} hours`
     });
     
   } catch (err) {
-    console.error('Roadmap error:', err);
-    res.status(500).json({ error: 'Roadmap failed: ' + err.message });
+    console.error('Roadmap error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
-
 app.get("/gap-analysis", async (req, res) => {
   try {
     const { url, competitor } = req.query;

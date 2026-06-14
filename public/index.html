@@ -784,21 +784,25 @@ function renderAllResults(data) {
   renderEEAT(data);
   renderAISimulation(data);
   renderAEOReadiness(data);
-  renderCitationProbability(data);
-  renderAIVisibility(data);
+ renderCitationProbability(data);
+renderAIVisibility(data);
 
-  // NEW FEATURES
- if (data.topicalAuthority) {
-  document.getElementById('topicalAuthorityCard').style.display = 'block';
-  const score = Math.round(data.topicalAuthority.score); // Decimal hata diya
-  document.getElementById('topicalAuthorityContent').innerHTML = `
-    <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #e0e0e0 ${score}% 100%);">
-      <span>${score}</span>
-    </div>
-    <p><strong>Depth:</strong> ${data.topicalAuthority.depth}</p>
-    <p><strong>Topics Covered:</strong> ${data.topicalAuthority.topicsCovered}/9</p>
-    <div><strong>Missing Subtopics:</strong> ${data.topicalAuthority.missingSubtopics.join(', ') || 'None'}</div>
-  `;
+// NEW FEATURES - FIXED
+if (data.topicalAuthority) {
+  const topicalCard = document.getElementById('topicalAuthorityCard');
+  const topicalContent = document.getElementById('topicalAuthorityContent');
+  
+  if (topicalCard && topicalContent) {
+    topicalCard.style.display = 'block';
+    const score = Math.round(data.topicalAuthority.score); // Decimal hata diya
+    topicalContent.innerHTML = 
+      `<div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #e0e0e0 ${score}% 100%);">
+         <span>${score}</span>
+       </div>
+       <p><strong>Depth:</strong> ${data.topicalAuthority.depth}</p>
+       <p><strong>Topics Covered:</strong> ${data.topicalAuthority.topicsCovered}/9</p>
+      `;
+  }
 }
   if (data.semanticSEO) {
     document.getElementById('semanticSEOCard').style.display = 'block';

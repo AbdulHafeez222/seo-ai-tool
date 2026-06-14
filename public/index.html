@@ -82,7 +82,6 @@ details summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
   border-radius: 4px;
 }
 
-
 /* FAQ Boxes Ka Fix - Yahan Paste Karo */
 .faq-box, .ai-faq-box, .question-box {
   background: #2a2a2a!important;
@@ -100,10 +99,9 @@ details summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
 }
 
 .faq-box p, .ai-faq-box p {
-  color: #e0e0e0!important;
+  color: #e0e0!important;
   margin: 8px 0 0 0;
 }
-
 
 div[style*="background-color: rgb(26"] div,
 div[style*="background-color:#1"] div,
@@ -335,7 +333,6 @@ div[style*="Fix"] { color: #ffaa00!important; }
   <div id="schemaOppContent"></div>
 </div>
 
-
 <!-- NEW FEATURE START: Local SEO -->
 <div id="localSEOCard" class="card" style="display:none">
   <h3>📍 Local SEO Analyzer</h3>
@@ -381,8 +378,7 @@ div[style*="Fix"] { color: #ffaa00!important; }
 <script>
 const API_BASE = "https://seo-ai-tool-s47q.onrender.com";
 let seoChart, aeoChart, comparisonChart;
-let lastScanData = null; // ✅ FIX 1 & 2: Global variable
-
+let lastScanData = null;
 
 // NEW FEATURE START: Copy Functions
 function copyFAQs() {
@@ -400,12 +396,10 @@ function copySnippet(type) {
 }
 // NEW FEATURE END
 
-
-
-  showLoading(); // ✅ FIX 19
-  hideAllCards();
-  document.getElementById("result").innerHTML = "";
-
+// ✅ FIX: v5.1 Features ko function me wrap kiya
+function renderV51Features(data) {
+  const v51 = data.v51Features;
+  if (!v51) return;
 
   // Broken Links
   if (v51.brokenLinks) {
@@ -493,47 +487,8 @@ function copySnippet(type) {
       <p><strong>Trend:</strong> <span style="color:${vt.direction === 'improving'? '#00ff88' : vt.direction === 'declining'? '#ff0000' : '#ffaa00'}">${vt.trend}</span> (${vt.direction})</p>
       <p><strong>7-Day Average:</strong> ${vt.average}/100</p>
     `;
-
-    // Render trend chart
-    const ctx = document.getElementById('trendChart').getContext('2d');
- new Chart(ctx, {
-  type: 'doughnut',
-  data: {
-    datasets: [{
-      data: [73.33, 26.67], // 2 decimal tak rakho
-      backgroundColor: ['#00ff88', '#1a1a1a'],
-      borderWidth: 0
-    }]
-  },
-  options: {
-    cutout: '75%', // Circle ko patla karo
-    plugins: {
-      legend: { display: false },
-      tooltip: { enabled: false }
-    }
-  },
-  plugins: [{
-    id: 'centerText',
-    beforeDraw: function(chart) {
-      let width = chart.width,
-          height = chart.height,
-          ctx = chart.ctx;
-
-      ctx.restore();
-      ctx.font = "bold 18px Arial";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "#ffffff"; // White text
-
-      let score = chart.data.datasets[0].data[0];
-      let text = Math.round(score) + "%"; // Ab 73% dikhega
-      let textX = Math.round((width - ctx.measureText(text).width) / 2);
-      let textY = height / 2;
-
-      ctx.fillText(text, textX, textY);
-      ctx.save();
-    }
-  }]
-})
+  }
+}
 
 // ✅ FIX 1: Prevent undefined errors
 const fixData = (data) => ({
@@ -574,7 +529,7 @@ function hideAllCards() {
   });
 }
 
-function saveToHistory(data) { // ✅ FIX 20
+function saveToHistory(data) {
   try {
     let history = JSON.parse(localStorage.getItem('scanHistory') || '[]');
     history.unshift({
@@ -587,7 +542,7 @@ function saveToHistory(data) { // ✅ FIX 20
   } catch (e) { console.error('History save error:', e); }
 }
 
-function copyToClipboard(text, btn) { // ✅ FIX 17
+function copyToClipboard(text, btn) {
   navigator.clipboard.writeText(text).then(() => {
     const original = btn.innerText;
     btn.innerText = 'Copied!';
@@ -601,7 +556,7 @@ async function scan() {
   if (!url) return alert("Enter URL");
   if (!url.startsWith("http")) url = "https://" + url;
 
-  showLoading(); // ✅ FIX 19
+  showLoading();
   hideAllCards();
   document.getElementById("result").innerHTML = "";
 
@@ -609,52 +564,83 @@ async function scan() {
     const res = await fetch(`${API_BASE}/scan?url=${encodeURIComponent(url)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const rawData = await res.json();
-    const data = fixData(rawData); // ✅ FIX 1
-    lastScanData = data; // ✅ FIX 2
+    const data = fixData(rawData);
+    lastScanData = data;
     saveToHistory(data);
     hideLoading();
-    // NEW FEATURE START: Render New Features
-if (data.topicalAuthority) {
-  document.getElementById('topicalAuthorityCard').style.display = 'block';
-  document.getElementById('topicalAuthorityContent').innerHTML = `
-    <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${data.topicalAuthority.score}%, #333 ${data.topicalAuthority.score}% 100%)">
-      <span>${data.topicalAuthority.score}</span>
-    </div>
-    <p><strong>Depth:</strong> ${data.topicalAuthority.depth}</p>
-    <p><strong>Topics Covered:</strong> ${data.topicalAuthority.topicsCovered}/9</p>
-    <div><strong>Missing Subtopics:</strong> ${data.topicalAuthority.missingSubtopics.join(', ') || 'None'}</div>
-  `;
+    if (data.error) {
+      document.getElementById("result").innerHTML = `<div class="card">❌ ${data.error}</div>`;
+      return;
+    }
+    
+    renderAllResults(data);
+    renderV51Features(data);
+    
+  } catch (err) {
+    hideLoading();
+    document.getElementById("result").innerHTML = `<div class="card">❌ Error: ${err.message}</div>`;
+  }
 }
+  
+function renderAllResults(data) {
+  renderCharts(data);
+  renderBasicResults(data);
+  renderSchemaGenerator(data);
+  renderSEOAudit(data);
+  renderTitleAnalyzer(data);
+  renderMetaAnalyzer(data);
+  renderHeadingStructure(data);
+  renderInternalLinking(data);
+  renderImageSEO(data);
+  renderEntities(data);
+  renderEEAT(data);
+  renderAISimulation(data);
+  renderAEOReadiness(data);
+  renderCitationProbability(data);
+  renderAIVisibility(data);
 
-if (data.semanticSEO) {
-  document.getElementById('semanticSEOCard').style.display = 'block';
-  document.getElementById('semanticSEOContent').innerHTML = `
-    <p><strong>NLP Score:</strong> ${data.semanticSEO.nlpScore}/100</p>
-    <p><strong>Entities Found:</strong> ${data.semanticSEO.entities.join(', ') || 'None'}</p>
-    <p><strong>Semantic Gaps:</strong> ${data.semanticSEO.semanticGaps.join(', ') || 'None'}</p>
-    <p><strong>Semantic HTML:</strong> ${data.semanticSEO.hasSemanticHTML? '✓ Yes' : '✗ No'}</p>
-  `;
-}
+  // NEW FEATURES
+  if (data.topicalAuthority) {
+    document.getElementById('topicalAuthorityCard').style.display = 'block';
+    document.getElementById('topicalAuthorityContent').innerHTML = `
+      <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${data.topicalAuthority.score}%, #333 ${data.topicalAuthority.score}% 100%)">
+        <span>${data.topicalAuthority.score}</span>
+      </div>
+      <p><strong>Depth:</strong> ${data.topicalAuthority.depth}</p>
+      <p><strong>Topics Covered:</strong> ${data.topicalAuthority.topicsCovered}/9</p>
+      <div><strong>Missing Subtopics:</strong> ${data.topicalAuthority.missingSubtopics.join(', ') || 'None'}</div>
+    `;
+  }
 
-if (data.citationOpportunities) {
-  document.getElementById('citationOppCard').style.display = 'block';
-  document.getElementById('citationOppContent').innerHTML = data.citationOpportunities.map(opp => `
-    <div class="opp-item" style="margin:10px 0; padding:10px; background:#222; border-left:3px solid #00ff88">
-      <strong>${opp.engine}:</strong> ${opp.reason}<br>
-      <span style="color:#00ff88">Impact: ${opp.impact}</span> | 
-      <span style="color:#ffaa00">Fix: ${opp.fix}</span>
-    </div>
-  `).join('');
-}
+  if (data.semanticSEO) {
+    document.getElementById('semanticSEOCard').style.display = 'block';
+    document.getElementById('semanticSEOContent').innerHTML = `
+      <p><strong>NLP Score:</strong> ${data.semanticSEO.nlpScore}/100</p>
+      <p><strong>Entities Found:</strong> ${data.semanticSEO.entities.join(', ') || 'None'}</p>
+      <p><strong>Semantic Gaps:</strong> ${data.semanticSEO.semanticGaps.join(', ') || 'None'}</p>
+      <p><strong>Semantic HTML:</strong> ${data.semanticSEO.hasSemanticHTML? '✓ Yes' : '✗ No'}</p>
+    `;
+  }
 
-if (data.faqExpansion) {
-  document.getElementById('faqExpansionCard').style.display = 'block';
-  document.getElementById('faqExpansionContent').innerHTML = data.faqExpansion.map((faq, i) => `
-    <div style="margin:10px 0; padding:10px; background:#222">
-      <strong>Q${i+1}: ${faq.q}</strong><br>
-      <span style="color:#aaa">A: ${faq.a}</span>
-    </div>
-  `).join('') + `<button onclick="copyFAQs()">📋 Copy All FAQs</button>`;
+  if (data.citationOpportunities) {
+    document.getElementById('citationOppCard').style.display = 'block';
+    document.getElementById('citationOppContent').innerHTML = data.citationOpportunities.map(opp => `
+      <div class="opp-item" style="margin:10px 0; padding:10px; background:#222; border-left:3px solid #00ff88">
+        <strong>${opp.engine}:</strong> ${opp.reason}<br>
+        <span style="color:#00ff88">Impact: ${opp.impact}</span> | 
+        <span style="color:#ffaa00">Fix: ${opp.fix}</span>
+      </div>
+    `).join('');
+  }
+
+  if (data.faqExpansion) {
+    document.getElementById('faqExpansionCard').style.display = 'block';
+    document.getElementById('faqExpansionContent').innerHTML = data.faqExpansion.map((faq, i) => `
+      <div style="margin:10px 0; padding:10px; background:#222">
+        <strong>Q${i+1}: ${faq.q}</strong><br>
+        <span style="color:#aaa">A: ${faq.a}</span>
+      </div>
+        `).join('') + `<button onclick="copyFAQs()">📋 Copy All FAQs</button>`;
 }
 
 if (data.aiSnippets) {
@@ -719,35 +705,6 @@ if (data.localSEO) {
   `;
 }
 // NEW FEATURE END
-    if (data.error) {
-      document.getElementById("result").innerHTML = `<div class="card">❌ ${data.error}</div>`;
-      return;
-    }
-    
-    renderAllResults(data);
-    
-  } catch (err) { // ✅ FIX 18
-    hideLoading();
-    document.getElementById("result").innerHTML = `<div class="card">❌ Error: ${err.message}</div>`;
-  
-}
-  
-function renderAllResults(data) {
-  renderCharts(data);
-  renderBasicResults(data);
-  renderSchemaGenerator(data); // ✅ FIX 13, 17
-  renderSEOAudit(data); // ✅ FIX 5
-  renderTitleAnalyzer(data); // ✅ FIX 6
-  renderMetaAnalyzer(data); // ✅ FIX 7
-  renderHeadingStructure(data); // ✅ FIX 8
-  renderInternalLinking(data); // ✅ FIX 9
-  renderImageSEO(data); // ✅ FIX 10
-  renderEntities(data); // ✅ FIX 11
-  renderEEAT(data); // ✅ FIX 12
-  renderAISimulation(data); // ✅ FIX 4
-  renderAEOReadiness(data);
-  renderCitationProbability(data);
-  renderAIVisibility(data); // ✅ FIX 16
 }
 
 function renderBasicResults(data) {
@@ -784,8 +741,8 @@ plugins: [{
     ctx.restore();
     ctx.font = "bold 20px Arial";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = "#ffffff"; // White text hamesha
-    let score = Math.round(chart.data.datasets[0].data[0]); // 29% dikhega
+    ctx.fillStyle = "#ffffff";
+    let score = Math.round(chart.data.datasets[0].data[0]);
     let text = score + "%";
     let textX = Math.round((chart.width - ctx.measureText(text).width) / 2);
     let textY = chart.height / 2;
@@ -967,8 +924,9 @@ function renderAEOReadiness(data) {
       div.textContent = signal;
       signalsList.appendChild(div);
     });
+  }
 }
-}
+
 function renderCitationProbability(data) {
   if (data.realCitationChatGPT !== undefined) {
     document.getElementById('realCitationCard').style.display = 'block';
@@ -1001,7 +959,6 @@ function renderAIVisibility(data) {
   `;
 }
 
-// ✅ FIX 3: Backend endpoints - Compare, Roadmap, Gap Analysis, Keyword Theft, Content Brief
 async function compareCompetitor() {
   if (!lastScanData) return alert("Pehle Scan Website karo!");
   const url = document.getElementById("url").value;

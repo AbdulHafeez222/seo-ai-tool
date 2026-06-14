@@ -112,7 +112,39 @@ div[style*="background: #2"] div {
 /* Impact green, Fix orange */
 div[style*="Impact"] { color: #00ff88!important; }
 div[style*="Fix"] { color: #ffaa00!important; }
-
+   /* === GLOBAL FIX: Sab Dark Boxes + Circles Theek Karo === */
+   
+   /* 1. Saare score circles ka text white karo */
+   .score-circle, 
+   .score-circle span {
+     color: #ffffff !important;
+     font-weight: bold !important;
+   }
+   
+   /* 2. Saare dark background boxes ka text light karo */
+   .card div[style*="background:#222"],
+   .card div[style*="background: #222"],
+   .card pre[style*="background:#222"] {
+     background: #2a2a2a !important;
+     color: #e0e0e0 !important;
+     border: 1px solid #444 !important;
+   }
+   
+   /* 3. Schema/FAQ/AI boxes ke headings white karo */
+   .card div strong {
+     color: #ffffff !important;
+   }
+   
+   /* 4. Impact/Labels ke colors preserve rakho */
+   .card span[style*="color:#00ff88"] { color: #00ff88 !important; }
+   .card span[style*="color:#ffaa00"] { color: #ffaa00 !important; }
+   .card span[style*="color:#ff4444"] { color: #ff4444 !important; }
+   
+   /* 5. Pre tag yani Featured Snippet Block */
+   pre {
+     color: #e0e0e0 !important;
+     background: #2a2a2a !important;
+   }
 </style>
 </head>
 <body>

@@ -804,6 +804,30 @@ if (data.localSEO) {
     </div>
   `;
 }
+ if (data.aeoReadiness) {
+  document.getElementById('aeoReadinessCard').style.display = 'block';
+  const score = Math.round(data.aeoReadiness.score);
+  const grade = score >= 80 ? 'A+' : score >= 60 ? 'B' : score >= 40 ? 'C' : 'D';
+  const color = score >= 80 ? '#00ff88' : score >= 60 ? '#ffa500' : '#ff4444';
+  
+  document.getElementById('aeoScoreCircle').innerHTML = `
+    <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
+      <div class="score-text">
+        <span class="score-number" style="color:${color}">${score}</span>
+        <span class="score-label">AEO ${grade}</span>
+      </div>
+    </div>
+  `;
+  
+  // Signals list
+  document.getElementById('aeoSignalsList').innerHTML = `
+    <div style="font-size:14px; color:#666; text-align:left">
+      ${data.aeoReadiness.signals.map(s => 
+        `${s.found ? '✓' : '✗'} ${s.name}`
+      ).join('<br>')}
+    </div>
+  `;
+}
 // NEW FEATURE END
 }
 

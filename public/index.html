@@ -178,6 +178,43 @@ body.dark-mode .score-circle span,
 .score-circle span::selection {
   background: transparent !important;
 }
+  /* === Bade Circles ka Fix === */
+.score-circle-large {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 150px !important;
+  height: 150px !important;
+  border-radius: 50% !important;
+  margin: 20px auto !important;
+}
+
+.score-text {
+  text-align: center !important;
+  z-index: 5 !important;
+}
+
+.score-number {
+  display: block !important;
+  color: #00ff88 !important;
+  font-size: 32px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+}
+
+.score-label {
+  display: block !important;
+  color: #ffffff !important;
+  font-size: 14px !important;
+  margin-top: 4px !important;
+  opacity: 0.8 !important;
+}
+
+/* Purana text hide kar do */
+.score-circle-large > span:not(.score-text span) {
+  display: none !important;
+}
 </style>
 </head>
 <body>

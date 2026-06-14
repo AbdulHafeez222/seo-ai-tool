@@ -1181,7 +1181,7 @@ if (data.aeoReadiness) {
 // NEW FEATURE END
 }
 
-ffunction renderBasicResults(data) {
+function renderBasicResults(data) {
   setHTML("result", `
     <div class="card">
       <h3>📊 SEO Status: ${escapeHtml(data.status)} <span class="badge badge-${data.score >= 80? 'green' : data.score >= 60? 'orange' : 'red'}">${data.score}/100</span></h3>

@@ -783,7 +783,7 @@ if (data.trustSignals) {
   document.getElementById('trustSignalsCard').style.display = 'block';
   const signals = data.trustSignals;
   
-  const score = Math.round(signals.trustScore); // Decimal khatam karo
+  const score = Math.round(signals.trustScore);
   const color = score > 70 ? '#00ff88' : score > 40 ? '#ffaa00' : '#ff4444';
   const found = signals.signals ? signals.signals.filter(s => s.found).length : 0;
   const total = signals.totalSignals || 7;
@@ -797,21 +797,15 @@ if (data.trustSignals) {
     </div>
     <div style="margin-top:15px; font-size:14px; color:#333; text-align:left">
       <p><strong>Signals Found:</strong> ${found}/${total}</p>
-      ${signals.signals ? signals.signals.map(s => 
-        `<span style="margin-right:10px">${s.found ? '✓' : '✗'} ${s.name}</span>`
-      ).join('') : ''}
-    </div>
-  `;
-}
-    <p><strong>Signals Found:</strong> ${signals.totalSignals}/7</p>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px">
-      ${signals.hasAuthor? '✓' : '✗'} Author 
-      ${signals.hasContact? '✓' : '✗'} Contact 
-      ${signals.hasAbout? '✓' : '✗'} About 
-      ${signals.hasPrivacyPolicy? '✓' : '✗'} Privacy Policy 
-      ${signals.hasSocialProfiles? '✓' : '✗'} Social Profiles 
-      ${signals.hasReviews? '✓' : '✗'} Reviews 
-      ${signals.hasTestimonials? '✓' : '✗'} Testimonials
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px">
+        ${signals.hasAuthor ? '✓' : '✗'} Author 
+        ${signals.hasContact ? '✓' : '✗'} Contact 
+        ${signals.hasAbout ? '✓' : '✗'} About 
+        ${signals.hasPrivacyPolicy ? '✓' : '✗'} Privacy Policy 
+        ${signals.hasSocialProfiles ? '✓' : '✗'} Social Profiles 
+        ${signals.hasReviews ? '✓' : '✗'} Reviews 
+        ${signals.hasTestimonials ? '✓' : '✗'} Testimonials
+      </div>
     </div>
   `;
 }

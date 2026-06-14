@@ -1472,17 +1472,34 @@ async function compareCompetitor() {
         options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
       });
     }
-    
-    setHTML("comparisonDetails",
-  (data.sites || []).map(s => `
-    <tr>
-      <td>${s.brand || 'Unknown'}</td>
-      <td>${s.aiVisibilityScore || 0}</td>
-      <td>${s.seoScore || 0}</td>
-      <td>${s.aeoScore || 0}</td>
-    </tr>
-  `).join('')
-);
+ setHTML("comparisonDetails", `
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th>Site</th>
+        <th>AI Score</th>
+        <th>SEO</th>
+        <th>AEO</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(data.sites || []).map(s => `
+        <tr>
+          <td>${s.brand || 'Unknown'}</td>
+          <td>${s.aiVisibilityScore || 0}</td>
+          <td>${s.seoScore || 0}</td>
+          <td>${s.aeoScore || 0}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <p style="margin-top:15px;">
+    <strong>Winner:</strong>
+    ${data.winner?.brand || 'N/A'}
+    (${data.winner?.aiVisibilityScore || 0}/100)
+  </p>
+`);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);

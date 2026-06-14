@@ -145,6 +145,38 @@ div[style*="Fix"] { color: #ffaa00!important; }
      color: #e0e0e0 !important;
      background: #2a2a2a !important;
    }
+  /* === Score Circle Text Center Fix === */
+.score-circle {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100px !important;
+  height: 100px !important;
+  border-radius: 50% !important;
+  margin: 10px auto !important;
+}
+
+.score-circle span {
+  position: absolute !important;
+  color: #000000 !important;
+  font-weight: bold !important;
+  font-size: 20px !important;
+  z-index: 10 !important;
+  background: transparent !important;
+  user-select: none !important;
+}
+
+/* Dark mode me text white karo */
+body.dark-mode .score-circle span,
+.box.dark-mode .score-circle span {
+  color: #ffffff !important;
+}
+
+/* Selection blue hatane ke liye */
+.score-circle span::selection {
+  background: transparent !important;
+}
 </style>
 </head>
 <body>
@@ -632,18 +664,18 @@ function renderAllResults(data) {
   renderAIVisibility(data);
 
   // NEW FEATURES
-  if (data.topicalAuthority) {
-    document.getElementById('topicalAuthorityCard').style.display = 'block';
-    document.getElementById('topicalAuthorityContent').innerHTML = `
-      <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${data.topicalAuthority.score}%, #333 ${data.topicalAuthority.score}% 100%)">
-        <span>${data.topicalAuthority.score}</span>
-      </div>
-      <p><strong>Depth:</strong> ${data.topicalAuthority.depth}</p>
-      <p><strong>Topics Covered:</strong> ${data.topicalAuthority.topicsCovered}/9</p>
-      <div><strong>Missing Subtopics:</strong> ${data.topicalAuthority.missingSubtopics.join(', ') || 'None'}</div>
-    `;
-  }
-
+ if (data.topicalAuthority) {
+  document.getElementById('topicalAuthorityCard').style.display = 'block';
+  const score = Math.round(data.topicalAuthority.score); // Decimal hata diya
+  document.getElementById('topicalAuthorityContent').innerHTML = `
+    <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #e0e0e0 ${score}% 100%);">
+      <span>${score}</span>
+    </div>
+    <p><strong>Depth:</strong> ${data.topicalAuthority.depth}</p>
+    <p><strong>Topics Covered:</strong> ${data.topicalAuthority.topicsCovered}/9</p>
+    <div><strong>Missing Subtopics:</strong> ${data.topicalAuthority.missingSubtopics.join(', ') || 'None'}</div>
+  `;
+}
   if (data.semanticSEO) {
     document.getElementById('semanticSEOCard').style.display = 'block';
     document.getElementById('semanticSEOContent').innerHTML = `

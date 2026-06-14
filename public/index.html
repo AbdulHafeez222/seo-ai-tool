@@ -6,147 +6,126 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
  
 <style>
-body { font-family: Arial; background: #f2f4f8; padding: 20px; text-align: center; }
-.dark { background: #0f172a; color: white; }
-.box { background: white; padding: 25px; border-radius: 15px; max-width: 900px; margin: auto; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
-.dark .box { background: #1e293b; }
-input { width: 80%; padding: 12px; margin: 10px; border: 1px solid #ddd; border-radius: 8px; }
-button { padding: 12px 20px; border: none; background: #2563eb; color: white; cursor: pointer; border-radius: 8px; margin: 5px; font-weight: 600; }
+
+/* ===== THEME VARIABLES ===== */
+:root {
+  --bg-body: #f2f4f8;
+  --bg-box: #ffffff;
+  --bg-card: #f9f9f9;
+  --bg-ai-box: #eef4ff;
+  --text-primary: #1f2937;
+  --text-secondary: #4b5563;
+  --text-heading: #1e293b;
+  --text-muted: #666;
+  --border-color: #e2e8f0;
+  --selection-bg: #2563eb;
+  --selection-text: #ffffff;
+  --score-text-on-dark: #ffffff;
+}
+
+/* DARK THEME - sirf .dark use karo, .dark-mode nahi */
+body.dark {
+  --bg-body: #0f172a;
+  --bg-box: #1e293b;
+  --bg-card: #1e293b;
+  --bg-ai-box: #0f172a;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-heading: #f1f5f9;
+  --text-muted: #94a3b8;
+  --border-color: #334155;
+  --selection-bg: #3b82f6;
+}
+
+/* ===== BASE ===== */
+body { 
+  font-family: Arial; 
+  background: var(--bg-body); 
+  color: var(--text-primary);
+  padding: 20px; 
+  text-align: center;
+  transition: background 0.2s, color 0.2s;
+}
+
+.box { 
+  background: var(--bg-box); 
+  padding: 25px; 
+  border-radius: 15px; 
+  max-width: 900px; 
+  margin: auto; 
+  box-shadow: 0 0 15px rgba(0,0,0,0.1); 
+}
+
+input { 
+  width: 80%; 
+  padding: 12px; 
+  margin: 10px; 
+  border: 1px solid #ddd; 
+  border-radius: 8px;
+  background: var(--bg-box);
+  color: var(--text-primary);
+}
+
+button { 
+  padding: 12px 20px; 
+  border: none; 
+  background: #2563eb; 
+  color: white; 
+  cursor: pointer; 
+  border-radius: 8px; 
+  margin: 5px; 
+  font-weight: 600; 
+}
 button:hover { background: #1d4ed8; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
-.card { text-align: left; margin-top: 20px; background: #f9f9f9; padding: 18px; border-radius: 10px; }
-.ai-box { background: #eef4ff; padding: 15px; border-radius: 10px; margin-top: 10px; }
+
+.card { 
+  text-align: left; 
+  margin-top: 20px; 
+  background: var(--bg-card); 
+  color: var(--text-primary);
+  padding: 18px; 
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+}
+
+.ai-box { 
+  background: var(--bg-ai-box); 
+  color: var(--text-primary);
+  padding: 15px; 
+  border-radius: 10px; 
+  margin-top: 10px;
+  border: 1px solid var(--border-color);
+}
+
+h3 { 
+  margin-top: 25px; 
+  margin-bottom: 10px; 
+  color: var(--text-heading); 
+  border-bottom: 2px solid var(--border-color); 
+  padding-bottom: 8px; 
+}
+
+p { color: var(--text-secondary); }
+small { color: var(--text-muted) !important; }
+
+/* ===== CHARTS & SCORES ===== */
 .chartContainer { display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; margin: 20px 0; }
 .chartBox { position: relative; width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; }
 canvas { width: 100% !important; height: 100% !important; position: relative; z-index: 1; }
-.loading { display: none; margin-top: 10px; font-size: 18px; }
-.centerScore { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 36px; font-weight: 700; text-align: center; line-height: 1; pointer-events: none; z-index: 10; width: 100%; }
-.centerScore span { display: block; font-size: 12px; font-weight: 500; color: #666; margin-top: 2px; }
-.badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: 8px; }
-.badge-green { background: #dcfce7; color: #166534; }
-.badge-red { background: #fee2e2; color: #991b1b; }
-.badge-orange { background: #ffedd5; color: #9a3412; }
-.badge-purple { background: #f3e8ff; color: #6b21a8; }
-h3 { margin-top: 25px; margin-bottom: 10px; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
-.dark h3 { color: #f1f5f9; border-bottom-color: #334155; }
-.dark .card { background: #1e293b; color: #f1f5f9; border: 1px solid #334155; }
-.dark .ai-box { background: #0f172a !important; color: #e2e8f0 !important; border: 1px solid #334155; }
-.dark input { background: #1e293b; color: #f1f5f9; border: 1px solid #334155; }
-.dark .centerScore span { color: #94a3b8; }
-.dark .badge-green { background: #14532d; color: #bbf7d0; }
-.dark .badge-red { background: #7f1d1d; color: #fecaca; }
-.dark .badge-orange { background: #7c2d12; color: #fed7aa; }
-.dark .badge-purple { background: #581c87; color: #e9d5ff; }
-ul { padding-left: 20px; }
-li { margin: 5px 0; }
-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-td, th { padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: left; }
-.dark td, .dark th { border-bottom-color: #334155; color: #e2e8f0; }
-details summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
-.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 15px 0; }
-.metric-box { text-align: center; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; color: white; }
-.metric-value { font-size: 28px; font-weight: bold; }
-.metric-label { font-size: 13px; opacity: 0.9; margin-top: 5px; }
-.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 100%); }
-.spinner { border: 3px solid #f3f3f3; border-top: 3px solid #2563eb; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; margin-left: 10px; }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-.dark p { color: #cbd5e1; }
-.dark small { color: #94a3b8 !important; }
-.dark #citationReasonsList { background: #0f172a !important; color: #e2e8f0 !important; }
-  /* v5.1 STYLES START */
-.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
-.metric-box { text-align: center; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; color: white; }
-.metric-value { font-size: 24px; font-weight: bold; }
-.metric-label { font-size: 12px; opacity: 0.9; margin-top: 4px; }
-.badge { display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-.badge-green { background: #dcfce7; color: #166534; }
-.badge-orange { background: #ffedd5; color: #9a3412; }
-.badge-red { background: #fee2e2; color: #991b1b; }
-.badge-purple { background: #f3e8ff; color: #6b21a8; }
-/* v5.1 STYLES END */
- .card {
-  text-align: left; margin-top: 20px; background: #f9f9f9; padding: 18px; border-radius: 10px;
+
+.centerScore { 
+  position: absolute; top: 50%; left: 50%; 
+  transform: translate(-50%, -50%); 
+  font-size: 36px; font-weight: 700; 
+  text-align: center; line-height: 1; 
+  pointer-events: none; z-index: 10; width: 100%; 
 }
-.score-circle {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
-  margin: 10px auto;
-}
-.opp-item {
-  border-radius: 4px;
+.centerScore span { 
+  display: block; font-size: 12px; 
+  font-weight: 500; color: var(--text-muted); margin-top: 2px; 
 }
 
-/* FAQ Boxes Ka Fix - Yahan Paste Karo */
-.faq-box, .ai-faq-box, .question-box {
-  background: #2a2a2a!important;
-  color: #ffffff!important;
-  padding: 16px;
-  margin-bottom: 12px;
-  border-radius: 8px;
-  border: 1px solid #444;
-}
-
-.faq-box strong, .faq-box b, 
-.ai-faq-box strong, .ai-faq-box b {
-  color: #00ff88!important;
-  font-weight: 700;
-}
-
-.faq-box p, .ai-faq-box p {
-  color: #e0e0!important;
-  margin: 8px 0 0 0;
-}
-
-div[style*="background-color: rgb(26"] div,
-div[style*="background-color:#1"] div,
-div[style*="background: #2"] div {
-  color: #ffffff!important;
-}
-
-/* Impact green, Fix orange */
-div[style*="Impact"] { color: #00ff88!important; }
-div[style*="Fix"] { color: #ffaa00!important; }
-   /* === GLOBAL FIX: Sab Dark Boxes + Circles Theek Karo === */
-   
-   /* 1. Saare score circles ka text white karo */
-   .score-circle, 
-   .score-circle span {
-     color: #ffffff !important;
-     font-weight: bold !important;
-   }
-   
-   /* 2. Saare dark background boxes ka text light karo */
-   .card div[style*="background:#222"],
-   .card div[style*="background: #222"],
-   .card pre[style*="background:#222"] {
-     background: #2a2a2a !important;
-     color: #e0e0e0 !important;
-     border: 1px solid #444 !important;
-   }
-   
-   /* 3. Schema/FAQ/AI boxes ke headings white karo */
-   .card div strong {
-     color: #ffffff !important;
-   }
-   
-   /* 4. Impact/Labels ke colors preserve rakho */
-   .card span[style*="color:#00ff88"] { color: #00ff88 !important; }
-   .card span[style*="color:#ffaa00"] { color: #ffaa00 !important; }
-   .card span[style*="color:#ff4444"] { color: #ff4444 !important; }
-   
-   /* 5. Pre tag yani Featured Snippet Block */
-   pre {
-     color: #e0e0e0 !important;
-     background: #2a2a2a !important;
-   }
-  /* === Score Circle Text Center Fix === */
-/* === Sab Score Circles ka Universal Fix === */
 .score-circle {
   position: relative !important;
   display: flex !important;
@@ -160,52 +139,14 @@ div[style*="Fix"] { color: #ffaa00!important; }
 
 .score-circle span {
   position: relative !important;
-  color: #ffffff !important; /* Hamesha white text */
+  color: var(--score-text-on-dark) !important;
   font-weight: 700 !important;
   font-size: 20px !important;
   z-index: 5 !important;
-  background: transparent !important;
   line-height: 1 !important;
-  text-shadow: 0px 0px 3px rgba(0,0,0,0.8) !important; /* Light part pe bhi dikhega */
-}
-/* Dark mode me text white karo */
-/* THEME VARIABLES */
-:root {
-  --bg-card: #ffffff;
-  --text-primary: #111827;
-  --text-secondary: #4b5563;
-  --text-heading: #1e40af;
-  --text-on-dark: #ffffff;
-  --selection-bg: #2563eb;
-  --selection-text: #ffffff;
+  text-shadow: 0px 0px 3px rgba(0,0,0,0.8) !important;
 }
 
-body.dark-mode {
-  --bg-card: #1e293b;
-  --text-primary: #f3f4f6;
-  --text-secondary: #cbd5e1;
-  --text-heading: #60a5fa;
-}
-
-/* CARDS & TEXT */
-.card {
-  background: var(--bg-card);
-  color: var(--text-primary);
-}
-
-.card h3 {
-  color: var(--text-heading);
-}
-
-.card p, .card div, .card span {
-  color: var(--text-secondary);
-}
-
-.card strong {
-  color: var(--text-primary);
-}
-
-/* SCORE CIRCLE */
 .score-circle-large {
   position: relative !important;
   display: flex !important;
@@ -231,40 +172,127 @@ body.dark-mode {
   font-size: 32px !important; 
   font-weight: 700 !important; 
   line-height: 1 !important;
-  color: var(--text-on-dark) !important; /* Circle ke andar hamesha white */
+  color: var(--score-text-on-dark) !important;
 }
 
 .score-label { 
   display: block !important; 
-  color: var(--text-on-dark) !important; 
+  color: var(--score-text-on-dark) !important; 
   font-size: 14px !important; 
   margin-top: 4px !important; 
   opacity: 0.8 !important; 
 }
 
-/* Extra span hide karo circle se */
+/* Extra span hide karo */
 .score-circle-large > span:not(.score-text span),
 #seoScoreCircle > span,
 #seoScoreCircle > div:not(.score-text) {
   display: none !important;
 }
 
-/* SELECTION */
-::selection {
-  background: var(--selection-bg) !important;
-  color: var(--selection-text) !important;
-}
-::-moz-selection {
-  background: var(--selection-bg) !important;
-  color: var(--selection-text) !important;
+/* ===== BADGES ===== */
+.badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: 8px; }
+.badge-green { background: #dcfce7; color: #166534; }
+.badge-red { background: #fee2e2; color: #991b1b; }
+.badge-orange { background: #ffedd5; color: #9a3412; }
+.badge-purple { background: #f3e8ff; color: #6b21a8; }
+
+body.dark .badge-green { background: #14532d; color: #bbf7d0; }
+body.dark .badge-red { background: #7f1d1d; color: #fecaca; }
+body.dark .badge-orange { background: #7c2d12; color: #fed7aa; }
+body.dark .badge-purple { background: #581c87; color: #e9d5ff; }
+
+/* ===== FAQ / DARK BOXES ===== */
+.faq-box, .ai-faq-box, .question-box {
+  background: #2a2a2a !important;
+  color: #ffffff !important;
+  padding: 16px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  border: 1px solid #444;
 }
 
-/* Score circle me selection band */
+.faq-box strong, .ai-faq-box strong {
+  color: #00ff88 !important;
+  font-weight: 700;
+}
+
+.faq-box p, .ai-faq-box p {
+  color: #e0e0 !important;
+  margin: 8px 0 0 0;
+}
+
+pre {
+  color: #e0e0e0 !important;
+  background: #2a2a2a !important;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #444;
+}
+
+/* Impact/Fix colors */
+span[style*="color:#00ff88"], div[style*="Impact"] { color: #00ff88 !important; }
+span[style*="color:#ffaa00"], div[style*="Fix"] { color: #ffaa00 !important; }
+span[style*="color:#ff4444"] { color: #ff4444 !important; }
+
+/* ===== TABLES & LISTS ===== */
+ul { padding-left: 20px; }
+li { margin: 5px 0; color: var(--text-secondary); }
+table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+td, th { padding: 8px; border-bottom: 1px solid var(--border-color); text-align: left; color: var(--text-primary); }
+details summary { cursor: pointer; font-weight: 600; padding: 8px 0; color: var(--text-heading); }
+
+/* ===== METRICS GRID ===== */
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
+.metric-box { 
+  text-align: center; padding: 12px; 
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+  border-radius: 8px; color: white; 
+}
+.metric-value { font-size: 24px; font-weight: bold; }
+.metric-label { font-size: 12px; opacity: 0.9; margin-top: 4px; }
+body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 100%); }
+
+/* ===== LOADING ===== */
+.loading { display: none; margin-top: 10px; font-size: 18px; }
+.spinner { 
+  border: 3px solid #f3f3f3; border-top: 3px solid #2563eb; 
+  border-radius: 50%; width: 20px; height: 20px; 
+  animation: spin 1s linear infinite; display: inline-block; margin-left: 10px; 
+}
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* ===== SELECTION FIX - SAB SE ZAROORI ===== */
+*::selection {
+  background: var(--selection-bg) !important;
+  color: var(--selection-text) !important;
+  -webkit-text-fill-color: var(--selection-text) !important;
+  -webkit-text-stroke: 0 transparent !important;
+  text-shadow: none !important;
+}
+
+*::-moz-selection {
+  background: var(--selection-bg) !important;
+  color: var(--selection-text) !important;
+  text-shadow: none !important;
+}
+
+/* Score circles me selection band */
+.score-circle *, .score-circle-large *, .score-text *, 
+.score-number, .score-label, .centerScore {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  user-select: none !important;
+}
+
+.score-circle *::selection,
 .score-circle-large *::selection,
 .score-text *::selection {
   background: transparent !important;
   color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
 }
+
 
 </style>
 </head>

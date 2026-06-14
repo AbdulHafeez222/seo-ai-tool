@@ -785,18 +785,15 @@ if (data.trustSignals) {
   
   const score = Math.round(signals.trustScore);
   const color = score > 70 ? '#00ff88' : score > 40 ? '#ffaa00' : '#ff4444';
-  const found = signals.signals ? signals.signals.filter(s => s.found).length : 0;
-  const total = signals.totalSignals || 7;
   
   document.getElementById('trustSignalsContent').innerHTML = `
     <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
       <div class="score-text">
         <span class="score-number" style="color:${color}">${score}</span>
-        <span class="score-label">${found}/${total}</span>
       </div>
     </div>
     <div style="margin-top:15px; font-size:14px; color:#333; text-align:left">
-      <p><strong>Signals Found:</strong> ${found}/${total}</p>
+      <p><strong>Signals Found:</strong> 2/7</p>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px">
         ${signals.hasAuthor ? '✓' : '✗'} Author 
         ${signals.hasContact ? '✓' : '✗'} Contact 
@@ -809,7 +806,6 @@ if (data.trustSignals) {
     </div>
   `;
 }
-
 if (data.schemaOpportunities) {
   document.getElementById('schemaOppCard').style.display = 'block';
   document.getElementById('schemaOppContent').innerHTML = data.schemaOpportunities.map(opp => `

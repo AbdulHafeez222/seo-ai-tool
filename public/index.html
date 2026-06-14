@@ -209,6 +209,23 @@ body.dark-mode .score-circle span,
 .score-circle-large > span:not(.score-text span) {
   display: none !important;
 }
+#seoScoreCircle > span,
+#seoScoreCircle > div:not(.score-text) {
+  display: none !important;
+}
+
+.score-circle-large {
+  position: relative !important;
+}
+
+.score-text {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  z-index: 10 !important;
+}
+  
 </style>
 </head>
 <body>

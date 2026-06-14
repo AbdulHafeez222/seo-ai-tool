@@ -514,7 +514,7 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
 </div>
 
 <!-- NEW FEATURE START: Local SEO -->
-<div id="localSEOCard" class="card" style="display:none">
+<div id="localSeoCard" class="card" style="display:none">
   <h3>📍 Local SEO Analyzer</h3>
   <div id="localSEOContent"></div>
 </div>
@@ -575,9 +575,11 @@ function showCard(cardId, contentId, html) {
   if (contentId && html !== undefined) setHTML(contentId, html);
 }
 
-function escapeHtml(text) {
-  if (!text) return '';
-  return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function escapeHtml(text = "") {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function unescapeHtml(text) {
@@ -1471,11 +1473,16 @@ async function compareCompetitor() {
       });
     }
     
-    setHTML("comparisonDetails", `
-      <table style="margin-top: 15px;"><tr><th>Site</th><th>AI Score</th><th>SEO</th><th>AEO</th></tr>
-      ${(data.sites || []).map(s => `<tr><td><b>${s.brand || 'Unknown'}</b></td><td>${s.aiVisibilityScore || 0}</td><td>${s.seoScore || 0}</td><td>${s.aeoScore || 0}</td></tr>`).join('')}
-      </table><p style="margin-top: 10px;"><b>Winner:</b> ${data.winner?.brand || 'N/A'} (${data.winner?.aiVisibilityScore || 0}/100)</p>
-    `);
+    setHTML("comparisonDetails",
+  (data.sites || []).map(s => `
+    <tr>
+      <td>${s.brand || 'Unknown'}</td>
+      <td>${s.aiVisibilityScore || 0}</td>
+      <td>${s.seoScore || 0}</td>
+      <td>${s.aeoScore || 0}</td>
+    </tr>
+  `).join('')
+);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);

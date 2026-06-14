@@ -146,6 +146,7 @@ div[style*="Fix"] { color: #ffaa00!important; }
      background: #2a2a2a !important;
    }
   /* === Score Circle Text Center Fix === */
+/* === Sab Score Circles ka Universal Fix === */
 .score-circle {
   position: relative !important;
   display: flex !important;
@@ -154,19 +155,19 @@ div[style*="Fix"] { color: #ffaa00!important; }
   width: 100px !important;
   height: 100px !important;
   border-radius: 50% !important;
-  margin: 10px auto !important;
+  margin: 15px auto !important;
 }
 
 .score-circle span {
-  position: absolute !important;
-  color: #000000 !important;
-  font-weight: bold !important;
+  position: relative !important;
+  color: #ffffff !important; /* Hamesha white text */
+  font-weight: 700 !important;
   font-size: 20px !important;
-  z-index: 10 !important;
+  z-index: 5 !important;
   background: transparent !important;
-  user-select: none !important;
+  line-height: 1 !important;
+  text-shadow: 0px 0px 3px rgba(0,0,0,0.8) !important; /* Light part pe bhi dikhega */
 }
-
 /* Dark mode me text white karo */
 body.dark-mode .score-circle span,
 .box.dark-mode .score-circle span {
@@ -755,17 +756,16 @@ if (data.schemaOpportunities) {
 }
 
 if (data.localSEO) {
-  document.getElementById('localSEOCard').style.display = 'block';
-  const local = data.localSEO;
-  document.getElementById('localSEOContent').innerHTML = `
-    <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${local.localScore}%, #333 ${local.localScore}% 100%)">
-      <span>${local.localScore}</span>
+  document.getElementById('localSeoCard').style.display = 'block';
+  const score = Math.round(data.localSEO.localScore); // Decimal hataya
+  document.getElementById('localSeoContent').innerHTML = `
+    <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #2d3748 ${score}% 100%);">
+      <span>${score}</span>
     </div>
-    <p><strong>NAP Status:</strong> ${local.napConsistency}</p>
-    <p><strong>LocalBusiness Schema:</strong> ${local.hasLocalBusiness? '✓ Present' : '✗ Missing'}</p>
-    <p><strong>Google Maps:</strong> ${local.hasMap? '✓ Embedded' : '✗ Missing'}</p>
-    <p><strong>City Signals:</strong> ${local.hasCity? '✓ Found' : '✗ Missing'}</p>
-    ${local.recommendations.length > 0? `<div style="color:#ffaa00">Recommendations: ${local.recommendations.join(', ')}</div>` : ''}
+    <div style="margin-top:15px">
+      <p><strong>Detected:</strong> ${data.localSEO.detected.join(', ') || 'None'}</p>
+      <p><strong>Missing:</strong> ${data.localSEO.missing.join(', ') || 'None'}</p>
+    </div>
   `;
 }
 // NEW FEATURE END

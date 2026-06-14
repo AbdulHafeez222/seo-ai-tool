@@ -562,18 +562,31 @@ let lastScanData = null;
 // ==== SAFE DOM HELPERS ====
 function setHTML(id, html) {
   const el = document.getElementById(id);
-  if (el) el.innerHTML = html;
+  if (el) el.innerHTML = html; // innerHTML hi chahiye
 }
 
 function setStyle(id, prop, value) {
   const el = document.getElementById(id);
-  if (el) el.style[prop] = value;
+  if (el) el.style.setProperty(prop, value); // Ye fix hai
 }
 
 function showCard(cardId, contentId, html) {
   setStyle(cardId, 'display', 'block');
-  setHTML(contentId, html);
+  if (contentId && html !== undefined) setHTML(contentId, html);
 }
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function unescapeHtml(text) {
+  if (!text) return '';
+  const txt = document.createElement('textarea');
+  txt.innerHTML = String(text);
+  return txt.value;
+}
+
 // NEW FEATURE START: Copy Functions
 function copyFAQs() {
   if (!lastScanData?.faqExpansion) return;
@@ -1168,17 +1181,18 @@ if (data.aeoReadiness) {
 // NEW FEATURE END
 }
 
-function renderBasicResults(data) {
+ffunction renderBasicResults(data) {
   setHTML("result", `
     <div class="card">
-      <h3>📊 SEO Status: ${data.status} <span class="badge badge-${data.score >= 80? 'green' : data.score >= 60? 'orange' : 'red'}">${data.score}/100</span></h3>
-      <p><b>URL:</b> ${data.url}</p>
-      <p><b>Title:</b> ${data.title || 'Not Found'}</p>
-      <p><b>H1:</b> ${data.h1 || 'Not Found'}</p>
+      <h3>📊 SEO Status: ${escapeHtml(data.status)} <span class="badge badge-${data.score >= 80? 'green' : data.score >= 60? 'orange' : 'red'}">${data.score}/100</span></h3>
+      <p><b>URL:</b> ${escapeHtml(data.url)}</p>
+      <p><b>Title:</b> ${escapeHtml(unescapeHtml(data.title)) || 'Not Found'}</p>
+      <p><b>H1:</b> ${escapeHtml(unescapeHtml(data.h1)) || 'Not Found'}</p>
       <p><b>Word Count:</b> ${data.wordCount || 0}</p>
     </div>
   `);
 }
+
 
 function renderCharts(data) {
   const seoScore = data.score || 0;
@@ -1342,15 +1356,14 @@ function renderImageSEO(data) {
 }
 
 function renderEntities(data) {
-  document.getElementById("entityCard").style.display = "block";
   const entities = data.entities || {};
-  document.getElementById("entityResults").innerHTML = `
+  showCard("entityCard", "entityResults", `
     <div class="grid-3">
-      <div><h4>🏢 Brands:</h4>${(entities.brands || []).map(b => `<span class="badge badge-purple" style="margin:2px;">${b}</span>`).join('') || 'None'}</div>
-      <div><h4>📍 Locations:</h4>${(entities.locations || []).map(l => `<span class="badge badge-green" style="margin:2px;">${l}</span>`).join('') || 'None'}</div>
-      <div><h4>💼 Services:</h4>${(entities.services || []).map(s => `<span class="badge badge-orange" style="margin:2px;">${s}</span>`).join('') || 'None'}</div>
+      <div><h4>🏢 Brands:</h4>${(entities.brands || []).map(b => `<span class="badge badge-purple" style="margin:2px;">${escapeHtml(b)}</span>`).join('') || 'None'}</div>
+      <div><h4>📍 Locations:</h4>${(entities.locations || []).map(l => `<span class="badge badge-green" style="margin:2px;">${escapeHtml(l)}</span>`).join('') || 'None'}</div>
+      <div><h4>💼 Services:</h4>${(entities.services || []).map(s => `<span class="badge badge-orange" style="margin:2px;">${escapeHtml(s)}</span>`).join('') || 'None'}</div>
     </div>
-  `;
+  `);
 }
 
 function renderEEAT(data) {

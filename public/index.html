@@ -225,7 +225,44 @@ body.dark-mode .score-circle span,
   transform: translate(-50%, -50%) !important;
   z-index: 10 !important;
 }
-  
+ /* 1. Light mode - default black text */
+body, .card, .card * {
+  color: #111827;
+}
+
+.card h3 {
+  color: #1e40af;
+}
+
+/* 2. Dark mode - white text */
+body.dark-mode, 
+body.dark-mode .card, 
+body.dark-mode .card * {
+  color: #f3f4f6 !important;
+}
+
+body.dark-mode .card h3 {
+  color: #60a5fa !important;
+}
+
+/* 3. Selection - dono mode me visible */
+::selection {
+  background: #2563eb !important; /* Blue */
+  color: #ffffff !important;      /* White text */
+}
+
+::-moz-selection {
+  background: #2563eb !important;
+  color: #ffffff !important;
+}
+
+/* 4. Score circle me selection band */
+.score-number::selection,
+.score-text::selection,
+.score-circle-large *::selection {
+  background: transparent !important;
+  color: inherit !important;
+} 
 </style>
 </head>
 <body>

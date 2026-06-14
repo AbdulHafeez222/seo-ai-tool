@@ -559,7 +559,21 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
 const API_BASE = "https://seo-ai-tool-s47q.onrender.com";
 let seoChart, aeoChart, comparisonChart;
 let lastScanData = null;
+// ==== SAFE DOM HELPERS ====
+function setHTML(id, html) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
 
+function setStyle(id, prop, value) {
+  const el = document.getElementById(id);
+  if (el) el.style[prop] = value;
+}
+
+function showCard(cardId, contentId, html) {
+  setStyle(cardId, 'display', 'block');
+  setHTML(contentId, html);
+}
 // NEW FEATURE START: Copy Functions
 function copyFAQs() {
   if (!lastScanData?.faqExpansion) return;
@@ -567,15 +581,245 @@ function copyFAQs() {
   navigator.clipboard.writeText(text);
   alert('FAQs copied!');
 }
+function extractEntities(text) {
+  const stopWords = [
+    'chat','reply','minutes','today','click','here','direct','worldwide',
+    'clients','services','business','money','read','more','contact','us',
+    'home','about','privacy','terms','copyright'
+  ];
+  
+  // Sirf Capitalized words nikalo jo stop words me na ho
+  const words = text.match(/\b[A-Z][a-z]{2,}\b/g) || [];
+  const entities = [...new Set(words)]
+   .filter(w =>!stopWords.includes(w.toLowerCase()))
+   .filter(w => w.length > 2);
+  
+  return entities.slice(0, 15); // Top 15 hi rakho
+}
+  function generateFAQ(text, mainKeyword) {
+  const genericWords = ['clients','services','business','today','money','website','company'];
+  
+  // Text se keywords nikalo
+  let keywords = text.toLowerCase().match(/\b[a-z]{5,}\b/g) || [];
+  keywords = [...new Set(keywords)]
+   .filter(k => k.length >= 5) // 5+ letters
+   .filter(k =>!genericWords.includes(k))
+   .filter(k => k!== mainKeyword.toLowerCase())
+   .slice(0, 5);
+  
+  if (keywords.length === 0) return [];
+  
+  return keywords.map(k => ({
+    q: `How does ${k} help with ${mainKeyword}?`,
+    a: `${capitalize(k)} is important for ${mainKeyword} because it directly impacts results and user experience.`
+  }));
+}
 
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
 function copySnippet(type) {
   if (!lastScanData?.aiSnippets) return;
   const text = type === 'direct'? lastScanData.aiSnippets.directAnswer : lastScanData.aiSnippets.featuredSnippet;
   navigator.clipboard.writeText(text);
   alert('Snippet copied!');
 }
-// NEW FEATURE END
+  
 
+const topicalClusters = {
+  seo: [
+    "backlinks", "keyword research", "technical seo", "local seo", 
+    "content marketing", "on page seo", "off page seo", "link building", 
+    "serp", "meta tags", "schema markup"
+  ],
+  marketing: [
+    "social media", "email marketing", "ppc", "conversion", "funnel", 
+    "branding", "leads", "ads", "campaign"
+  ],
+  business: [
+    "strategy", "growth", "revenue", "customers", "sales", 
+    "b2b", "b2c", "saas", "startup"
+  ]
+};
+
+function calculateTopicAuthority(text, niche = 'seo') {
+  const cluster = topicalClusters[niche] || topicalClusters.seo;
+  const lowerText = text.toLowerCase();
+  
+  let covered = 0;
+  let coveredTopics = [];
+  cluster.forEach(topic => {
+    if (lowerText.includes(topic)) {
+      covered++;
+      coveredTopics.push(topic);
+    }
+  });
+  
+  const score = Math.round((covered / cluster.length) * 100);
+  const depth = score > 70? 'Deep' : score > 40? 'Medium' : 'Shallow';
+  
+  return {
+    score,
+    depth,
+    topicsCovered: covered,
+    totalTopics: cluster.length,
+    coveredList: coveredTopics // Ye add kiya taake pata chale konse topics mile
+  };
+} NEW FEATURE END
+function calculateNLPScore(text, entities, keywords) {
+  const wordCount = text.split(/\s+/).length;
+  
+  const entityCoverage = Math.min(entities.length / 10, 1) * 100; // 10 entities = 100%
+  const keywordCoverage = Math.min(keywords.length / 20, 1) * 100; // 20 keywords = 100%
+  const contentDepth = Math.min(wordCount / 1500, 1) * 100; // 1500 words = 100%
+  
+  const nlpScore = Math.round(
+    (entityCoverage * 0.4) +
+    (keywordCoverage * 0.3) +
+    (contentDepth * 0.3)
+  );
+  
+  return {
+    nlpScore,
+    entityCount: entities.length,
+    semanticKeywords: keywords.length,
+    topicCoverage: Math.round(contentDepth)
+  };
+}
+  function scanTrustSignals(html) {
+  const hasPhone = /(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.test(html);
+  const hasEmail = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(html);
+  const hasContactPage = /href=["'].*contact.*["']/i.test(html);
+  const hasAddress = /address|street|suite|road/i.test(html);
+  
+  const hasContact = hasPhone || hasEmail || hasContactPage || hasAddress;
+  
+  return {
+    hasContact,
+    hasPhone,
+    hasEmail,
+    hasContactPage,
+    hasAddress,
+    hasAuthor: /author|written by/i.test(html),
+    hasSSL: location.protocol === 'https:'
+  };
+}
+  function simulateCitation(data) {
+  const reasons = [];
+  let willCite = true;
+  
+  if (!data.hasFAQSchema) {
+    willCite = false;
+    reasons.push('No FAQ Schema');
+  }
+  if (data.eeAtScore < 60) {
+    willCite = false;
+    reasons.push('Low E-E-A-T');
+  }
+  if (!data.hasAuthor) {
+    willCite = false;
+    reasons.push('No Author');
+  }
+  if (data.wordCount < 300) {
+    willCite = false;
+    reasons.push('Thin Content');
+  }
+  
+  return {
+    willCite: willCite? 'Yes' : 'No',
+    confidence: willCite? 85 : 20,
+    reasons: reasons.length? reasons : ['All checks passed']
+  };
+}
+ function analyzeInternalLinks(html, wordCount) {
+  const internalLinks = (html.match(/<a[^>]+href=["'](?!http|mailto|tel)/gi) || []).length;
+  const authorityFlow = Math.min(
+    Math.round((internalLinks / Math.max(wordCount / 500, 1)) * 100),
+    100
+  );
+  
+  return {
+    internalLinks,
+    authorityFlow,
+    status: authorityFlow > 60? 'Good' : authorityFlow > 30? 'Average' : 'Weak'
+  };
+} 
+  function generateRoadmap(data) {
+  const tasks = [];
+  
+  if (!data.hasFAQSchema) {
+    tasks.push({
+      title: 'Add FAQ Schema',
+      code: `<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [{
+    "@type": "Question",
+    "name": "Question here?",
+    "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Answer here"
+    }
+  }]
+}
+</script>`
+    });
+  }
+  
+  return tasks;
+}
+
+// HTML me show karne ka code
+function renderRoadmap(tasks) {
+  const html = tasks.map((t, i) => `
+    <div class="card">
+      <h4>${t.title}</h4>
+      <button onclick="toggleCode('code${i}')">Show Code</button>
+      <pre id="code${i}" style="display:none;background:#1e1e1e;color:#0f0;padding:10px;border-radius:4px;overflow:auto;"><code>${escapeHtml(t.code)}</code></pre>
+    </div>
+  `).join('');
+  
+  setHTML('roadmapResults', html);
+}
+
+function toggleCode(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = el.style.display === 'none'? 'block' : 'none';
+}
+
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+  function calculateAdvantage(yourData, competitorData) {
+  const seoAdv = yourData.seoScore - competitorData.seoScore;
+  const aeoAdv = yourData.aeoScore - competitorData.aeoScore;
+  const trustAdv = yourData.trustScore - competitorData.trustScore;
+  
+  const netAdvantage = seoAdv + aeoAdv + trustAdv;
+  
+  return {
+    seo: seoAdv > 0? `+${seoAdv}` : seoAdv,
+    aeo: aeoAdv > 0? `+${aeoAdv}` : aeoAdv,
+    trust: trustAdv > 0? `+${trustAdv}` : trustAdv,
+    netAdvantage: netAdvantage > 0? `+${netAdvantage}` : netAdvantage,
+    verdict: netAdvantage > 10? 'You are winning' : netAdvantage < -10? 'Competitor is winning' : 'Close fight'
+  };
+}
+
+// Display
+function renderAdvantage(adv) {
+  setHTML('advantageResults', `
+    <h3>Competitor Advantage</h3>
+    <p><strong>SEO:</strong> ${adv.seo}</p>
+    <p><strong>AEO:</strong> ${adv.aeo}</p>
+    <p><strong>Trust:</strong> ${adv.trust}</p>
+    <hr>
+    <p><strong>Net Advantage:</strong> ${adv.netAdvantage}</p>
+    <p><strong>Verdict:</strong> ${adv.verdict}</p>
+  `);
+}
 // ✅ FIX: v5.1 Features ko function me wrap kiya
 function renderV51Features(data) {
   const v51 = data.v51Features;
@@ -583,98 +827,97 @@ function renderV51Features(data) {
 
   // Broken Links
   if (v51.brokenLinks) {
-  document.getElementById('brokenLinksCard').style.display = 'block';
-  const score = v51.brokenLinks.healthScore;
-  const color = score > 80 ? '#00ff88' : '#ffaa00';
-  
-  document.getElementById('brokenLinksContent').innerHTML = `
-    <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
-      <div class="score-text">
-        <span class="score-number" style="color:${color}">${score}</span>
-        <span class="score-label">Health</span>
+    const score = v51.brokenLinks.healthScore;
+    const color = score > 80 ? '#00ff88' : '#ffaa00';
+    
+    showCard('brokenLinksCard', 'brokenLinksContent', `
+      <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
+        <div class="score-text">
+          <span class="score-number" style="color:${color}">${score}</span>
+          <span class="score-label">Health</span>
+        </div>
       </div>
-    </div>
-    <div style="margin-top:15px; text-align:left; font-size:14px; color:#333">
-      <p><strong>Total Checked:</strong> ${v51.brokenLinks.totalChecked}</p>
-      <p><strong>Broken:</strong> <span style="color:#ff0000">${v51.brokenLinks.brokenCount}</span></p>
-      ${v51.brokenLinks.brokenLinks.slice(0, 5).map(l => `<div style="font-size:12px;color:#ff6666">✗ ${l.url}</div>`).join('')}
-    </div>
-  `;
-}
+      <div style="margin-top:15px; text-align:left; font-size:14px; color:#333">
+        <p><strong>Total Checked:</strong> ${v51.brokenLinks.totalChecked}</p>
+        <p><strong>Broken:</strong> <span style="color:#ff0000">${v51.brokenLinks.brokenCount}</span></p>
+        ${v51.brokenLinks.brokenLinks.slice(0, 5).map(l => `<div style="font-size:12px;color:#ff6666">✗ ${l.url}</div>`).join('')}
+      </div>
+    `);
+  }
 
   // Core Web Vitals
   if (v51.coreWebVitals) {
-    document.getElementById('coreWebVitalsCard').style.display = 'block';
     const cwv = v51.coreWebVitals;
-    document.getElementById('coreWebVitalsContent').innerHTML = `
+    showCard('coreWebVitalsCard', 'coreWebVitalsContent', `
       <div class="grid-3">
         <div class="metric-box"><div class="metric-value">${cwv.lcp}ms</div><div class="metric-label">LCP <span class="badge badge-${cwv.lcpGrade === 'Good'? 'green' : 'orange'}">${cwv.lcpGrade}</span></div></div>
         <div class="metric-box"><div class="metric-value">${cwv.cls}</div><div class="metric-label">CLS <span class="badge badge-${cwv.clsGrade === 'Good'? 'green' : 'orange'}">${cwv.clsGrade}</span></div></div>
         <div class="metric-box"><div class="metric-value">${cwv.performanceScore}</div><div class="metric-label">Performance</div></div>
       </div>
       <p style="margin-top:10px"><strong>Fix:</strong> ${cwv.recommendations}</p>
-    `;
+    `);
   }
 
-  // Internal Link Opportunities
-  if (v51.internalLinkOpportunities) {
-    document.getElementById('linkOpportunityCard').style.display = 'block';
-    document.getElementById('linkOpportunityContent').innerHTML = `
-      <p><strong>Opportunities Found:</strong> ${v51.internalLinkOpportunities.totalFound}</p>
-      ${v51.internalLinkOpportunities.opportunities.map(o => `
-        <div class="opp-item" style="margin:8px 0;padding:8px;background:#222;border-left:3px solid ${o.priority === 'HIGH'? '#ff0000' : '#ffaa00'}">
-          Link "<strong>${o.keyword}</strong>" to <strong>${o.targetHeading}</strong><br>
-          <span style="color:#aaa;font-size:12px">${o.reason}</span>
-        </div>
-      `).join('')}
-    `;
+  // Link Opportunity
+  if (v51.linkOpportunity) {
+    showCard('linkOpportunityCard', 'linkOpportunityContent', `
+      <p><strong>Domain:</strong> ${v51.linkOpportunity.domain}</p>
+      <p><strong>DR Estimate:</strong> ${v51.linkOpportunity.drEstimate}</p>
+      <p><strong>Authority Score:</strong> ${v51.linkOpportunity.authorityScore}</p>
+      <p><strong>Opportunity Score:</strong> ${v51.linkOpportunity.opportunityScore}/100</p>
+      <p><strong>Effort:</strong> ${v51.linkOpportunity.effort}</p>
+    `);
   }
 
   // Content Decay
   if (v51.contentDecay) {
-    document.getElementById('contentDecayCard').style.display = 'block';
-    const cd = v51.contentDecay;
-    document.getElementById('contentDecayContent').innerHTML = `
-      <div class="score-circle" style="background: conic-gradient(${cd.decayScore > 80? '#00ff88' : '#ffaa00'} 0% ${cd.decayScore}%, #333 ${cd.decayScore}% 100%)">
-        <span>${cd.decayScore}</span>
+    const freshness = v51.contentDecay.freshnessScore;
+    const color = freshness > 80 ? '#00ff88' : freshness > 60 ? '#ffaa00' : '#ff4444';
+    showCard('contentDecayCard', 'contentDecayContent', `
+      <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${freshness}%, #2d3748 ${freshness}% 100%);">
+        <div class="score-text">
+          <span class="score-number" style="color:${color}">${freshness}</span>
+          <span class="score-label">Freshness</span>
+        </div>
       </div>
-      <p><strong>Status:</strong> <span class="badge badge-${cd.status === 'Fresh'? 'green' : 'orange'}">${cd.status}</span></p>
-      <p><strong>Last Updated:</strong> ${cd.daysSinceUpdate} days ago</p>
-      ${cd.recommendations.map(r => `<div style="color:#ffaa00">• ${r}</div>`).join('')}
-    `;
+      <p style="margin-top:10px"><strong>Days Since Update:</strong> ${v51.contentDecay.daysSinceUpdate}</p>
+      <p><strong>Decay Stage:</strong> ${v51.contentDecay.decayStage}</p>
+      <p><strong>Recommendation:</strong> ${v51.contentDecay.recommendation}</p>
+    `);
   }
 
   // Featured Snippet
   if (v51.featuredSnippet) {
-    document.getElementById('featuredSnippetCard').style.display = 'block';
-    const fs = v51.featuredSnippet;
-    document.getElementById('featuredSnippetContent').innerHTML = `
-      <p><strong>Best Format:</strong> <span class="badge badge-purple">${fs.bestFormat}</span></p>
-      ${fs.paragraph? `<div style="background:#222;padding:10px;margin:5px 0"><strong>Q:</strong> ${fs.paragraph.question}<br><strong>A:</strong> ${fs.paragraph.answer}</div>` : ''}
-      ${fs.list? `<div style="background:#222;padding:10px;margin:5px 0"><strong>List:</strong> ${fs.list.question}<br>${fs.list.items.map((i, idx) => `${idx+1}. ${i}`).join('<br>')}</div>` : ''}
-      <button onclick="navigator.clipboard.writeText(\`${fs.implementation.replace(/`/g, '\\`')}\`)">📋 Copy Implementation Code</button>
-    `;
+    const score = v51.featuredSnippet.optimizationScore;
+    showCard('featuredSnippetCard', 'featuredSnippetContent', `
+      <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #e0e0e0 ${score}% 100%);">
+        <span>${score}</span>
+      </div>
+      <p><strong>Current Winner:</strong> ${v51.featuredSnippet.currentWinner || 'None'}</p>
+      <p><strong>Your Chances:</strong> ${v51.featuredSnippet.yourChances}%</p>
+      <p><strong>Fix:</strong> ${v51.featuredSnippet.howToWin}</p>
+    `);
   }
 
   // People Also Ask
   if (v51.peopleAlsoAsk) {
-    document.getElementById('peopleAlsoAskCard').style.display = 'block';
-    const paa = v51.peopleAlsoAsk;
-    document.getElementById('peopleAlsoAskContent').innerHTML = `
-      <p><strong>Generated Questions:</strong> ${paa.totalGenerated}</p>
-      ${paa.questions.slice(0, 6).map(q => `<div style="background:#222;padding:8px;margin:4px 0">❓ ${q}</div>`).join('')}
-      <button onclick="navigator.clipboard.writeText(\`${paa.schemaCode.replace(/`/g, '\\`')}\`)">📋 Copy FAQ Schema</button>
-    `;
+    showCard('peopleAlsoAskCard', 'peopleAlsoAskContent', `
+      <p><strong>Coverage:</strong> ${v51.peopleAlsoAsk.coverage}%</p>
+      <p><strong>Questions Answered:</strong> ${v51.peopleAlsoAsk.answeredCount}/${v51.peopleAlsoAsk.totalQuestions}</p>
+      <div style="margin-top:10px">
+        ${v51.peopleAlsoAsk.missingQuestions.map(q => `<div style="padding:5px; background:#222; margin:5px 0">❓ ${q}</div>`).join('')}
+      </div>
+    `);
   }
 
   // Visibility Trend
   if (v51.visibilityTrend) {
-    document.getElementById('visibilityTrendCard').style.display = 'block';
-    const vt = v51.visibilityTrend;
-    document.getElementById('visibilityTrendContent').innerHTML = `
-      <p><strong>Trend:</strong> <span style="color:${vt.direction === 'improving'? '#00ff88' : vt.direction === 'declining'? '#ff0000' : '#ffaa00'}">${vt.trend}</span> (${vt.direction})</p>
-      <p><strong>7-Day Average:</strong> ${vt.average}/100</p>
-    `;
+    showCard('visibilityTrendCard', 'visibilityTrendContent', `
+      <p><strong>Trend:</strong> <span style="color:${v51.visibilityTrend.trend === 'Rising' ? '#00ff88' : '#ffaa00'}">${v51.visibilityTrend.trend}</span></p>
+      <p><strong>Change:</strong> ${v51.visibilityTrend.change}</p>
+      <p><strong>Confidence:</strong> ${v51.visibilityTrend.confidence}%</p>
+      <p><strong>Next Action:</strong> ${v51.visibilityTrend.nextAction}</p>
+    `);
   }
 }
 
@@ -702,9 +945,12 @@ const fixData = (data) => ({
 });
 
 // ========== UTILITY FUNCTIONS ==========
-function showLoading() { document.getElementById("loading").style.display = "block"; }
-function hideLoading() { document.getElementById("loading").style.display = "none"; }
-
+function showLoading() { 
+  setStyle("loading", 'display', 'block'); 
+}
+function hideLoading() { 
+  setStyle("loading", 'display', 'none'); 
+}
 function hideAllCards() {
   ["aiSimulationCard","seoAuditCard","titleAnalyzerCard","metaAnalyzerCard","headingCard",
    "internalLinkCard","imageSeoCard","entityCard","eeatCard","schemaCard","aeoReadinessCard",
@@ -713,7 +959,7 @@ function hideAllCards() {
    "citationOppCard","faqExpansionCard","aiSnippetsCard","trustSignalsCard","schemaOppCard",
    "localSEOCard","brokenLinksCard","coreWebVitalsCard","linkOpportunityCard",
    "contentDecayCard","featuredSnippetCard","peopleAlsoAskCard","visibilityTrendCard"].forEach(id => {
-    document.getElementById(id).style.display = "none";
+    setStyle(id, 'display', 'none'); // ✅ Safe - null check andar hai
   });
 }
 
@@ -740,13 +986,16 @@ function copyToClipboard(text, btn) {
 
 // ========== MAIN SCAN ==========
 async function scan() {
-  let url = document.getElementById("url").value;
+  const urlEl = document.getElementById("url");
+  if (!urlEl) return alert("URL input not found");
+  
+  let url = urlEl.value.trim();
   if (!url) return alert("Enter URL");
   if (!url.startsWith("http")) url = "https://" + url;
 
   showLoading();
   hideAllCards();
-  document.getElementById("result").innerHTML = "";
+  setHTML("result", "");
 
   try {
     const res = await fetch(`${API_BASE}/scan?url=${encodeURIComponent(url)}`);
@@ -756,8 +1005,9 @@ async function scan() {
     lastScanData = data;
     saveToHistory(data);
     hideLoading();
+    
     if (data.error) {
-      document.getElementById("result").innerHTML = `<div class="card">❌ ${data.error}</div>`;
+      setHTML("result", `<div class="card">❌ ${data.error}</div>`);
       return;
     }
     
@@ -766,10 +1016,9 @@ async function scan() {
     
   } catch (err) {
     hideLoading();
-    document.getElementById("result").innerHTML = `<div class="card">❌ Error: ${err.message}</div>`;
+    setHTML("result", `<div class="card">❌ Error: ${err.message}</div>`);
   }
 }
-  
 function renderAllResults(data) {
   renderCharts(data);
   renderBasicResults(data);
@@ -784,120 +1033,103 @@ function renderAllResults(data) {
   renderEEAT(data);
   renderAISimulation(data);
   renderAEOReadiness(data);
-renderCitationProbability(data);
-renderAIVisibility(data);
+  renderCitationProbability(data);
+  renderAIVisibility(data);
 
-// NEW FEATURES - FIXED
-if (data.topicalAuthority) {
-  const topicalCard = document.getElementById('topicalAuthorityCard');
-  const topicalContent = document.getElementById('topicalAuthorityContent');
-  
-  if (topicalCard && topicalContent) {
-    topicalCard.style.display = 'block';
-    const score = Math.round(data.topicalAuthority.score); // Decimal hata diya
-    topicalContent.innerHTML = 
-      `<div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #e0e0e0 ${score}% 100%);">
-         <span>${score}</span>
-       </div>
-       <p><strong>Depth:</strong> ${data.topicalAuthority.depth}</p>
-       <p><strong>Topics Covered:</strong> ${data.topicalAuthority.topicsCovered}/9</p>
-      `;
+  // NEW FEATURES - FIXED
+  if (data.topicalAuthority) {
+    const score = Math.round(data.topicalAuthority.score);
+    showCard('topicalAuthorityCard', 'topicalAuthorityContent', `
+      <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #e0e0e0 ${score}% 100%);">
+        <span>${score}</span>
+      </div>
+      <p><strong>Depth:</strong> ${data.topicalAuthority.depth}</p>
+      <p><strong>Topics Covered:</strong> ${data.topicalAuthority.topicsCovered}/9</p>
+    `);
   }
-}
+
   if (data.semanticSEO) {
-  const semanticCard = document.getElementById('semanticSEOCard');
-  const semanticContent = document.getElementById('semanticSEOContent');
-  
-  if (semanticCard && semanticContent) {
-    semanticCard.style.display = 'block';
-    semanticContent.innerHTML = `
+    showCard('semanticSEOCard', 'semanticSEOContent', `
       <p><strong>NLP Score:</strong> ${data.semanticSEO.nlpScore}/100</p>
       <p><strong>Entities Found:</strong> ${data.semanticSEO.entities?.join(', ') || 'None'}</p>
       <p><strong>Semantic Gaps:</strong> ${data.semanticSEO.semanticGaps?.join(', ') || 'None'}</p>
       <p><strong>Semantic HTML:</strong> ${data.semanticSEO.hasSemanticHTML ? '✓ Yes' : '✗ No'}</p>
-    `;
+    `);
   }
-}
 
   if (data.citationOpportunities) {
-    document.getElementById('citationOppCard').style.display = 'block';
-    document.getElementById('citationOppContent').innerHTML = data.citationOpportunities.map(opp => `
+    showCard('citationOppCard', 'citationOppContent', data.citationOpportunities.map(opp => `
       <div class="opp-item" style="margin:10px 0; padding:10px; background:#222; border-left:3px solid #00ff88">
         <strong>${opp.engine}:</strong> ${opp.reason}<br>
         <span style="color:#00ff88">Impact: ${opp.impact}</span> | 
         <span style="color:#ffaa00">Fix: ${opp.fix}</span>
       </div>
-    `).join('');
+    `).join(''));
   }
 
   if (data.faqExpansion) {
-    document.getElementById('faqExpansionCard').style.display = 'block';
-    document.getElementById('faqExpansionContent').innerHTML = data.faqExpansion.map((faq, i) => `
+    showCard('faqExpansionCard', 'faqExpansionContent', data.faqExpansion.map((faq, i) => `
       <div style="margin:10px 0; padding:10px; background:#222">
         <strong>Q${i+1}: ${faq.q}</strong><br>
         <span style="color:#aaa">A: ${faq.a}</span>
       </div>
-        `).join('') + `<button onclick="copyFAQs()">📋 Copy All FAQs</button>`;
-}
+    `).join('') + `<button onclick="copyFAQs()">📋 Copy All FAQs</button>`);
+  }
 
-if (data.aiSnippets) {
-  document.getElementById('aiSnippetsCard').style.display = 'block';
-  document.getElementById('aiSnippetsContent').innerHTML = `
-    <div style="margin:10px 0">
-      <strong>Direct Answer (${data.aiSnippets.wordCount} words):</strong>
-      <div style="background:#222; padding:10px; margin:5px 0">${data.aiSnippets.directAnswer}</div>
-      <button onclick="copySnippet('direct')">Copy Direct Answer</button>
-    </div>
-    <div style="margin:10px 0">
-      <strong>Featured Snippet Block:</strong>
-      <pre style="background:#222; padding:10px; white-space:pre-wrap">${data.aiSnippets.featuredSnippet}</pre>
-      <button onclick="copySnippet('featured')">Copy Featured Snippet</button>
-    </div>
-  `;
-}
+  if (data.aiSnippets) {
+    showCard('aiSnippetsCard', 'aiSnippetsContent', `
+      <div style="margin:10px 0">
+        <strong>Direct Answer (${data.aiSnippets.wordCount} words):</strong>
+        <div style="background:#222; padding:10px; margin:5px 0">${data.aiSnippets.directAnswer}</div>
+        <button onclick="copySnippet('direct')">Copy Direct Answer</button>
+      </div>
+      <div style="margin:10px 0">
+        <strong>Featured Snippet Block:</strong>
+        <pre style="background:#222; padding:10px; white-space:pre-wrap">${data.aiSnippets.featuredSnippet}</pre>
+        <button onclick="copySnippet('featured')">Copy Featured Snippet</button>
+      </div>
+    `);
+  }
 
-if (data.trustSignals) {
-  document.getElementById('trustSignalsCard').style.display = 'block';
-  const signals = data.trustSignals;
-  
-  const score = Math.round(signals.trustScore);
-  const color = score > 70 ? '#00ff88' : score > 40 ? '#ffaa00' : '#ff4444';
-  
-  document.getElementById('trustSignalsContent').innerHTML = `
-    <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
-      <div class="score-text">
-        <span class="score-number" style="color:${color}">${score}</span>
+  if (data.trustSignals) {
+    const signals = data.trustSignals;
+    const score = Math.round(signals.trustScore);
+    const color = score > 70 ? '#00ff88' : score > 40 ? '#ffaa00' : '#ff4444';
+    
+    showCard('trustSignalsCard', 'trustSignalsContent', `
+      <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
+        <div class="score-text">
+          <span class="score-number" style="color:${color}">${score}</span>
+        </div>
       </div>
-    </div>
-    <div style="margin-top:15px; font-size:14px; color:#333; text-align:left">
-      <p><strong>Signals Found:</strong> 2/7</p>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px">
-        ${signals.hasAuthor ? '✓' : '✗'} Author 
-        ${signals.hasContact ? '✓' : '✗'} Contact 
-        ${signals.hasAbout ? '✓' : '✗'} About 
-        ${signals.hasPrivacyPolicy ? '✓' : '✗'} Privacy Policy 
-        ${signals.hasSocialProfiles ? '✓' : '✗'} Social Profiles 
-        ${signals.hasReviews ? '✓' : '✗'} Reviews 
-        ${signals.hasTestimonials ? '✓' : '✗'} Testimonials
+      <div style="margin-top:15px; font-size:14px; color:#333; text-align:left">
+        <p><strong>Signals Found:</strong> 2/7</p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px">
+          ${signals.hasAuthor ? '✓' : '✗'} Author 
+          ${signals.hasContact ? '✓' : '✗'} Contact 
+          ${signals.hasAbout ? '✓' : '✗'} About 
+          ${signals.hasPrivacyPolicy ? '✓' : '✗'} Privacy Policy 
+          ${signals.hasSocialProfiles ? '✓' : '✗'} Social Profiles 
+          ${signals.hasReviews ? '✓' : '✗'} Reviews 
+          ${signals.hasTestimonials ? '✓' : '✗'} Testimonials
+        </div>
       </div>
-    </div>
-  `;
+    `);
+  }
 }
 if (data.schemaOpportunities) {
-  document.getElementById('schemaOppCard').style.display = 'block';
-  document.getElementById('schemaOppContent').innerHTML = data.schemaOpportunities.map(opp => `
+  showCard('schemaOppCard', 'schemaOppContent', data.schemaOpportunities.map(opp => `
     <div style="margin:10px 0; padding:10px; background:#222; border-left:3px solid ${opp.priority==='CRITICAL'?'#ff0000':opp.priority==='HIGH'?'#ffaa00':'#00ff88'}">
       <strong>${opp.type}</strong> <span style="color:#ffaa00">[${opp.priority}]</span><br>
       ${opp.reason}<br>
       <span style="color:#00ff88">Impact: ${opp.impact}</span>
     </div>
-  `).join('');
+  `).join(''));
 }
 
 if (data.localSEO) {
-  document.getElementById('localSeoCard').style.display = 'block';
-  const score = Math.round(data.localSEO.localScore); // Decimal hataya
-  document.getElementById('localSeoContent').innerHTML = `
+  const score = Math.round(data.localSEO.localScore);
+  showCard('localSeoCard', 'localSeoContent', `
     <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #2d3748 ${score}% 100%);">
       <span>${score}</span>
     </div>
@@ -905,99 +1137,109 @@ if (data.localSEO) {
       <p><strong>Detected:</strong> ${data.localSEO.detected.join(', ') || 'None'}</p>
       <p><strong>Missing:</strong> ${data.localSEO.missing.join(', ') || 'None'}</p>
     </div>
-  `;
+  `);
 }
- if (data.aeoReadiness) {
-  document.getElementById('aeoReadinessCard').style.display = 'block';
+
+if (data.aeoReadiness) {
   const score = Math.round(data.aeoReadiness.score);
-  const grade = score >= 80 ? 'A+' : score >= 60 ? 'B' : score >= 40 ? 'C' : 'D';
-  const color = score >= 80 ? '#00ff88' : score >= 60 ? '#ffa500' : '#ff4444';
+  const grade = score >= 80? 'A+' : score >= 60? 'B' : score >= 40? 'C' : 'D';
+  const color = score >= 80? '#00ff88' : score >= 60? '#ffa500' : '#ff4444';
   
-  document.getElementById('aeoScoreCircle').innerHTML = `
+  setStyle('aeoReadinessCard', 'display', 'block');
+  
+  setHTML('aeoScoreCircle', `
     <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
       <div class="score-text">
         <span class="score-number" style="color:${color}">${score}</span>
         <span class="score-label">AEO ${grade}</span>
       </div>
     </div>
-  `;
+  `);
   
   // Signals list
-  document.getElementById('aeoSignalsList').innerHTML = `
+  setHTML('aeoSignalsList', `
     <div style="font-size:14px; color:#666; text-align:left">
       ${data.aeoReadiness.signals.map(s => 
-        `${s.found ? '✓' : '✗'} ${s.name}`
+        `${s.found? '✓' : '✗'} ${s.name}`
       ).join('<br>')}
     </div>
-  `;
+  `);
 }
 // NEW FEATURE END
 }
 
 function renderBasicResults(data) {
-  document.getElementById("result").innerHTML = `
+  setHTML("result", `
     <div class="card">
-      <h3>📊 SEO Status: ${data.status} <span class="badge badge-${data.score >= 80 ? 'green' : data.score >= 60 ? 'orange' : 'red'}">${data.score}/100</span></h3>
+      <h3>📊 SEO Status: ${data.status} <span class="badge badge-${data.score >= 80? 'green' : data.score >= 60? 'orange' : 'red'}">${data.score}/100</span></h3>
       <p><b>URL:</b> ${data.url}</p>
       <p><b>Title:</b> ${data.title || 'Not Found'}</p>
       <p><b>H1:</b> ${data.h1 || 'Not Found'}</p>
       <p><b>Word Count:</b> ${data.wordCount || 0}</p>
     </div>
-  `;
+  `);
 }
 
 function renderCharts(data) {
   const seoScore = data.score || 0;
   const aeoScore = data.aeoScore || 0;
   let seoColor = seoScore >= 80? "#16a34a" : seoScore >= 50? "#f97316" : "#dc2626";
-  if (seoChart) seoChart.destroy();
-  seoChart = new Chart(document.getElementById("seoChart"), {
-    type: "doughnut",
-    data: { datasets: [{ data: [seoScore, 100 - seoScore], backgroundColor: [seoColor, "#e5e7eb"], borderWidth: 0 }] },
-   options: {
-  cutout: '70%',
-  plugins: {
-    legend: { display: false },
-    tooltip: { enabled: false }
+  
+  const seoCanvas = document.getElementById("seoChart");
+  if (seoCanvas) {
+    if (seoChart) seoChart.destroy();
+    seoChart = new Chart(seoCanvas, {
+      type: "doughnut",
+      data: { datasets: [{ data: [seoScore, 100 - seoScore], backgroundColor: [seoColor, "#e5e7eb"], borderWidth: 0 }] },
+      options: {
+        cutout: '70%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false }
+        }
+      },
+      plugins: [{
+        id: 'centerText',
+        beforeDraw: function(chart) {
+          let ctx = chart.ctx;
+          ctx.restore();
+          ctx.font = "bold 20px Arial";
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = "#ffffff";
+          let score = Math.round(chart.data.datasets[0].data[0]);
+          let text = score + "%";
+          let textX = Math.round((chart.width - ctx.measureText(text).width) / 2);
+          let textY = chart.height / 2;
+          ctx.fillText(text, textX, textY);
+          ctx.save();
+        }
+      }]
+    });
   }
-},
-plugins: [{
-  id: 'centerText',
-  beforeDraw: function(chart) {
-    let ctx = chart.ctx;
-    ctx.restore();
-    ctx.font = "bold 20px Arial";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#ffffff";
-    let score = Math.round(chart.data.datasets[0].data[0]);
-    let text = score + "%";
-    let textX = Math.round((chart.width - ctx.measureText(text).width) / 2);
-    let textY = chart.height / 2;
-    ctx.fillText(text, textX, textY);
-    ctx.save();
-  }
-}]
-  });
+  
   let seoGrade = seoScore >= 90? "A+" : seoScore >= 80? "A" : seoScore >= 60? "B" : seoScore >= 40? "C" : "D";
-  document.getElementById("seoScore").innerHTML = `${seoScore}<span>SEO ${seoGrade}</span>`;
-  document.getElementById("seoScore").style.color = seoColor;
+  setHTML("seoScore", `${seoScore}<span>SEO ${seoGrade}</span>`);
+  setStyle("seoScore", 'color', seoColor);
 
   let aeoColor = aeoScore >= 80? "#16a34a" : aeoScore >= 50? "#f97316" : "#dc2626";
-  if (aeoChart) aeoChart.destroy();
-  aeoChart = new Chart(document.getElementById("aeoChart"), {
-    type: "doughnut",
-    data: { datasets: [{ data: [aeoScore, 100 - aeoScore], backgroundColor: [aeoColor, "#e5e7eb"], borderWidth: 0 }] },
-    options: { cutout: "75%", plugins: { legend: { display: false }, tooltip: { enabled: false } } }
-  });
+  const aeoCanvas = document.getElementById("aeoChart");
+  if (aeoCanvas) {
+    if (aeoChart) aeoChart.destroy();
+    aeoChart = new Chart(aeoCanvas, {
+      type: "doughnut",
+      data: { datasets: [{ data: [aeoScore, 100 - aeoScore], backgroundColor: [aeoColor, "#e5e7eb"], borderWidth: 0 }] },
+      options: { cutout: "75%", plugins: { legend: { display: false }, tooltip: { enabled: false } } }
+    });
+  }
+  
   let aeoGrade = aeoScore >= 90? "A+" : aeoScore >= 80? "A" : aeoScore >= 60? "B" : aeoScore >= 40? "C" : "D";
-  document.getElementById("aeoScore").innerHTML = `${aeoScore}<span>AEO ${aeoGrade}</span>`;
-  document.getElementById("aeoScore").style.color = aeoColor;
+  setHTML("aeoScore", `${aeoScore}<span>AEO ${aeoGrade}</span>`);
+  setStyle("aeoScore", 'color', aeoColor);
 }
 
 function renderSchemaGenerator(data) {
   if (data.schemaGenerator && Object.keys(data.schemaGenerator).length > 0) {
-    document.getElementById("schemaCard").style.display = "block";
-    document.getElementById("schemaResults").innerHTML = `
+    showCard("schemaCard", "schemaResults", `
       <h3>📋 Copy-Paste Schema Code</h3>
       ${Object.entries(data.schemaGenerator).map(([key, val]) => `
         <div class="ai-box" style="background: #1e293b; color: #e2e8f0; margin: 10px 0;">
@@ -1006,16 +1248,16 @@ function renderSchemaGenerator(data) {
           <button onclick="copyToClipboard(\`${val.code.replace(/`/g, '\\`')}\`, this)" style="background:#10b981;font-size:12px; padding:6px 12px;">📋 Copy Code</button>
         </div>
       `).join('')}
-    `;
+    `);
   }
 }
 
 function renderSEOAudit(data) {
-  document.getElementById("seoAuditCard").style.display = "block";
   const critical = data.criticalIssues || [];
   const important = data.importantIssues || [];
   const minor = data.minorIssues || [];
-  document.getElementById("seoAuditResults").innerHTML = `
+  
+  showCard("seoAuditCard", "seoAuditResults", `
     <div class="grid-3">
       <div class="metric-box" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);">
         <div class="metric-value">${critical.length}</div><div class="metric-label">Critical Issues</div>
@@ -1030,52 +1272,51 @@ function renderSEOAudit(data) {
     ${critical.length > 0? `<h4 style="color:#dc2626;">❌ Critical:</h4><ul>${critical.map(i => `<li>${i}</li>`).join('')}</ul>` : ''}
     ${important.length > 0? `<h4 style="color:#f59e0b;">⚠️ Important:</h4><ul>${important.map(i => `<li>${i}</li>`).join('')}</ul>` : ''}
     ${minor.length > 0? `<h4 style="color:#3b82f6;">ℹ️ Minor:</h4><ul>${minor.map(i => `<li>${i}</li>`).join('')}</ul>` : ''}
-  `;
+  `);
 }
 
 function renderTitleAnalyzer(data) {
-  document.getElementById("titleAnalyzerCard").style.display = "block";
   const title = data.title || "";
   const length = title.length;
   const status = length === 0? "Missing" : length < 30? "Too Short" : length > 60? "Too Long" : "Perfect";
   const color = length === 0? "red" : length < 30 || length > 60? "orange" : "green";
-  document.getElementById("titleAnalyzerResults").innerHTML = `
+  
+  showCard("titleAnalyzerCard", "titleAnalyzerResults", `
     <p><strong>Title:</strong> ${title || "Not Found"}</p>
     <p><strong>Length:</strong> ${length} characters <span class="badge badge-${color}">${status}</span></p>
     <p><strong>Recommendation:</strong> ${length === 0? "Add title tag" : length < 30? "Expand to 50-60 chars" : length > 60? "Shorten to 50-60 chars" : "Perfect!"}</p>
-  `;
+  `);
 }
-
 function renderMetaAnalyzer(data) {
-  document.getElementById("metaAnalyzerCard").style.display = "block";
   const meta = data.metaDescription || "";
   const length = meta.length;
   const status = length === 0? "Missing" : length < 120? "Too Short" : length > 160? "Too Long" : "Perfect";
   const color = length === 0? "red" : length < 120 || length > 160? "orange" : "green";
-  document.getElementById("metaAnalyzerResults").innerHTML = `
+  
+  showCard("metaAnalyzerCard", "metaAnalyzerResults", `
     <p><strong>Description:</strong> ${meta || "Not Found"}</p>
     <p><strong>Length:</strong> ${length} characters <span class="badge badge-${color}">${status}</span></p>
     <p><strong>Recommendation:</strong> ${length === 0? "Add meta description" : length < 120? "Expand to 150-160 chars" : length > 160? "Shorten to 150-160 chars" : "Perfect!"}</p>
-  `;
+  `);
 }
 
 function renderHeadingStructure(data) {
-  document.getElementById("headingCard").style.display = "block";
   const h1Count = data.h1Count || 0, h2Count = data.h2Count || 0, h3Count = data.h3Count || 0;
-  document.getElementById("headingResults").innerHTML = `
+  
+  showCard("headingCard", "headingResults", `
     <table>
       <tr><th>Heading</th><th>Count</th><th>Status</th></tr>
       <tr><td>H1</td><td>${h1Count}</td><td>${h1Count === 1? '<span class="badge badge-green">✓ Perfect</span>' : h1Count === 0? '<span class="badge badge-red">✗ Missing</span>' : '<span class="badge badge-orange">⚠ Multiple</span>'}</td></tr>
       <tr><td>H2</td><td>${h2Count}</td><td>${h2Count >= 3? '<span class="badge badge-green">✓ Good</span>' : '<span class="badge badge-orange">⚠ Add More</span>'}</td></tr>
       <tr><td>H3</td><td>${h3Count}</td><td>${h3Count >= 5? '<span class="badge badge-green">✓ Good</span>' : '<span class="badge badge-orange">⚠ Add More</span>'}</td></tr>
     </table>
-  `;
+  `);
 }
 
 function renderInternalLinking(data) {
-  document.getElementById("internalLinkCard").style.display = "block";
   const linkData = data.breakdown?.internalLinkingAudit || {};
-  document.getElementById("internalLinkResults").innerHTML = `
+  
+  showCard("internalLinkCard", "internalLinkResults", `
     <div class="grid-3">
       <div class="metric-box"><div class="metric-value">${linkData.totalInternalLinks || 0}</div><div class="metric-label">Internal Links</div></div>
       <div class="metric-box"><div class="metric-value">${linkData.uniquePages || 0}</div><div class="metric-label">Unique Pages</div></div>
@@ -1083,21 +1324,21 @@ function renderInternalLinking(data) {
     </div>
     <p><strong>Authority Flow:</strong> ${linkData.authorityFlow || 0}% <span class="badge badge-${linkData.authorityFlow >= 80? 'green' : 'orange'}">${linkData.authorityFlow >= 80? 'Good' : 'Weak'}</span></p>
     ${linkData.weakLinking? `<p style="color:#dc2626;"><strong>⚠️ Weak Linking:</strong> Add more internal links</p>` : ''}
-  `;
+  `);
 }
 
 function renderImageSEO(data) {
-  document.getElementById("imageSeoCard").style.display = "block";
   const total = data.totalImages || 0, withoutAlt = data.imagesWithoutAlt || 0, withAlt = total - withoutAlt;
   const score = total > 0? Math.round((withAlt / total) * 100) : 100;
-  document.getElementById("imageSeoResults").innerHTML = `
+  
+  showCard("imageSeoCard", "imageSeoResults", `
     <div class="grid-3">
       <div class="metric-box"><div class="metric-value">${total}</div><div class="metric-label">Total Images</div></div>
       <div class="metric-box" style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);"><div class="metric-value">${withAlt}</div><div class="metric-label">With ALT</div></div>
       <div class="metric-box" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);"><div class="metric-value">${withoutAlt}</div><div class="metric-label">Missing ALT</div></div>
     </div>
     <p><strong>Image SEO Score:</strong> ${score}% <span class="badge badge-${score >= 80? 'green' : 'orange'}">${score >= 80? 'Good' : 'Needs Work'}</span></p>
-  `;
+  `);
 }
 
 function renderEntities(data) {
@@ -1188,9 +1429,15 @@ function renderAIVisibility(data) {
 
 async function compareCompetitor() {
   if (!lastScanData) return alert("Pehle Scan Website karo!");
-  const url = document.getElementById("url").value;
-  const comp = document.getElementById("competitorUrl").value;
+  
+  const urlEl = document.getElementById("url");
+  const compEl = document.getElementById("competitorUrl");
+  if (!urlEl || !compEl) return alert("Input fields not found");
+  
+  const url = urlEl.value;
+  const comp = compEl.value;
   if (!comp) return alert("Competitor URL dalo");
+  
   showLoading();
   try { 
     const res = await fetch(`${API_BASE}/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
@@ -1198,18 +1445,24 @@ async function compareCompetitor() {
     const data = await res.json();
     hideLoading();
     if (data.error) return alert(data.error);
-    document.getElementById("competitorCard").style.display = "block";
-    if (comparisonChart) comparisonChart.destroy();
-    comparisonChart = new Chart(document.getElementById("comparisonChart"), {
-      type: "bar",
-      data: { labels: (data.sites || []).map(s => s.brand || 'Unknown'), datasets: [{ label: "AI Visibility Score", data: (data.sites || []).map(s => s.aiVisibilityScore || 0), backgroundColor: ["#2563eb", "#dc2626"] }] },
-      options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
-    });
-    document.getElementById("comparisonDetails").innerHTML = `
+    
+    setStyle("competitorCard", 'display', 'block');
+    
+    const compCanvas = document.getElementById("comparisonChart");
+    if (compCanvas) {
+      if (comparisonChart) comparisonChart.destroy();
+      comparisonChart = new Chart(compCanvas, {
+        type: "bar",
+        data: { labels: (data.sites || []).map(s => s.brand || 'Unknown'), datasets: [{ label: "AI Visibility Score", data: (data.sites || []).map(s => s.aiVisibilityScore || 0), backgroundColor: ["#2563eb", "#dc2626"] }] },
+        options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+      });
+    }
+    
+    setHTML("comparisonDetails", `
       <table style="margin-top: 15px;"><tr><th>Site</th><th>AI Score</th><th>SEO</th><th>AEO</th></tr>
       ${(data.sites || []).map(s => `<tr><td><b>${s.brand || 'Unknown'}</b></td><td>${s.aiVisibilityScore || 0}</td><td>${s.seoScore || 0}</td><td>${s.aeoScore || 0}</td></tr>`).join('')}
       </table><p style="margin-top: 10px;"><b>Winner:</b> ${data.winner?.brand || 'N/A'} (${data.winner?.aiVisibilityScore || 0}/100)</p>
-    `;
+    `);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);
@@ -1220,22 +1473,26 @@ async function generateRoadmap() {
   if (!lastScanData) return alert("Pehle Scan Website karo!");
   showLoading();
   try {
-    const url = document.getElementById("url").value;
+    const urlEl = document.getElementById("url");
+    if (!urlEl) return alert("URL input not found");
+    const url = urlEl.value;
+    
     const res = await fetch(`${API_BASE}/roadmap?url=${encodeURIComponent(url)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     hideLoading();
     if (data.error) return alert(data.error);
-    document.getElementById("roadmapCard").style.display = "block";
-    document.getElementById("currentScore").textContent = data.currentScore || 0;
-    document.getElementById("potentialScore").textContent = data.potentialScore || 0;
-    document.getElementById("roadmapSteps").innerHTML = (data.roadmap || []).map(r => `
+    
+    setStyle("roadmapCard", 'display', 'block');
+    setHTML("currentScore", data.currentScore || 0);
+    setHTML("potentialScore", data.potentialScore || 0);
+    setHTML("roadmapSteps", (data.roadmap || []).map(r => `
       <div class="ai-box" style="border-left: 4px solid ${r.priority === 'CRITICAL'? '#dc2626' : '#f59e0b'};">
         <b>Step ${r.step}: ${r.task}</b><span class="badge badge-${r.priority === 'CRITICAL'? 'red' : 'orange'}">${r.priority}</span>
         <p style="margin: 8px 0 0; font-size: 13px;">${r.why}</p>
         <details style="margin-top: 8px;"><summary style="cursor: pointer; font-size: 12px; color: #2563eb;">Show Code</summary>
            <pre style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 5px; margin-top: 5px; font-size: 11px; overflow-x: auto;"><code>${r.code || '// No code available'}</code></pre></details>
-      </div>`).join('') + `<p style="text-align: center; margin-top: 15px; font-weight: 600;">⏱️ Total Time: ${data.estimatedTime || 'N/A'}</p>`;
+      </div>`).join('') + `<p style="text-align: center; margin-top: 15px; font-weight: 600;">⏱️ Total Time: ${data.estimatedTime || 'N/A'}</p>`);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);
@@ -1244,9 +1501,15 @@ async function generateRoadmap() {
 
 async function gapAnalysis() {
   if (!lastScanData) return alert("Pehle Scan Website karo!");
-  const url = document.getElementById("url").value;
-  const comp = document.getElementById("competitorUrl").value;
+  
+  const urlEl = document.getElementById("url");
+  const compEl = document.getElementById("competitorUrl");
+  if (!urlEl || !compEl) return alert("Input fields not found");
+  
+  const url = urlEl.value;
+  const comp = compEl.value;
   if (!comp) return alert("Competitor URL dalo");
+  
   showLoading();
   try {
     const res = await fetch(`${API_BASE}/gap-analysis?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
@@ -1254,10 +1517,11 @@ async function gapAnalysis() {
     const data = await res.json();
     hideLoading();
     if (data.error) return alert(data.error);
-    document.getElementById("gapCard").style.display = "block";
-    document.getElementById("competitorHas").innerHTML = (data.competitor?.has || []).map(h => `✓ ${h}`).join('<br>') || 'No data';
-    document.getElementById("youMissing").innerHTML = (data.you?.missing || []).map(m => `✗ ${m}`).join('<br>') || 'None!';
-    document.getElementById("gapImpact").innerHTML = `<div class="badge badge-red">${(data.you?.missing || []).length} Gaps Found</div>`;
+    
+    setStyle("gapCard", 'display', 'block');
+    setHTML("competitorHas", (data.competitor?.has || []).map(h => `✓ ${h}`).join('<br>') || 'No data');
+    setHTML("youMissing", (data.you?.missing || []).map(m => `✗ ${m}`).join('<br>') || 'None!');
+    setHTML("gapImpact", `<div class="badge badge-red">${(data.you?.missing || []).length} Gaps Found</div>`);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);
@@ -1266,9 +1530,15 @@ async function gapAnalysis() {
 
 async function keywordTheft() {
   if (!lastScanData) return alert("Pehle Scan Website karo!");
-  const url = document.getElementById("url").value;
-  const comp = document.getElementById("competitorUrl").value;
+  
+  const urlEl = document.getElementById("url");
+  const compEl = document.getElementById("competitorUrl");
+  if (!urlEl || !compEl) return alert("Input fields not found");
+  
+  const url = urlEl.value;
+  const comp = compEl.value;
   if (!comp) return alert("Competitor URL dalo");
+  
   showLoading();
   try {
     const res = await fetch(`${API_BASE}/keyword-theft?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
@@ -1276,13 +1546,14 @@ async function keywordTheft() {
     const data = await res.json();
     hideLoading();
     if (data.error) return alert(data.error);
-    document.getElementById("keywordTheftCard").style.display = "block";
-    document.getElementById("keywordTheftResults").innerHTML = `
+    
+    setStyle("keywordTheftCard", 'display', 'block');
+    setHTML("keywordTheftResults", `
       <div class="grid-3">
         <div><h4>🔥 Top Keywords:</h4>${(data.topCompetitorKeywords || []).map(k => `<span class="badge badge-red" style="margin: 2px;">${k}</span>`).join('') || 'None'}</div>
         <div><h4>💎 Missing:</h4>${(data.missingKeywords || []).map(k => `<span class="badge badge-orange" style="margin: 2px;">${k}</span>`).join('') || 'None!'}</div>
         <div><h4>✅ Shared:</h4>${(data.sharedKeywords || []).map(k => `<span class="badge badge-green" style="margin: 2px;">${k}</span>`).join('') || 'None'}</div>
-      </div><p style="margin-top: 15px; text-align: center; font-weight: 600;">${data.opportunity || 'No opportunity data'}</p>`;
+      </div><p style="margin-top: 15px; text-align: center; font-weight: 600;">${data.opportunity || 'No opportunity data'}</p>`);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);
@@ -1290,8 +1561,11 @@ async function keywordTheft() {
 }
 
 async function contentBrief() {
-  const keyword = document.getElementById("keyword").value;
+  const keywordEl = document.getElementById("keyword");
+  if (!keywordEl) return alert("Keyword input not found");
+  const keyword = keywordEl.value;
   if (!keyword) return alert("Keyword dalo");
+  
   showLoading();
   try {
    const res = await fetch(`${API_BASE}/content-brief?keyword=${encodeURIComponent(keyword)}`);
@@ -1299,13 +1573,14 @@ async function contentBrief() {
     const data = await res.json();
     hideLoading();
     if (data.error) return alert(data.error);
-    document.getElementById("briefCard").style.display = "block";
-    document.getElementById("briefResults").innerHTML = `
+    
+    setStyle("briefCard", 'display', 'block');
+    setHTML("briefResults", `
       <h4>H1: ${data.h1 || keyword}</h4>
       <h4>H2s:</h4>
       <ul>${(data.h2s || []).map(h => `<li>${h}</li>`).join('') || '<li>No H2s found</li>'}</ul>
       <h4>FAQs:</h4>
-      ${(data.faqs || []).map(f => `<p><b>Q: ${f.q || ''}</b><br>A: ${f.a || ''}</p>`).join('') || '<p>No FAQs</p>'}`;
+      ${(data.faqs || []).map(f => `<p><b>Q: ${f.q || ''}</b><br>A: ${f.a || ''}</p>`).join('') || '<p>No FAQs</p>'}`);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);
@@ -1315,10 +1590,11 @@ async function contentBrief() {
 async function runAutopilot() {
   if (!lastScanData) return alert("Pehle Scan Website karo!");
   showLoading();
-  document.getElementById("autopilotCard").style.display = "none";
+  setStyle("autopilotCard", 'display', 'none');
   const data = lastScanData;
   hideLoading();
-  document.getElementById("autopilotCard").style.display = "block";
+  setStyle("autopilotCard", 'display', 'block');
+  
   if (data.aiAutopilot && data.aiAutopilot.length > 0) {
     const tasksHTML = (data.aiAutopilot || []).map(task => {
       const color = task.priority === 'CRITICAL' ? '#dc2626' : task.priority === 'HIGH' ? '#f59e0b' : '#2563eb';
@@ -1335,23 +1611,24 @@ async function runAutopilot() {
         </div>
       `;
     }).join('');
-    document.getElementById('autopilotResults').innerHTML = `
+    
+    setHTML('autopilotResults', `
       <div style="text-align:center;margin:20px 0;">
         <div style="font-size:48px;font-weight:bold;color:#10b981;">${data.score || 0}/100</div>
         <div style="font-size:18px;">${data.aiVisibilityLevel || 'Good'}</div>
       </div>
       <h3>🚀 AI Autopilot - Quick Wins</h3>
       ${tasksHTML}
-    `;
+    `);
   } else {
-    document.getElementById('autopilotResults').innerHTML = `<div class="card">No autopilot tasks found. Score already high!</div>`;
+    setHTML('autopilotResults', `<div class="card">No autopilot tasks found. Score already high!</div>`);
   }
 }
+
 async function downloadPDF() {
   const el = document.getElementById("result");
-  if (!el ||!el.innerHTML.trim()) return alert("Scan first!");
+  if (!el || !el.innerHTML.trim()) return alert("Scan first!");
 
-  // 1. Sab cards ko force show karo PDF se pehle
   const hiddenCards = el.querySelectorAll('.card');
   const originalStyles = [];
 
@@ -1362,11 +1639,9 @@ async function downloadPDF() {
     card.style.overflow = 'visible';
   });
 
-  // 2. Scroll top + wait karo taake render ho jaye
   window.scrollTo(0, 0);
   await new Promise(resolve => setTimeout(resolve, 800));
 
-  // 3. PDF options - height fix ki hai
   const opt = {
     margin: 10,
     filename: 'ai-visibility-report.pdf',
@@ -1382,13 +1657,13 @@ async function downloadPDF() {
     pagebreak: { mode: ['css', 'legacy'] }
   };
 
-  // 4. PDF save karo aur purani display wapas lao
   html2pdf().from(el).set(opt).save().then(() => {
     hiddenCards.forEach((card, i) => {
       card.style.display = originalStyles[i];
     });
   });
 }
+
 function toggleDarkMode() {
   document.body.classList.toggle("dark");
 }
@@ -1397,10 +1672,10 @@ async function loadHistory() {
   try {
     const history = JSON.parse(localStorage.getItem('scanHistory') || '[]');
     if (history.length === 0) {
-      document.getElementById("result").innerHTML = `<div class="card">No scan history yet. Scan a website first!</div>`;
+      setHTML("result", `<div class="card">No scan history yet. Scan a website first!</div>`);
       return;
     }
-    document.getElementById("result").innerHTML = `
+    setHTML("result", `
       <h3>📊 Scan History</h3>
       ${history.map(item => `
         <div class="card">
@@ -1410,11 +1685,12 @@ async function loadHistory() {
           <p><b>Scanned:</b> ${new Date(item.timestamp).toLocaleString()}</p>
         </div>
       `).join("")}
-    `;
+    `);
   } catch (err) {
-    document.getElementById("result").innerHTML = `<div class="card">❌ Failed to load history</div>`;
+    setHTML("result", `<div class="card">❌ Failed to load history</div>`);
   }
 }
+
 
 window.onload = () => {}
   </script>

@@ -784,7 +784,7 @@ function renderAllResults(data) {
   renderEEAT(data);
   renderAISimulation(data);
   renderAEOReadiness(data);
- renderCitationProbability(data);
+renderCitationProbability(data);
 renderAIVisibility(data);
 
 // NEW FEATURES - FIXED
@@ -805,14 +805,19 @@ if (data.topicalAuthority) {
   }
 }
   if (data.semanticSEO) {
-    document.getElementById('semanticSEOCard').style.display = 'block';
-    document.getElementById('semanticSEOContent').innerHTML = `
+  const semanticCard = document.getElementById('semanticSEOCard');
+  const semanticContent = document.getElementById('semanticSEOContent');
+  
+  if (semanticCard && semanticContent) {
+    semanticCard.style.display = 'block';
+    semanticContent.innerHTML = `
       <p><strong>NLP Score:</strong> ${data.semanticSEO.nlpScore}/100</p>
-      <p><strong>Entities Found:</strong> ${data.semanticSEO.entities.join(', ') || 'None'}</p>
-      <p><strong>Semantic Gaps:</strong> ${data.semanticSEO.semanticGaps.join(', ') || 'None'}</p>
-      <p><strong>Semantic HTML:</strong> ${data.semanticSEO.hasSemanticHTML? '✓ Yes' : '✗ No'}</p>
+      <p><strong>Entities Found:</strong> ${data.semanticSEO.entities?.join(', ') || 'None'}</p>
+      <p><strong>Semantic Gaps:</strong> ${data.semanticSEO.semanticGaps?.join(', ') || 'None'}</p>
+      <p><strong>Semantic HTML:</strong> ${data.semanticSEO.hasSemanticHTML ? '✓ Yes' : '✗ No'}</p>
     `;
   }
+}
 
   if (data.citationOpportunities) {
     document.getElementById('citationOppCard').style.display = 'block';

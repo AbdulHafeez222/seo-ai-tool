@@ -169,100 +169,103 @@ div[style*="Fix"] { color: #ffaa00!important; }
   text-shadow: 0px 0px 3px rgba(0,0,0,0.8) !important; /* Light part pe bhi dikhega */
 }
 /* Dark mode me text white karo */
-body.dark-mode .score-circle span,
-.box.dark-mode .score-circle span {
-  color: #ffffff !important;
+/* THEME VARIABLES */
+:root {
+  --bg-card: #ffffff;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-heading: #1e40af;
+  --text-on-dark: #ffffff;
+  --selection-bg: #2563eb;
+  --selection-text: #ffffff;
 }
 
-/* Selection blue hatane ke liye */
-.score-circle span::selection {
-  background: transparent !important;
+body.dark-mode {
+  --bg-card: #1e293b;
+  --text-primary: #f3f4f6;
+  --text-secondary: #cbd5e1;
+  --text-heading: #60a5fa;
 }
-  
-  .score-circle-large {
-    position: relative !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 150px !important;
-    height: 150px !important;
-    border-radius: 50% !important;
-    margin: 20px auto !important;
-  }
-  
-  .score-text { text-align: center !important; z-index: 5 !important; }
-  .score-number { 
-    display: block !important; 
-    font-size: 32px !important; 
-    font-weight: 700 !important; 
-    line-height: 1 !important; 
-  }
-  .score-label { 
-    display: block !important; 
-    color: #ffffff !important; 
-    font-size: 14px !important; 
-    margin-top: 4px !important; 
-    opacity: 0.8 !important; 
-  }
 
-
-.score-circle-large > span:not(.score-text span) {
-  display: none !important;
+/* CARDS & TEXT */
+.card {
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
+
+.card h3 {
+  color: var(--text-heading);
+}
+
+.card p, .card div, .card span {
+  color: var(--text-secondary);
+}
+
+.card strong {
+  color: var(--text-primary);
+}
+
+/* SCORE CIRCLE */
+.score-circle-large {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 150px !important;
+  height: 150px !important;
+  border-radius: 50% !important;
+  margin: 20px auto !important;
+}
+
+.score-text { 
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  text-align: center !important; 
+  z-index: 10 !important; 
+}
+
+.score-number { 
+  display: block !important; 
+  font-size: 32px !important; 
+  font-weight: 700 !important; 
+  line-height: 1 !important;
+  color: var(--text-on-dark) !important; /* Circle ke andar hamesha white */
+}
+
+.score-label { 
+  display: block !important; 
+  color: var(--text-on-dark) !important; 
+  font-size: 14px !important; 
+  margin-top: 4px !important; 
+  opacity: 0.8 !important; 
+}
+
+/* Extra span hide karo circle se */
+.score-circle-large > span:not(.score-text span),
 #seoScoreCircle > span,
 #seoScoreCircle > div:not(.score-text) {
   display: none !important;
 }
 
-.score-circle-large {
-  position: relative !important;
-}
-
-.score-text {
-  position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
-  transform: translate(-50%, -50%) !important;
-  z-index: 10 !important;
-}
- /* 1. Light mode - default black text */
-body, .card, .card * {
-  color: #111827;
-}
-
-.card h3 {
-  color: #1e40af;
-}
-
-/* 2. Dark mode - white text */
-body.dark-mode, 
-body.dark-mode .card, 
-body.dark-mode .card * {
-  color: #f3f4f6 !important;
-}
-
-body.dark-mode .card h3 {
-  color: #60a5fa !important;
-}
-
-/* 3. Selection - dono mode me visible */
+/* SELECTION */
 ::selection {
-  background: #2563eb !important; /* Blue */
-  color: #ffffff !important;      /* White text */
+  background: var(--selection-bg) !important;
+  color: var(--selection-text) !important;
 }
-
 ::-moz-selection {
-  background: #2563eb !important;
-  color: #ffffff !important;
+  background: var(--selection-bg) !important;
+  color: var(--selection-text) !important;
 }
 
-/* 4. Score circle me selection band */
-.score-number::selection,
-.score-text::selection,
-.score-circle-large *::selection {
+/* Score circle me selection band */
+.score-circle-large *::selection,
+.score-text *::selection {
   background: transparent !important;
   color: inherit !important;
-} 
+}
+
 </style>
 </head>
 <body>

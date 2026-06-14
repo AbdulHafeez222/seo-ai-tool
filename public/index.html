@@ -1184,14 +1184,48 @@ async function runAutopilot() {
     document.getElementById('autopilotResults').innerHTML = `<div class="card">No autopilot tasks found. Score already high!</div>`;
   }
 }
-
-function downloadPDF() {
+async function downloadPDF() {
   const el = document.getElementById("result");
-  if (!el || !el.innerHTML.trim()) return alert("Scan first!");
-  const opt = { margin: 10, filename: 'ai-visibility-report.pdf', image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
-  html2pdf().from(el).set(opt).save();
-}
+  if (!el ||!el.innerHTML.trim()) return alert("Scan first!");
 
+  // 1. Sab cards ko force show karo PDF se pehle
+  const hiddenCards = el.querySelectorAll('.card');
+  const originalStyles = [];
+
+  hiddenCards.forEach((card, i) => {
+    originalStyles[i] = card.style.display;
+    card.style.display = 'block';
+    card.style.height = 'auto';
+    card.style.overflow = 'visible';
+  });
+
+  // 2. Scroll top + wait karo taake render ho jaye
+  window.scrollTo(0, 0);
+  await new Promise(resolve => setTimeout(resolve, 800));
+
+  // 3. PDF options - height fix ki hai
+  const opt = {
+    margin: 10,
+    filename: 'ai-visibility-report.pdf',
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: {
+      scale: 2,
+      useCORS: true,
+      scrollY: 0,
+      windowWidth: el.scrollWidth,
+      windowHeight: el.scrollHeight
+    },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'] }
+  };
+
+  // 4. PDF save karo aur purani display wapas lao
+  html2pdf().from(el).set(opt).save().then(() => {
+    hiddenCards.forEach((card, i) => {
+      card.style.display = originalStyles[i];
+    });
+  });
+}
 function toggleDarkMode() {
   document.body.classList.toggle("dark");
 }

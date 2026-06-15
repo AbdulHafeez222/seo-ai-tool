@@ -1349,6 +1349,7 @@ function renderImageSEO(data) {
   `);
 }
 
+    
 function renderEntities(data) {
   const entities = data.entities || {};
   showCard("entityCard", "entityResults", `
@@ -1360,8 +1361,10 @@ function renderEntities(data) {
   `);
 }
 
-function renderEEAT(data) {
-  document.getElementById("eeatCard").style.display = "block";
+function renderEEAT(data) 
+    {
+    setStyle("eeatCard", "display", "block");
+    document.getElementById("eeatCard").style.display = "block";
   const eeat = data.breakdown?.eeatBreakdown || {}, score = data.breakdown?.eeatScore || 0;
   document.getElementById("eeatResults").innerHTML = `
     <div style="text-align:center; margin:15px 0;">
@@ -1377,7 +1380,7 @@ function renderEEAT(data) {
 }
 
 function renderAISimulation(data) {
-  document.getElementById("aiSimulationCard").style.display = "block";
+  setStyle("aiSimulationCard", "display", "block");
   const sim = data.aiSearchSimulation;
   if (!sim) return;
   document.getElementById("aiSimulationText").innerHTML = `
@@ -1389,7 +1392,7 @@ function renderAISimulation(data) {
 
 function renderAEOReadiness(data) {
   if (data.aeoReadiness) {
-    document.getElementById('aeoReadinessCard').style.display = 'block';
+   setStyle("aeoReadinessCard", "display", "block");
     document.getElementById('aeoReadinessScore').textContent = data.aeoReadiness;
     const signalsList = document.getElementById('aeoSignalsList');
     signalsList.innerHTML = '';
@@ -1404,7 +1407,7 @@ function renderAEOReadiness(data) {
 
 function renderCitationProbability(data) {
   if (data.realCitationChatGPT !== undefined) {
-    document.getElementById('realCitationCard').style.display = 'block';
+    setStyle("realCitationCard", "display", "block");
     document.getElementById('realChatGPT').textContent = (data.realCitationChatGPT || 0) + '%';
     document.getElementById('realGemini').textContent = (data.realCitationGemini || 0) + '%';
     document.getElementById('realPerplexity').textContent = (data.realCitationPerplexity || 0) + '%';
@@ -1418,7 +1421,7 @@ function renderCitationProbability(data) {
 }
 
 function renderAIVisibility(data) {
-  document.getElementById("aiVisibilityCard").style.display = "block";
+  setStyle("aiVisibilityCard", "display", "block");
   document.getElementById("aiVisibilityResults").innerHTML = `
     <div style="text-align:center; margin:15px 0;">
       <div style="font-size:48px; font-weight:bold; color:#667eea;">${data.overallAIVisibilityScore || 0}</div>

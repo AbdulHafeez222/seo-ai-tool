@@ -219,7 +219,7 @@ body.dark .badge-purple { background: #581c87; color: #e9d5ff; }
 
 .faq-box p, .ai-faq-box p {
   color: #e0e0 !important;
-  margin: 8px 0 0 0;
+  margin: 8px 0 0;
 }
 
 pre {
@@ -256,7 +256,7 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
 /* ===== LOADING ===== */
 .loading { display: none; margin-top: 10px; font-size: 18px; }
 .spinner { 
-  border: 3px solid #f3f3f3; border-top: 3px solid #2563eb; 
+  border: 3px solid #f3f3; border-top: 3px solid #2563eb; 
   border-radius: 50%; width: 20px; height: 20px; 
   animation: spin 1s linear infinite; display: inline-block; margin-left: 10px; 
 }
@@ -292,7 +292,6 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
   color: inherit !important;
   -webkit-text-fill-color: inherit !important;
 }
-
 
 </style>
 </head>
@@ -402,7 +401,6 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
         <div class="metric-value" id="realPerplexity">0%</div>
         <div class="metric-label">Perplexity</div>
       </div>
-    </div>
     <div id="citationReasonsList" style="margin-top: 15px; font-size: 13px; padding: 10px; background: #f0f0f0; border-radius: 5px;"></div>
   </div>
 
@@ -680,7 +678,7 @@ function calculateTopicAuthority(text, niche = 'seo') {
     totalTopics: cluster.length,
     coveredList: coveredTopics // Ye add kiya taake pata chale konse topics mile
   };
-} NEW FEATURE END
+} // NEW FEATURE END
 function calculateNLPScore(text, entities, keywords) {
   const wordCount = text.split(/\s+/).length;
   
@@ -778,7 +776,7 @@ function calculateNLPScore(text, entities, keywords) {
     }
   }]
 }
-</script>
+</script>`
     });
   }
   
@@ -789,9 +787,9 @@ function calculateNLPScore(text, entities, keywords) {
 function renderRoadmap(tasks) {
   const html = tasks.map((t, i) => `
     <div class="card">
-      <h4>${t.title}</h4>
+      <h4>${escapeHtml(t.title)}</h4>
       <button onclick="toggleCode('code${i}')">Show Code</button>
-      <pre id="code${i}" style="display:none;background:#1e1e1e;color:#0f0;padding:10px;border-radius:4px;overflow:auto;"><code>${escapeHtml(t.code)}</code></pre>
+      <pre id="code${i}" style="display:none;background:#1e1e;color:#0f0;padding:10px;border-radius:4px;overflow:auto;"><code>${escapeHtml(t.code)}</code></pre>
     </div>
   `).join('');
   
@@ -803,7 +801,6 @@ function toggleCode(id) {
   if (!el) return;
   el.style.display = el.style.display === 'none'? 'block' : 'none';
 }
-
 
   function calculateAdvantage(yourData, competitorData) {
   const seoAdv = yourData.seoScore - competitorData.seoScore;
@@ -850,7 +847,7 @@ function renderV51Features(data) {
           <span class="score-label">Health</span>
         </div>
       </div>
-      <div style="margin-top:15px; text-align:left; font-size:14px; color:#333">
+            <div style="margin-top:15px; text-align:left; font-size:14px; color:#333">
         <p><strong>Total Checked:</strong> ${v51.brokenLinks.totalChecked}</p>
         <p><strong>Broken:</strong> <span style="color:#ff0000">${v51.brokenLinks.brokenCount}</span></p>
         ${v51.brokenLinks.brokenLinks.slice(0, 5).map(l => `<div style="font-size:12px;color:#ff6666">✗ ${l.url}</div>`).join('')}
@@ -972,7 +969,7 @@ function hideAllCards() {
    "citationOppCard","faqExpansionCard","aiSnippetsCard","trustSignalsCard","schemaOppCard",
    "localSeoCard","brokenLinksCard","coreWebVitalsCard","linkOpportunityCard",
    "contentDecayCard","featuredSnippetCard","peopleAlsoAskCard","visibilityTrendCard"].forEach(id => {
-    setStyle(id, 'display', 'none'); // ✅ Safe - null check andar hai
+    setStyle(id, 'display', 'none');
   });
 }
 
@@ -1129,56 +1126,54 @@ function renderAllResults(data) {
       </div>
     `);
   }
-}
-if (data.schemaOpportunities) {
-  showCard('schemaOppCard', 'schemaOppContent', data.schemaOpportunities.map(opp => `
-    <div style="margin:10px 0; padding:10px; background:#222; border-left:3px solid ${opp.priority==='CRITICAL'?'#ff0000':opp.priority==='HIGH'?'#ffaa00':'#00ff88'}">
-      <strong>${opp.type}</strong> <span style="color:#ffaa00">[${opp.priority}]</span><br>
-      ${opp.reason}<br>
-      <span style="color:#00ff88">Impact: ${opp.impact}</span>
-    </div>
-  `).join(''));
-}
-
-if (data.localSEO) {
-  const score = Math.round(data.localSEO.localScore);
-  showCard('localSeoCard', 'localSeoContent', `
-    <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #2d3748 ${score}% 100%);">
-      <span>${score}</span>
-    </div>
-    <div style="margin-top:15px">
-      <p><strong>Detected:</strong> ${data.localSEO.detected.join(', ') || 'None'}</p>
-      <p><strong>Missing:</strong> ${data.localSEO.missing.join(', ') || 'None'}</p>
-    </div>
-  `);
-}
-
-if (data.aeoReadiness) {
-  const score = Math.round(data.aeoReadiness.score);
-  const grade = score >= 80? 'A+' : score >= 60? 'B' : score >= 40? 'C' : 'D';
-  const color = score >= 80? '#00ff88' : score >= 60? '#ffa500' : '#ff4444';
   
-  setStyle('aeoReadinessCard', 'display', 'block');
-  
-  setHTML('aeoScoreCircle', `
-    <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
-      <div class="score-text">
-        <span class="score-number" style="color:${color}">${score}</span>
-        <span class="score-label">AEO ${grade}</span>
+  if (data.schemaOpportunities) {
+    showCard('schemaOppCard', 'schemaOppContent', data.schemaOpportunities.map(opp => `
+      <div style="margin:10px 0; padding:10px; background:#222; border-left:3px solid ${opp.priority==='CRITICAL'?'#ff0000':opp.priority==='HIGH'?'#ffaa00':'#00ff88'}">
+        <strong>${opp.type}</strong> <span style="color:#ffaa00">[${opp.priority}]</span><br>
+        ${opp.reason}<br>
+        <span style="color:#00ff88">Impact: ${opp.impact}</span>
       </div>
-    </div>
-  `);
-  
-  // Signals list
-  setHTML('aeoSignalsList', `
-    <div style="font-size:14px; color:#666; text-align:left">
-      ${data.aeoReadiness.signals.map(s => 
-        `${s.found? '✓' : '✗'} ${s.name}`
-      ).join('<br>')}
-    </div>
-  `);
-}
-// NEW FEATURE END
+    `).join(''));
+  }
+
+  if (data.localSEO) {
+    const score = Math.round(data.localSEO.localScore);
+    showCard('localSeoCard', 'localSeoContent', `
+      <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #2d3748 ${score}% 100%);">
+        <span>${score}</span>
+      </div>
+      <div style="margin-top:15px">
+        <p><strong>Detected:</strong> ${data.localSEO.detected.join(', ') || 'None'}</p>
+        <p><strong>Missing:</strong> ${data.localSEO.missing.join(', ') || 'None'}</p>
+      </div>
+    `);
+  }
+
+  if (data.aeoReadiness) {
+    const score = Math.round(data.aeoReadiness.score);
+    const grade = score >= 80? 'A+' : score >= 60? 'B' : score >= 40? 'C' : 'D';
+    const color = score >= 80? '#00ff88' : score >= 60? '#ffa500' : '#ff4444';
+    
+    setStyle('aeoReadinessCard', 'display', 'block');
+    
+    setHTML('aeoScoreCircle', `
+      <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
+        <div class="score-text">
+          <span class="score-number" style="color:${color}">${score}</span>
+          <span class="score-label">AEO ${grade}</span>
+        </div>
+      </div>
+    `);
+    
+    setHTML('aeoSignalsList', `
+      <div style="font-size:14px; color:#666; text-align:left">
+        ${data.aeoReadiness.signals.map(s => 
+          `${s.found? '✓' : '✗'} ${s.name}`
+        ).join('<br>')}
+      </div>
+    `);
+  }
 }
 
 function renderBasicResults(data) {
@@ -1192,7 +1187,6 @@ function renderBasicResults(data) {
     </div>
   `);
 }
-
 
 function renderCharts(data) {
   const seoScore = data.score || 0;
@@ -1401,7 +1395,7 @@ function renderAEOReadiness(data) {
     signalsList.innerHTML = '';
     (data.aeoSignals || []).forEach(signal => {
       const div = document.createElement('div');
-      div.style.cssText = 'padding: 8px; margin: 5px 0; background: #f0f0f0; border-radius: 5px; font-size: 14px;';
+      div.style.cssText = 'padding: 8px; margin: 5px 0; background: #f0; border-radius: 5px; font-size: 14px;';
       div.textContent = signal;
       signalsList.appendChild(div);
     });
@@ -1470,34 +1464,35 @@ async function compareCompetitor() {
         options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
       });
     }
- setHTML("comparisonDetails", `
-  <table style="width:100%;border-collapse:collapse;">
-    <thead>
-      <tr>
-        <th>Site</th>
-        <th>AI Score</th>
-        <th>SEO</th>
-        <th>AEO</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${(data.sites || []).map(s => `
-        <tr>
-          <td>${s.brand || 'Unknown'}</td>
-          <td>${s.aiVisibilityScore || 0}</td>
-          <td>${s.seoScore || 0}</td>
-          <td>${s.aeoScore || 0}</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>
+    
+    setHTML("comparisonDetails", `
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th>Site</th>
+            <th>AI Score</th>
+            <th>SEO</th>
+            <th>AEO</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(data.sites || []).map(s => `
+            <tr>
+              <td>${s.brand || 'Unknown'}</td>
+              <td>${s.aiVisibilityScore || 0}</td>
+              <td>${s.seoScore || 0}</td>
+              <td>${s.aeoScore || 0}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
 
-  <p style="margin-top:15px;">
-    <strong>Winner:</strong>
-    ${data.winner?.brand || 'N/A'}
-    (${data.winner?.aiVisibilityScore || 0}/100)
-  </p>
-`);
+      <p style="margin-top:15px;">
+        <strong>Winner:</strong>
+        ${data.winner?.brand || 'N/A'}
+        (${data.winner?.aiVisibilityScore || 0}/100)
+      </p>
+    `);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);
@@ -1725,7 +1720,6 @@ async function loadHistory() {
     setHTML("result", `<div class="card">❌ Failed to load history</div>`);
   }
 }
-
 
 window.onload = () => {}
   </script>

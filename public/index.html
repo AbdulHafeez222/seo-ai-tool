@@ -778,7 +778,7 @@ function calculateNLPScore(text, entities, keywords) {
     }
   }]
 }
-</script>`
+</script>
     });
   }
   
@@ -804,9 +804,7 @@ function toggleCode(id) {
   el.style.display = el.style.display === 'none'? 'block' : 'none';
 }
 
-function escapeHtml(text) {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+
   function calculateAdvantage(yourData, competitorData) {
   const seoAdv = yourData.seoScore - competitorData.seoScore;
   const aeoAdv = yourData.aeoScore - competitorData.aeoScore;

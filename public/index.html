@@ -382,6 +382,8 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
   <h3>🎯 Real AEO Readiness Score</h3>
   <div class="score-display" style="text-align: center; margin: 15px 0;">
     <div class="score-circle-large" id="aeoScoreCircle"></div>
+    <!-- Missing HTML Elements Added safely to support scripts -->
+    <div style="display:none;" id="aeoReadinessScore">0</div>
   </div>
   <div id="aeoSignalsList" style="margin-top: 15px;"></div>
 </div>
@@ -401,6 +403,7 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
         <div class="metric-value" id="realPerplexity">0%</div>
         <div class="metric-label">Perplexity</div>
       </div>
+    </div>
     <div id="citationReasonsList" style="margin-top: 15px; font-size: 13px; padding: 10px; background: #f0f0f0; border-radius: 5px;"></div>
   </div>
 
@@ -553,28 +556,43 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
   <div id="visibilityTrendContent"></div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 const API_BASE = "https://seo-ai-tool-s47q.onrender.com";
-let seoChart, aeoChart, comparisonChart;
+let seoChart = null, aeoChart = null, comparisonChart = null;
 let lastScanData = null;
+
 // ==== SAFE DOM HELPERS ====
 function setHTML(id, html) {
   const el = document.getElementById(id);
-  if (el) el.innerHTML = html; // innerHTML hi chahiye
+  if (el) {
+    el.innerHTML = html;
+  }
 }
 
 function setStyle(id, prop, value) {
   const el = document.getElementById(id);
-  if (el) el.style.setProperty(prop, value); // Ye fix hai
+  if (el) {
+    el.style.setProperty(prop, value);
+  }
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.textContent = text;
+  }
 }
 
 function showCard(cardId, contentId, html) {
   setStyle(cardId, 'display', 'block');
-  if (contentId && html !== undefined) setHTML(contentId, html);
+  if (contentId && html !== undefined) {
+    setHTML(contentId, html);
+  }
 }
 
 function escapeHtml(text = "") {
-  return text
+  return String(text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
@@ -594,6 +612,7 @@ function copyFAQs() {
   navigator.clipboard.writeText(text);
   alert('FAQs copied!');
 }
+
 function extractEntities(text) {
   const stopWords = [
     'chat','reply','minutes','today','click','here','direct','worldwide',
@@ -601,23 +620,22 @@ function extractEntities(text) {
     'home','about','privacy','terms','copyright'
   ];
   
-  // Sirf Capitalized words nikalo jo stop words me na ho
   const words = text.match(/\b[A-Z][a-z]{2,}\b/g) || [];
   const entities = [...new Set(words)]
-   .filter(w =>!stopWords.includes(w.toLowerCase()))
+   .filter(w => !stopWords.includes(w.toLowerCase()))
    .filter(w => w.length > 2);
   
-  return entities.slice(0, 15); // Top 15 hi rakho
+  return entities.slice(0, 15);
 }
-  function generateFAQ(text, mainKeyword) {
+
+function generateFAQ(text, mainKeyword) {
   const genericWords = ['clients','services','business','today','money','website','company'];
   
-  // Text se keywords nikalo
   let keywords = text.toLowerCase().match(/\b[a-z]{5,}\b/g) || [];
   keywords = [...new Set(keywords)]
-   .filter(k => k.length >= 5) // 5+ letters
-   .filter(k =>!genericWords.includes(k))
-   .filter(k => k!== mainKeyword.toLowerCase())
+   .filter(k => k.length >= 5)
+   .filter(k => !genericWords.includes(k))
+   .filter(k => k !== mainKeyword.toLowerCase())
    .slice(0, 5);
   
   if (keywords.length === 0) return [];
@@ -631,14 +649,14 @@ function extractEntities(text) {
 function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
+
 function copySnippet(type) {
   if (!lastScanData?.aiSnippets) return;
-  const text = type === 'direct'? lastScanData.aiSnippets.directAnswer : lastScanData.aiSnippets.featuredSnippet;
+  const text = type === 'direct' ? lastScanData.aiSnippets.directAnswer : lastScanData.aiSnippets.featuredSnippet;
   navigator.clipboard.writeText(text);
   alert('Snippet copied!');
 }
   
-
 const topicalClusters = {
   seo: [
     "backlinks", "keyword research", "technical seo", "local seo", 
@@ -669,22 +687,23 @@ function calculateTopicAuthority(text, niche = 'seo') {
   });
   
   const score = Math.round((covered / cluster.length) * 100);
-  const depth = score > 70? 'Deep' : score > 40? 'Medium' : 'Shallow';
+  const depth = score > 70 ? 'Deep' : score > 40 ? 'Medium' : 'Shallow';
   
   return {
     score,
     depth,
     topicsCovered: covered,
     totalTopics: cluster.length,
-    coveredList: coveredTopics // Ye add kiya taake pata chale konse topics mile
+    coveredList: coveredTopics
   };
-} // NEW FEATURE END
+}
+
 function calculateNLPScore(text, entities, keywords) {
   const wordCount = text.split(/\s+/).length;
   
-  const entityCoverage = Math.min(entities.length / 10, 1) * 100; // 10 entities = 100%
-  const keywordCoverage = Math.min(keywords.length / 20, 1) * 100; // 20 keywords = 100%
-  const contentDepth = Math.min(wordCount / 1500, 1) * 100; // 1500 words = 100%
+  const entityCoverage = Math.min(entities.length / 10, 1) * 100;
+  const keywordCoverage = Math.min(keywords.length / 20, 1) * 100;
+  const contentDepth = Math.min(wordCount / 1500, 1) * 100;
   
   const nlpScore = Math.round(
     (entityCoverage * 0.4) +
@@ -699,7 +718,8 @@ function calculateNLPScore(text, entities, keywords) {
     topicCoverage: Math.round(contentDepth)
   };
 }
-  function scanTrustSignals(html) {
+
+function scanTrustSignals(html) {
   const hasPhone = /(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.test(html);
   const hasEmail = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(html);
   const hasContactPage = /href=["'].*contact.*["']/i.test(html);
@@ -714,10 +734,11 @@ function calculateNLPScore(text, entities, keywords) {
     hasContactPage,
     hasAddress,
     hasAuthor: /author|written by/i.test(html),
-    hasSSL: location.protocol === 'https:'
+    hasSSL: window.location.protocol === 'https:'
   };
 }
-  function simulateCitation(data) {
+
+function simulateCitation(data) {
   const reasons = [];
   let willCite = true;
   
@@ -739,12 +760,13 @@ function calculateNLPScore(text, entities, keywords) {
   }
   
   return {
-    willCite: willCite? 'Yes' : 'No',
-    confidence: willCite? 85 : 20,
-    reasons: reasons.length? reasons : ['All checks passed']
+    willCite: willCite ? 'Yes' : 'No',
+    confidence: willCite ? 85 : 20,
+    reasons: reasons.length ? reasons : ['All checks passed']
   };
 }
- function analyzeInternalLinks(html, wordCount) {
+
+function analyzeInternalLinks(html, wordCount) {
   const internalLinks = (html.match(/<a[^>]+href=["'](?!http|mailto|tel)/gi) || []).length;
   const authorityFlow = Math.min(
     Math.round((internalLinks / Math.max(wordCount / 500, 1)) * 100),
@@ -754,10 +776,11 @@ function calculateNLPScore(text, entities, keywords) {
   return {
     internalLinks,
     authorityFlow,
-    status: authorityFlow > 60? 'Good' : authorityFlow > 30? 'Average' : 'Weak'
+    status: authorityFlow > 60 ? 'Good' : authorityFlow > 30 ? 'Average' : 'Weak'
   };
 } 
-  function generateRoadmap(data) {
+
+function generateRoadmap(data) {
   const tasks = [];
   
   if (!data.hasFAQSchema) {
@@ -776,20 +799,19 @@ function calculateNLPScore(text, entities, keywords) {
     }
   }]
 }
-</script>
+<\/script>`
     });
   }
   
   return tasks;
 }
 
-// HTML me show karne ka code
 function renderRoadmap(tasks) {
   const html = tasks.map((t, i) => `
     <div class="card">
       <h4>${escapeHtml(t.title)}</h4>
       <button onclick="toggleCode('code${i}')">Show Code</button>
-      <pre id="code${i}" style="display:none;background:#1e1e;color:#0f0;padding:10px;border-radius:4px;overflow:auto;"><code>${escapeHtml(t.code)}</code></pre>
+      <pre id="code${i}" style="display:none;background:#1e293b;color:#00ff88;padding:10px;border-radius:4px;overflow:auto;"><code>${escapeHtml(t.code)}</code></pre>
     </div>
   `).join('');
   
@@ -799,10 +821,10 @@ function renderRoadmap(tasks) {
 function toggleCode(id) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.style.display = el.style.display === 'none'? 'block' : 'none';
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
-  function calculateAdvantage(yourData, competitorData) {
+function calculateAdvantage(yourData, competitorData) {
   const seoAdv = yourData.seoScore - competitorData.seoScore;
   const aeoAdv = yourData.aeoScore - competitorData.aeoScore;
   const trustAdv = yourData.trustScore - competitorData.trustScore;
@@ -810,15 +832,14 @@ function toggleCode(id) {
   const netAdvantage = seoAdv + aeoAdv + trustAdv;
   
   return {
-    seo: seoAdv > 0? `+${seoAdv}` : seoAdv,
-    aeo: aeoAdv > 0? `+${aeoAdv}` : aeoAdv,
-    trust: trustAdv > 0? `+${trustAdv}` : trustAdv,
-    netAdvantage: netAdvantage > 0? `+${netAdvantage}` : netAdvantage,
-    verdict: netAdvantage > 10? 'You are winning' : netAdvantage < -10? 'Competitor is winning' : 'Close fight'
+    seo: seoAdv > 0 ? `+${seoAdv}` : seoAdv,
+    aeo: aeoAdv > 0 ? `+${aeoAdv}` : aeoAdv,
+    trust: trustAdv > 0 ? `+${trustAdv}` : trustAdv,
+    netAdvantage: netAdvantage > 0 ? `+${netAdvantage}` : netAdvantage,
+    verdict: netAdvantage > 10 ? 'You are winning' : netAdvantage < -10 ? 'Competitor is winning' : 'Close fight'
   };
 }
 
-// Display
 function renderAdvantage(adv) {
   setHTML('advantageResults', `
     <h3>Competitor Advantage</h3>
@@ -830,14 +851,14 @@ function renderAdvantage(adv) {
     <p><strong>Verdict:</strong> ${adv.verdict}</p>
   `);
 }
-// ✅ FIX: v5.1 Features ko function me wrap kiya
+
 function renderV51Features(data) {
   const v51 = data.v51Features;
   if (!v51) return;
 
   // Broken Links
   if (v51.brokenLinks) {
-    const score = v51.brokenLinks.healthScore;
+    const score = v51.brokenLinks.healthScore || 0;
     const color = score > 80 ? '#00ff88' : '#ffaa00';
     
     showCard('brokenLinksCard', 'brokenLinksContent', `
@@ -847,10 +868,10 @@ function renderV51Features(data) {
           <span class="score-label">Health</span>
         </div>
       </div>
-            <div style="margin-top:15px; text-align:left; font-size:14px; color:#333">
-        <p><strong>Total Checked:</strong> ${v51.brokenLinks.totalChecked}</p>
-        <p><strong>Broken:</strong> <span style="color:#ff0000">${v51.brokenLinks.brokenCount}</span></p>
-        ${v51.brokenLinks.brokenLinks.slice(0, 5).map(l => `<div style="font-size:12px;color:#ff6666">✗ ${l.url}</div>`).join('')}
+      <div style="margin-top:15px; text-align:left; font-size:14px; color:#333">
+        <p><strong>Total Checked:</strong> ${v51.brokenLinks.totalChecked || 0}</p>
+        <p><strong>Broken:</strong> <span style="color:#ff0000">${v51.brokenLinks.brokenCount || 0}</span></p>
+        ${(v51.brokenLinks.brokenLinks || []).slice(0, 5).map(l => `<div style="font-size:12px;color:#ff6666">✗ ${l.url}</div>`).join('')}
       </div>
     `);
   }
@@ -860,28 +881,28 @@ function renderV51Features(data) {
     const cwv = v51.coreWebVitals;
     showCard('coreWebVitalsCard', 'coreWebVitalsContent', `
       <div class="grid-3">
-        <div class="metric-box"><div class="metric-value">${cwv.lcp}ms</div><div class="metric-label">LCP <span class="badge badge-${cwv.lcpGrade === 'Good'? 'green' : 'orange'}">${cwv.lcpGrade}</span></div></div>
-        <div class="metric-box"><div class="metric-value">${cwv.cls}</div><div class="metric-label">CLS <span class="badge badge-${cwv.clsGrade === 'Good'? 'green' : 'orange'}">${cwv.clsGrade}</span></div></div>
-        <div class="metric-box"><div class="metric-value">${cwv.performanceScore}</div><div class="metric-label">Performance</div></div>
+        <div class="metric-box"><div class="metric-value">${cwv.lcp || 0}ms</div><div class="metric-label">LCP <span class="badge badge-${cwv.lcpGrade === 'Good' ? 'green' : 'orange'}">${cwv.lcpGrade || 'N/A'}</span></div></div>
+        <div class="metric-box"><div class="metric-value">${cwv.cls || 0}</div><div class="metric-label">CLS <span class="badge badge-${cwv.clsGrade === 'Good' ? 'green' : 'orange'}">${cwv.clsGrade || 'N/A'}</span></div></div>
+        <div class="metric-box"><div class="metric-value">${cwv.performanceScore || 0}</div><div class="metric-label">Performance</div></div>
       </div>
-      <p style="margin-top:10px"><strong>Fix:</strong> ${cwv.recommendations}</p>
+      <p style="margin-top:10px"><strong>Fix:</strong> ${cwv.recommendations || 'No recommendations'}</p>
     `);
   }
 
   // Link Opportunity
   if (v51.linkOpportunity) {
     showCard('linkOpportunityCard', 'linkOpportunityContent', `
-      <p><strong>Domain:</strong> ${v51.linkOpportunity.domain}</p>
-      <p><strong>DR Estimate:</strong> ${v51.linkOpportunity.drEstimate}</p>
-      <p><strong>Authority Score:</strong> ${v51.linkOpportunity.authorityScore}</p>
-      <p><strong>Opportunity Score:</strong> ${v51.linkOpportunity.opportunityScore}/100</p>
-      <p><strong>Effort:</strong> ${v51.linkOpportunity.effort}</p>
+      <p><strong>Domain:</strong> ${v51.linkOpportunity.domain || 'N/A'}</p>
+      <p><strong>DR Estimate:</strong> ${v51.linkOpportunity.drEstimate || 'N/A'}</p>
+      <p><strong>Authority Score:</strong> ${v51.linkOpportunity.authorityScore || 0}</p>
+      <p><strong>Opportunity Score:</strong> ${v51.linkOpportunity.opportunityScore || 0}/100</p>
+      <p><strong>Effort:</strong> ${v51.linkOpportunity.effort || 'Low'}</p>
     `);
   }
 
   // Content Decay
   if (v51.contentDecay) {
-    const freshness = v51.contentDecay.freshnessScore;
+    const freshness = v51.contentDecay.freshnessScore || 0;
     const color = freshness > 80 ? '#00ff88' : freshness > 60 ? '#ffaa00' : '#ff4444';
     showCard('contentDecayCard', 'contentDecayContent', `
       <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${freshness}%, #2d3748 ${freshness}% 100%);">
@@ -890,32 +911,32 @@ function renderV51Features(data) {
           <span class="score-label">Freshness</span>
         </div>
       </div>
-      <p style="margin-top:10px"><strong>Days Since Update:</strong> ${v51.contentDecay.daysSinceUpdate}</p>
-      <p><strong>Decay Stage:</strong> ${v51.contentDecay.decayStage}</p>
-      <p><strong>Recommendation:</strong> ${v51.contentDecay.recommendation}</p>
+      <p style="margin-top:10px"><strong>Days Since Update:</strong> ${v51.contentDecay.daysSinceUpdate || 0}</p>
+      <p><strong>Decay Stage:</strong> ${v51.contentDecay.decayStage || 'N/A'}</p>
+      <p><strong>Recommendation:</strong> ${v51.contentDecay.recommendation || 'No decay detected'}</p>
     `);
   }
 
   // Featured Snippet
   if (v51.featuredSnippet) {
-    const score = v51.featuredSnippet.optimizationScore;
+    const score = v51.featuredSnippet.optimizationScore || 0;
     showCard('featuredSnippetCard', 'featuredSnippetContent', `
       <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #e0e0e0 ${score}% 100%);">
         <span>${score}</span>
       </div>
       <p><strong>Current Winner:</strong> ${v51.featuredSnippet.currentWinner || 'None'}</p>
-      <p><strong>Your Chances:</strong> ${v51.featuredSnippet.yourChances}%</p>
-      <p><strong>Fix:</strong> ${v51.featuredSnippet.howToWin}</p>
+      <p><strong>Your Chances:</strong> ${v51.featuredSnippet.yourChances || 0}%</p>
+      <p><strong>Fix:</strong> ${v51.featuredSnippet.howToWin || 'No updates required'}</p>
     `);
   }
 
   // People Also Ask
   if (v51.peopleAlsoAsk) {
     showCard('peopleAlsoAskCard', 'peopleAlsoAskContent', `
-      <p><strong>Coverage:</strong> ${v51.peopleAlsoAsk.coverage}%</p>
-      <p><strong>Questions Answered:</strong> ${v51.peopleAlsoAsk.answeredCount}/${v51.peopleAlsoAsk.totalQuestions}</p>
+      <p><strong>Coverage:</strong> ${v51.peopleAlsoAsk.coverage || 0}%</p>
+      <p><strong>Questions Answered:</strong> ${v51.peopleAlsoAsk.answeredCount || 0}/${v51.peopleAlsoAsk.totalQuestions || 0}</p>
       <div style="margin-top:10px">
-        ${v51.peopleAlsoAsk.missingQuestions.map(q => `<div style="padding:5px; background:#222; margin:5px 0">❓ ${q}</div>`).join('')}
+        ${(v51.peopleAlsoAsk.missingQuestions || []).map(q => `<div style="padding:5px; background:#222; margin:5px 0">❓ ${q}</div>`).join('')}
       </div>
     `);
   }
@@ -923,15 +944,14 @@ function renderV51Features(data) {
   // Visibility Trend
   if (v51.visibilityTrend) {
     showCard('visibilityTrendCard', 'visibilityTrendContent', `
-      <p><strong>Trend:</strong> <span style="color:${v51.visibilityTrend.trend === 'Rising' ? '#00ff88' : '#ffaa00'}">${v51.visibilityTrend.trend}</span></p>
-      <p><strong>Change:</strong> ${v51.visibilityTrend.change}</p>
-      <p><strong>Confidence:</strong> ${v51.visibilityTrend.confidence}%</p>
-      <p><strong>Next Action:</strong> ${v51.visibilityTrend.nextAction}</p>
+      <p><strong>Trend:</strong> <span style="color:${v51.visibilityTrend.trend === 'Rising' ? '#00ff88' : '#ffaa00'}">${v51.visibilityTrend.trend || 'Stable'}</span></p>
+      <p><strong>Change:</strong> ${v51.visibilityTrend.change || '0'}</p>
+      <p><strong>Confidence:</strong> ${v51.visibilityTrend.confidence || 0}%</p>
+      <p><strong>Next Action:</strong> ${v51.visibilityTrend.nextAction || 'Keep tracking'}</p>
     `);
   }
 }
 
-// ✅ FIX 1: Prevent undefined errors
 const fixData = (data) => ({
   ...data,
   overallAIVisibilityScore: data.overallAIVisibilityScore ?? data.overall ?? data.aiVisibilityScore ?? 0,
@@ -991,6 +1011,8 @@ function copyToClipboard(text, btn) {
     const original = btn.innerText;
     btn.innerText = 'Copied!';
     setTimeout(() => btn.innerText = original, 2000);
+  }).catch(err => {
+    console.error("Clipboard copy failed: ", err);
   });
 }
 
@@ -1029,6 +1051,7 @@ async function scan() {
     setHTML("result", `<div class="card">❌ Error: ${err.message}</div>`);
   }
 }
+
 function renderAllResults(data) {
   renderCharts(data);
   renderBasicResults(data);
@@ -1046,56 +1069,56 @@ function renderAllResults(data) {
   renderCitationProbability(data);
   renderAIVisibility(data);
 
-  // NEW FEATURES - FIXED
+  // NEW FEATURES - FIXED WITH SAFE DOM HELPER
   if (data.topicalAuthority) {
-    const score = Math.round(data.topicalAuthority.score);
+    const score = Math.round(data.topicalAuthority.score || 0);
     showCard('topicalAuthorityCard', 'topicalAuthorityContent', `
       <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #e0e0e0 ${score}% 100%);">
         <span>${score}</span>
       </div>
-      <p><strong>Depth:</strong> ${data.topicalAuthority.depth}</p>
-      <p><strong>Topics Covered:</strong> ${data.topicalAuthority.topicsCovered}/9</p>
+      <p><strong>Depth:</strong> ${data.topicalAuthority.depth || 'N/A'}</p>
+      <p><strong>Topics Covered:</strong> ${data.topicalAuthority.topicsCovered || 0}/9</p>
     `);
   }
 
   if (data.semanticSEO) {
     showCard('semanticSEOCard', 'semanticSEOContent', `
-      <p><strong>NLP Score:</strong> ${data.semanticSEO.nlpScore}/100</p>
-      <p><strong>Entities Found:</strong> ${data.semanticSEO.entities?.join(', ') || 'None'}</p>
-      <p><strong>Semantic Gaps:</strong> ${data.semanticSEO.semanticGaps?.join(', ') || 'None'}</p>
+      <p><strong>NLP Score:</strong> ${data.semanticSEO.nlpScore || 0}/100</p>
+      <p><strong>Entities Found:</strong> ${(data.semanticSEO.entities || []).join(', ') || 'None'}</p>
+      <p><strong>Semantic Gaps:</strong> ${(data.semanticSEO.semanticGaps || []).join(', ') || 'None'}</p>
       <p><strong>Semantic HTML:</strong> ${data.semanticSEO.hasSemanticHTML ? '✓ Yes' : '✗ No'}</p>
     `);
   }
 
   if (data.citationOpportunities) {
-    showCard('citationOppCard', 'citationOppContent', data.citationOpportunities.map(opp => `
+    showCard('citationOppCard', 'citationOppContent', (data.citationOpportunities || []).map(opp => `
       <div class="opp-item" style="margin:10px 0; padding:10px; background:#222; border-left:3px solid #00ff88">
-        <strong>${opp.engine}:</strong> ${opp.reason}<br>
-        <span style="color:#00ff88">Impact: ${opp.impact}</span> | 
-        <span style="color:#ffaa00">Fix: ${opp.fix}</span>
+        <strong>${opp.engine || 'Engine'}:</strong> ${opp.reason || 'No details'}<br>
+        <span style="color:#00ff88">Impact: ${opp.impact || 'Medium'}</span> | 
+        <span style="color:#ffaa00">Fix: ${opp.fix || 'Needed'}</span>
       </div>
     `).join(''));
   }
 
   if (data.faqExpansion) {
-    showCard('faqExpansionCard', 'faqExpansionContent', data.faqExpansion.map((faq, i) => `
+    showCard('faqExpansionCard', 'faqExpansionContent', (data.faqExpansion || []).map((faq, i) => `
       <div style="margin:10px 0; padding:10px; background:#222">
-        <strong>Q${i+1}: ${faq.q}</strong><br>
-        <span style="color:#aaa">A: ${faq.a}</span>
+        <strong>Q${i+1}: ${faq.q || ''}</strong><br>
+        <span style="color:#aaa">A: ${faq.a || ''}</span>
       </div>
-    `).join('') + `<button onclick="copyFAQs()">📋 Copy All FAQs</button>`);
+    `).join('') + `<br><button onclick="copyFAQs()">📋 Copy All FAQs</button>`);
   }
 
   if (data.aiSnippets) {
     showCard('aiSnippetsCard', 'aiSnippetsContent', `
       <div style="margin:10px 0">
-        <strong>Direct Answer (${data.aiSnippets.wordCount} words):</strong>
-        <div style="background:#222; padding:10px; margin:5px 0">${data.aiSnippets.directAnswer}</div>
+        <strong>Direct Answer (${data.aiSnippets.wordCount || 0} words):</strong>
+        <div style="background:#222; padding:10px; margin:5px 0">${data.aiSnippets.directAnswer || ''}</div>
         <button onclick="copySnippet('direct')">Copy Direct Answer</button>
       </div>
       <div style="margin:10px 0">
         <strong>Featured Snippet Block:</strong>
-        <pre style="background:#222; padding:10px; white-space:pre-wrap">${data.aiSnippets.featuredSnippet}</pre>
+        <pre style="background:#222; padding:10px; white-space:pre-wrap">${data.aiSnippets.featuredSnippet || ''}</pre>
         <button onclick="copySnippet('featured')">Copy Featured Snippet</button>
       </div>
     `);
@@ -1103,7 +1126,7 @@ function renderAllResults(data) {
 
   if (data.trustSignals) {
     const signals = data.trustSignals;
-    const score = Math.round(signals.trustScore);
+    const score = Math.round(signals.trustScore || 0);
     const color = score > 70 ? '#00ff88' : score > 40 ? '#ffaa00' : '#ff4444';
     
     showCard('trustSignalsCard', 'trustSignalsContent', `
@@ -1113,47 +1136,47 @@ function renderAllResults(data) {
         </div>
       </div>
       <div style="margin-top:15px; font-size:14px; color:#333; text-align:left">
-        <p><strong>Signals Found:</strong> 2/7</p>
+        <p><strong>Signals Found:</strong></p>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px">
-          ${signals.hasAuthor ? '✓' : '✗'} Author 
-          ${signals.hasContact ? '✓' : '✗'} Contact 
-          ${signals.hasAbout ? '✓' : '✗'} About 
-          ${signals.hasPrivacyPolicy ? '✓' : '✗'} Privacy Policy 
-          ${signals.hasSocialProfiles ? '✓' : '✗'} Social Profiles 
-          ${signals.hasReviews ? '✓' : '✗'} Reviews 
-          ${signals.hasTestimonials ? '✓' : '✗'} Testimonials
+          <div>${signals.hasAuthor ? '✓' : '✗'} Author</div>
+          <div>${signals.hasContact ? '✓' : '✗'} Contact</div>
+          <div>${signals.hasAbout ? '✓' : '✗'} About</div>
+          <div>${signals.hasPrivacyPolicy ? '✓' : '✗'} Privacy Policy</div>
+          <div>${signals.hasSocialProfiles ? '✓' : '✗'} Social Profiles</div>
+          <div>${signals.hasReviews ? '✓' : '✗'} Reviews</div>
+          <div>${signals.hasTestimonials ? '✓' : '✗'} Testimonials</div>
         </div>
       </div>
     `);
   }
   
   if (data.schemaOpportunities) {
-    showCard('schemaOppCard', 'schemaOppContent', data.schemaOpportunities.map(opp => `
+    showCard('schemaOppCard', 'schemaOppContent', (data.schemaOpportunities || []).map(opp => `
       <div style="margin:10px 0; padding:10px; background:#222; border-left:3px solid ${opp.priority==='CRITICAL'?'#ff0000':opp.priority==='HIGH'?'#ffaa00':'#00ff88'}">
-        <strong>${opp.type}</strong> <span style="color:#ffaa00">[${opp.priority}]</span><br>
-        ${opp.reason}<br>
-        <span style="color:#00ff88">Impact: ${opp.impact}</span>
+        <strong>${opp.type || 'Schema'}</strong> <span style="color:#ffaa00">[${opp.priority || 'NORMAL'}]</span><br>
+        ${opp.reason || ''}<br>
+        <span style="color:#00ff88">Impact: ${opp.impact || 'High'}</span>
       </div>
     `).join(''));
   }
 
   if (data.localSEO) {
-    const score = Math.round(data.localSEO.localScore);
+    const score = Math.round(data.localSEO.localScore || 0);
     showCard('localSeoCard', 'localSeoContent', `
       <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #2d3748 ${score}% 100%);">
         <span>${score}</span>
       </div>
       <div style="margin-top:15px">
-        <p><strong>Detected:</strong> ${data.localSEO.detected.join(', ') || 'None'}</p>
-        <p><strong>Missing:</strong> ${data.localSEO.missing.join(', ') || 'None'}</p>
+        <p><strong>Detected:</strong> ${(data.localSEO.detected || []).join(', ') || 'None'}</p>
+        <p><strong>Missing:</strong> ${(data.localSEO.missing || []).join(', ') || 'None'}</p>
       </div>
     `);
   }
 
   if (data.aeoReadiness) {
-    const score = Math.round(data.aeoReadiness.score);
-    const grade = score >= 80? 'A+' : score >= 60? 'B' : score >= 40? 'C' : 'D';
-    const color = score >= 80? '#00ff88' : score >= 60? '#ffa500' : '#ff4444';
+    const score = Math.round(data.aeoReadiness.score || 0);
+    const grade = score >= 80 ? 'A+' : score >= 60 ? 'B' : score >= 40 ? 'C' : 'D';
+    const color = score >= 80 ? '#00ff88' : score >= 60 ? '#ffa500' : '#ff4444';
     
     setStyle('aeoReadinessCard', 'display', 'block');
     
@@ -1166,21 +1189,25 @@ function renderAllResults(data) {
       </div>
     `);
     
-    setHTML('aeoSignalsList', `
-      <div style="font-size:14px; color:#666; text-align:left">
-        ${data.aeoReadiness.signals.map(s => 
-          `${s.found? '✓' : '✗'} ${s.name}`
-        ).join('<br>')}
-      </div>
-    `);
+    setText('aeoReadinessScore', score);
+    
+    if (data.aeoReadiness.signals) {
+      setHTML('aeoSignalsList', `
+        <div style="font-size:14px; color:#666; text-align:left">
+          ${(data.aeoReadiness.signals || []).map(s => 
+            `${s.found ? '✓' : '✗'} ${s.name || ''}`
+          ).join('<br>')}
+        </div>
+      `);
+    }
   }
 }
 
 function renderBasicResults(data) {
   setHTML("result", `
     <div class="card">
-      <h3>📊 SEO Status: ${escapeHtml(data.status)} <span class="badge badge-${data.score >= 80? 'green' : data.score >= 60? 'orange' : 'red'}">${data.score}/100</span></h3>
-      <p><b>URL:</b> ${escapeHtml(data.url)}</p>
+      <h3>📊 SEO Status: ${escapeHtml(data.status || 'Scanned')} <span class="badge badge-${(data.score || 0) >= 80 ? 'green' : (data.score || 0) >= 60 ? 'orange' : 'red'}">${data.score || 0}/100</span></h3>
+      <p><b>URL:</b> ${escapeHtml(data.url || '')}</p>
       <p><b>Title:</b> ${escapeHtml(unescapeHtml(data.title)) || 'Not Found'}</p>
       <p><b>H1:</b> ${escapeHtml(unescapeHtml(data.h1)) || 'Not Found'}</p>
       <p><b>Word Count:</b> ${data.wordCount || 0}</p>
@@ -1191,7 +1218,7 @@ function renderBasicResults(data) {
 function renderCharts(data) {
   const seoScore = data.score || 0;
   const aeoScore = data.aeoScore || 0;
-  let seoColor = seoScore >= 80? "#16a34a" : seoScore >= 50? "#f97316" : "#dc2626";
+  let seoColor = seoScore >= 80 ? "#16a34a" : seoScore >= 50 ? "#f97316" : "#dc2626";
   
   const seoCanvas = document.getElementById("seoChart");
   if (seoCanvas) {
@@ -1225,11 +1252,11 @@ function renderCharts(data) {
     });
   }
   
-  let seoGrade = seoScore >= 90? "A+" : seoScore >= 80? "A" : seoScore >= 60? "B" : seoScore >= 40? "C" : "D";
+  let seoGrade = seoScore >= 90 ? "A+" : seoScore >= 80 ? "A" : seoScore >= 60 ? "B" : seoScore >= 40 ? "C" : "D";
   setHTML("seoScore", `${seoScore}<span>SEO ${seoGrade}</span>`);
   setStyle("seoScore", 'color', seoColor);
 
-  let aeoColor = aeoScore >= 80? "#16a34a" : aeoScore >= 50? "#f97316" : "#dc2626";
+  let aeoColor = aeoScore >= 80 ? "#16a34a" : aeoScore >= 50 ? "#f97316" : "#dc2626";
   const aeoCanvas = document.getElementById("aeoChart");
   if (aeoCanvas) {
     if (aeoChart) aeoChart.destroy();
@@ -1240,7 +1267,7 @@ function renderCharts(data) {
     });
   }
   
-  let aeoGrade = aeoScore >= 90? "A+" : aeoScore >= 80? "A" : aeoScore >= 60? "B" : aeoScore >= 40? "C" : "D";
+  let aeoGrade = aeoScore >= 90 ? "A+" : aeoScore >= 80 ? "A" : aeoScore >= 60 ? "B" : aeoScore >= 40 ? "C" : "D";
   setHTML("aeoScore", `${aeoScore}<span>AEO ${aeoGrade}</span>`);
   setStyle("aeoScore", 'color', aeoColor);
 }
@@ -1251,9 +1278,9 @@ function renderSchemaGenerator(data) {
       <h3>📋 Copy-Paste Schema Code</h3>
       ${Object.entries(data.schemaGenerator).map(([key, val]) => `
         <div class="ai-box" style="background: #1e293b; color: #e2e8f0; margin: 10px 0;">
-          <b style="color: #60a5fa;">${val.title}</b>
-          <textarea readonly style="width:100%; height:120px; font-family:monospace; font-size:11px; margin:8px 0; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #334155;">${val.code}</textarea>
-          <button onclick="copyToClipboard(\`${val.code.replace(/`/g, '\\`')}\`, this)" style="background:#10b981;font-size:12px; padding:6px 12px;">📋 Copy Code</button>
+          <b style="color: #60a5fa;">${val.title || key}</b>
+          <textarea readonly style="width:100%; height:120px; font-family:monospace; font-size:11px; margin:8px 0; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #334155;">${val.code || ''}</textarea>
+          <button onclick="copyToClipboard(\`${(val.code || '').replace(/`/g, '\\`')}\`, this)" style="background:#10b981;font-size:12px; padding:6px 12px;">📋 Copy Code</button>
         </div>
       `).join('')}
     `);
@@ -1277,34 +1304,35 @@ function renderSEOAudit(data) {
         <div class="metric-value">${minor.length}</div><div class="metric-label">Minor Issues</div>
       </div>
     </div>
-    ${critical.length > 0? `<h4 style="color:#dc2626;">❌ Critical:</h4><ul>${critical.map(i => `<li>${i}</li>`).join('')}</ul>` : ''}
-    ${important.length > 0? `<h4 style="color:#f59e0b;">⚠️ Important:</h4><ul>${important.map(i => `<li>${i}</li>`).join('')}</ul>` : ''}
-    ${minor.length > 0? `<h4 style="color:#3b82f6;">ℹ️ Minor:</h4><ul>${minor.map(i => `<li>${i}</li>`).join('')}</ul>` : ''}
+    ${critical.length > 0 ? `<h4 style="color:#dc2626;">❌ Critical:</h4><ul>${critical.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>` : ''}
+    ${important.length > 0 ? `<h4 style="color:#f59e0b;">⚠️ Important:</h4><ul>${important.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>` : ''}
+    ${minor.length > 0 ? `<h4 style="color:#3b82f6;">ℹ️ Minor:</h4><ul>${minor.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>` : ''}
   `);
 }
 
 function renderTitleAnalyzer(data) {
   const title = data.title || "";
   const length = title.length;
-  const status = length === 0? "Missing" : length < 30? "Too Short" : length > 60? "Too Long" : "Perfect";
-  const color = length === 0? "red" : length < 30 || length > 60? "orange" : "green";
+  const status = length === 0 ? "Missing" : length < 30 ? "Too Short" : length > 60 ? "Too Long" : "Perfect";
+  const color = length === 0 ? "red" : length < 30 || length > 60 ? "orange" : "green";
   
   showCard("titleAnalyzerCard", "titleAnalyzerResults", `
-    <p><strong>Title:</strong> ${title || "Not Found"}</p>
+    <p><strong>Title:</strong> ${escapeHtml(title) || "Not Found"}</p>
     <p><strong>Length:</strong> ${length} characters <span class="badge badge-${color}">${status}</span></p>
-    <p><strong>Recommendation:</strong> ${length === 0? "Add title tag" : length < 30? "Expand to 50-60 chars" : length > 60? "Shorten to 50-60 chars" : "Perfect!"}</p>
+    <p><strong>Recommendation:</strong> ${length === 0 ? "Add title tag" : length < 30 ? "Expand to 50-60 chars" : length > 60 ? "Shorten to 50-60 chars" : "Perfect!"}</p>
   `);
 }
+
 function renderMetaAnalyzer(data) {
   const meta = data.metaDescription || "";
   const length = meta.length;
-  const status = length === 0? "Missing" : length < 120? "Too Short" : length > 160? "Too Long" : "Perfect";
-  const color = length === 0? "red" : length < 120 || length > 160? "orange" : "green";
+  const status = length === 0 ? "Missing" : length < 120 ? "Too Short" : length > 160 ? "Too Long" : "Perfect";
+  const color = length === 0 ? "red" : length < 120 || length > 160 ? "orange" : "green";
   
   showCard("metaAnalyzerCard", "metaAnalyzerResults", `
-    <p><strong>Description:</strong> ${meta || "Not Found"}</p>
+    <p><strong>Description:</strong> ${escapeHtml(meta) || "Not Found"}</p>
     <p><strong>Length:</strong> ${length} characters <span class="badge badge-${color}">${status}</span></p>
-    <p><strong>Recommendation:</strong> ${length === 0? "Add meta description" : length < 120? "Expand to 150-160 chars" : length > 160? "Shorten to 150-160 chars" : "Perfect!"}</p>
+    <p><strong>Recommendation:</strong> ${length === 0 ? "Add meta description" : length < 120 ? "Expand to 150-160 chars" : length > 160 ? "Shorten to 150-160 chars" : "Perfect!"}</p>
   `);
 }
 
@@ -1314,9 +1342,9 @@ function renderHeadingStructure(data) {
   showCard("headingCard", "headingResults", `
     <table>
       <tr><th>Heading</th><th>Count</th><th>Status</th></tr>
-      <tr><td>H1</td><td>${h1Count}</td><td>${h1Count === 1? '<span class="badge badge-green">✓ Perfect</span>' : h1Count === 0? '<span class="badge badge-red">✗ Missing</span>' : '<span class="badge badge-orange">⚠ Multiple</span>'}</td></tr>
-      <tr><td>H2</td><td>${h2Count}</td><td>${h2Count >= 3? '<span class="badge badge-green">✓ Good</span>' : '<span class="badge badge-orange">⚠ Add More</span>'}</td></tr>
-      <tr><td>H3</td><td>${h3Count}</td><td>${h3Count >= 5? '<span class="badge badge-green">✓ Good</span>' : '<span class="badge badge-orange">⚠ Add More</span>'}</td></tr>
+      <tr><td>H1</td><td>${h1Count}</td><td>${h1Count === 1 ? '<span class="badge badge-green">✓ Perfect</span>' : h1Count === 0 ? '<span class="badge badge-red">✗ Missing</span>' : '<span class="badge badge-orange">⚠ Multiple</span>'}</td></tr>
+      <tr><td>H2</td><td>${h2Count}</td><td>${h2Count >= 3 ? '<span class="badge badge-green">✓ Good</span>' : '<span class="badge badge-orange">⚠ Add More</span>'}</td></tr>
+      <tr><td>H3</td><td>${h3Count}</td><td>${h3Count >= 5 ? '<span class="badge badge-green">✓ Good</span>' : '<span class="badge badge-orange">⚠ Add More</span>'}</td></tr>
     </table>
   `);
 }
@@ -1330,14 +1358,14 @@ function renderInternalLinking(data) {
       <div class="metric-box"><div class="metric-value">${linkData.uniquePages || 0}</div><div class="metric-label">Unique Pages</div></div>
       <div class="metric-box"><div class="metric-value">${linkData.avgLinkDepth || 0}</div><div class="metric-label">Avg Depth</div></div>
     </div>
-    <p><strong>Authority Flow:</strong> ${linkData.authorityFlow || 0}% <span class="badge badge-${linkData.authorityFlow >= 80? 'green' : 'orange'}">${linkData.authorityFlow >= 80? 'Good' : 'Weak'}</span></p>
-    ${linkData.weakLinking? `<p style="color:#dc2626;"><strong>⚠️ Weak Linking:</strong> Add more internal links</p>` : ''}
+    <p><strong>Authority Flow:</strong> ${linkData.authorityFlow || 0}% <span class="badge badge-${linkData.authorityFlow >= 80 ? 'green' : 'orange'}">${linkData.authorityFlow >= 80 ? 'Good' : 'Weak'}</span></p>
+    ${linkData.weakLinking ? `<p style="color:#dc2626;"><strong>⚠️ Weak Linking:</strong> Add more internal links</p>` : ''}
   `);
 }
 
 function renderImageSEO(data) {
   const total = data.totalImages || 0, withoutAlt = data.imagesWithoutAlt || 0, withAlt = total - withoutAlt;
-  const score = total > 0? Math.round((withAlt / total) * 100) : 100;
+  const score = total > 0 ? Math.round((withAlt / total) * 100) : 100;
   
   showCard("imageSeoCard", "imageSeoResults", `
     <div class="grid-3">
@@ -1345,11 +1373,10 @@ function renderImageSEO(data) {
       <div class="metric-box" style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);"><div class="metric-value">${withAlt}</div><div class="metric-label">With ALT</div></div>
       <div class="metric-box" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);"><div class="metric-value">${withoutAlt}</div><div class="metric-label">Missing ALT</div></div>
     </div>
-    <p><strong>Image SEO Score:</strong> ${score}% <span class="badge badge-${score >= 80? 'green' : 'orange'}">${score >= 80? 'Good' : 'Needs Work'}</span></p>
+    <p><strong>Image SEO Score:</strong> ${score}% <span class="badge badge-${score >= 80 ? 'green' : 'orange'}">${score >= 80 ? 'Good' : 'Needs Work'}</span></p>
   `);
 }
 
-    
 function renderEntities(data) {
   const entities = data.entities || {};
   showCard("entityCard", "entityResults", `
@@ -1361,68 +1388,73 @@ function renderEntities(data) {
   `);
 }
 
-function renderEEAT(data) 
-    {
-    setStyle("eeatCard", "display", "block");
-    document.getElementById("eeatCard").style.display = "block";
-  const eeat = data.breakdown?.eeatBreakdown || {}, score = data.breakdown?.eeatScore || 0;
-  document.getElementById("eeatResults").innerHTML = `
+function renderEEAT(data) {
+  setStyle("eeatCard", "display", "block");
+  const eeat = data.breakdown?.eeatBreakdown || {};
+  const score = data.breakdown?.eeatScore || 0;
+  
+  setHTML("eeatResults", `
     <div style="text-align:center; margin:15px 0;">
       <div style="font-size:48px; font-weight:bold; color:#667eea;">${score}/100</div>
       <div>E-E-A-T Score</div>
     </div>
     <div class="grid-3">
-      <div><h4>Experience (${eeat.experience?.score || 0}/25)</h4>${(eeat.experience?.factors || []).map(f => `<div style="font-size:12px;">${f}</div>`).join('')}</div>
-      <div><h4>Expertise (${eeat.expertise?.score || 0}/25)</h4>${(eeat.expertise?.factors || []).map(f => `<div style="font-size:12px;">${f}</div>`).join('')}</div>
-      <div><h4>Authority (${eeat.authoritativeness?.score || 0}/25)</h4>${(eeat.authoritativeness?.factors || []).map(f => `<div style="font-size:12px;">${f}</div>`).join('')}</div>
+      <div><h4>Experience (${eeat.experience?.score || 0}/25)</h4>${(eeat.experience?.factors || []).map(f => `<div style="font-size:12px;">${escapeHtml(f)}</div>`).join('')}</div>
+      <div><h4>Expertise (${eeat.expertise?.score || 0}/25)</h4>${(eeat.expertise?.factors || []).map(f => `<div style="font-size:12px;">${escapeHtml(f)}</div>`).join('')}</div>
+      <div><h4>Authority (${eeat.authoritativeness?.score || 0}/25)</h4>${(eeat.authoritativeness?.factors || []).map(f => `<div style="font-size:12px;">${escapeHtml(f)}</div>`).join('')}</div>
     </div>
-  `;
+  `);
 }
 
 function renderAISimulation(data) {
   setStyle("aiSimulationCard", "display", "block");
   const sim = data.aiSearchSimulation;
   if (!sim) return;
-  document.getElementById("aiSimulationText").innerHTML = `
-    <div class="ai-box"><b>ChatGPT:</b> ${sim.chatgpt?.answer || 'N/A'}<br><small>Will Cite: ${sim.chatgpt?.willCite? 'Yes' : 'No'}</small></div>
-    <div class="ai-box"><b>Gemini:</b> ${sim.gemini?.answer || 'N/A'}<br><small>Will Cite: ${sim.gemini?.willCite? 'Yes' : 'No'}</small></div>
-    <div class="ai-box"><b>Perplexity:</b> ${sim.perplexity?.answer || 'N/A'}<br><small>Will Cite: ${sim.perplexity?.willCite? 'Yes' : 'No'}</small></div>
-  `;
+  setHTML("aiSimulationText", `
+    <div class="ai-box"><b>ChatGPT:</b> ${escapeHtml(sim.chatgpt?.answer || 'N/A')}<br><small>Will Cite: ${sim.chatgpt?.willCite ? 'Yes' : 'No'}</small></div>
+    <div class="ai-box"><b>Gemini:</b> ${escapeHtml(sim.gemini?.answer || 'N/A')}<br><small>Will Cite: ${sim.gemini?.willCite ? 'Yes' : 'No'}</small></div>
+    <div class="ai-box"><b>Perplexity:</b> ${escapeHtml(sim.perplexity?.answer || 'N/A')}<br><small>Will Cite: ${sim.perplexity?.willCite ? 'Yes' : 'No'}</small></div>
+  `);
 }
 
 function renderAEOReadiness(data) {
   if (data.aeoReadiness) {
-   setStyle("aeoReadinessCard", "display", "block");
-    document.getElementById('aeoReadinessScore').textContent = data.aeoReadiness;
+    setStyle("aeoReadinessCard", "display", "block");
+    setText('aeoReadinessScore', data.aeoReadiness.score || 0);
+    
     const signalsList = document.getElementById('aeoSignalsList');
-    signalsList.innerHTML = '';
-    (data.aeoSignals || []).forEach(signal => {
-      const div = document.createElement('div');
-      div.style.cssText = 'padding: 8px; margin: 5px 0; background: #f0; border-radius: 5px; font-size: 14px;';
-      div.textContent = signal;
-      signalsList.appendChild(div);
-    });
+    if (signalsList) {
+      signalsList.innerHTML = '';
+      (data.aeoSignals || []).forEach(signal => {
+        const div = document.createElement('div');
+        div.style.cssText = 'padding: 8px; margin: 5px 0; background: #f0; border-radius: 5px; font-size: 14px;';
+        div.textContent = signal;
+        signalsList.appendChild(div);
+      });
+    }
   }
 }
 
 function renderCitationProbability(data) {
   if (data.realCitationChatGPT !== undefined) {
     setStyle("realCitationCard", "display", "block");
-    document.getElementById('realChatGPT').textContent = (data.realCitationChatGPT || 0) + '%';
-    document.getElementById('realGemini').textContent = (data.realCitationGemini || 0) + '%';
-    document.getElementById('realPerplexity').textContent = (data.realCitationPerplexity || 0) + '%';
+    setText('realChatGPT', (data.realCitationChatGPT || 0) + '%');
+    setText('realGemini', (data.realCitationGemini || 0) + '%');
+    setText('realPerplexity', (data.realCitationPerplexity || 0) + '%');
     
     const reasonsList = document.getElementById('citationReasonsList');
-    reasonsList.innerHTML = '<strong>Why AI will cite you:</strong><br>';
-    (data.citationReasons || []).forEach(reason => {
-      reasonsList.innerHTML += `• ${reason}<br>`;
-    });
+    if (reasonsList) {
+      reasonsList.innerHTML = '<strong>Why AI will cite you:</strong><br>';
+      (data.citationReasons || []).forEach(reason => {
+        reasonsList.innerHTML += `• ${escapeHtml(reason)}<br>`;
+      });
+    }
   }
 }
 
 function renderAIVisibility(data) {
   setStyle("aiVisibilityCard", "display", "block");
-  document.getElementById("aiVisibilityResults").innerHTML = `
+  setHTML("aiVisibilityResults", `
     <div style="text-align:center; margin:15px 0;">
       <div style="font-size:48px; font-weight:bold; color:#667eea;">${data.overallAIVisibilityScore || 0}</div>
       <div>Overall AI Visibility Score</div>
@@ -1434,7 +1466,7 @@ function renderAIVisibility(data) {
       <tr><td>Citation Probability</td><td>${data.citationProbability || 0}%</td></tr>
       <tr><td>Readability</td><td>${data.readabilityScore || 0}/100</td></tr>
     </table>
-  `;
+  `);
 }
 
 async function compareCompetitor() {
@@ -1444,8 +1476,8 @@ async function compareCompetitor() {
   const compEl = document.getElementById("competitorUrl");
   if (!urlEl || !compEl) return alert("Input fields not found");
   
-  const url = urlEl.value;
-  const comp = compEl.value;
+  const url = urlEl.value.trim();
+  const comp = compEl.value.trim();
   if (!comp) return alert("Competitor URL dalo");
   
   showLoading();
@@ -1481,7 +1513,7 @@ async function compareCompetitor() {
         <tbody>
           ${(data.sites || []).map(s => `
             <tr>
-              <td>${s.brand || 'Unknown'}</td>
+              <td>${escapeHtml(s.brand || 'Unknown')}</td>
               <td>${s.aiVisibilityScore || 0}</td>
               <td>${s.seoScore || 0}</td>
               <td>${s.aeoScore || 0}</td>
@@ -1492,7 +1524,7 @@ async function compareCompetitor() {
 
       <p style="margin-top:15px;">
         <strong>Winner:</strong>
-        ${data.winner?.brand || 'N/A'}
+        ${escapeHtml(data.winner?.brand || 'N/A')}
         (${data.winner?.aiVisibilityScore || 0}/100)
       </p>
     `);
@@ -1508,7 +1540,7 @@ async function generateRoadmap() {
   try {
     const urlEl = document.getElementById("url");
     if (!urlEl) return alert("URL input not found");
-    const url = urlEl.value;
+    const url = urlEl.value.trim();
     
     const res = await fetch(`${API_BASE}/roadmap?url=${encodeURIComponent(url)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1517,15 +1549,15 @@ async function generateRoadmap() {
     if (data.error) return alert(data.error);
     
     setStyle("roadmapCard", 'display', 'block');
-    setHTML("currentScore", data.currentScore || 0);
-    setHTML("potentialScore", data.potentialScore || 0);
+    setText("currentScore", data.currentScore || 0);
+    setText("potentialScore", data.potentialScore || 0);
     setHTML("roadmapSteps", (data.roadmap || []).map(r => `
       <div class="ai-box" style="border-left: 4px solid ${r.priority === 'CRITICAL'? '#dc2626' : '#f59e0b'};">
-        <b>Step ${r.step}: ${r.task}</b><span class="badge badge-${r.priority === 'CRITICAL'? 'red' : 'orange'}">${r.priority}</span>
-        <p style="margin: 8px 0 0; font-size: 13px;">${r.why}</p>
+        <b>Step ${r.step}: ${escapeHtml(r.task || '')}</b><span class="badge badge-${r.priority === 'CRITICAL'? 'red' : 'orange'}">${escapeHtml(r.priority || 'MEDIUM')}</span>
+        <p style="margin: 8px 0 0; font-size: 13px;">${escapeHtml(r.why || '')}</p>
         <details style="margin-top: 8px;"><summary style="cursor: pointer; font-size: 12px; color: #2563eb;">Show Code</summary>
-           <pre style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 5px; margin-top: 5px; font-size: 11px; overflow-x: auto;"><code>${r.code || '// No code available'}</code></pre></details>
-      </div>`).join('') + `<p style="text-align: center; margin-top: 15px; font-weight: 600;">⏱️ Total Time: ${data.estimatedTime || 'N/A'}</p>`);
+           <pre style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 5px; margin-top: 5px; font-size: 11px; overflow-x: auto;"><code>${escapeHtml(r.code || '// No code available')}</code></pre></details>
+      </div>`).join('') + `<p style="text-align: center; margin-top: 15px; font-weight: 600;">⏱️ Total Time: ${escapeHtml(data.estimatedTime || 'N/A')}</p>`);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);
@@ -1539,8 +1571,8 @@ async function gapAnalysis() {
   const compEl = document.getElementById("competitorUrl");
   if (!urlEl || !compEl) return alert("Input fields not found");
   
-  const url = urlEl.value;
-  const comp = compEl.value;
+  const url = urlEl.value.trim();
+  const comp = compEl.value.trim();
   if (!comp) return alert("Competitor URL dalo");
   
   showLoading();
@@ -1552,8 +1584,8 @@ async function gapAnalysis() {
     if (data.error) return alert(data.error);
     
     setStyle("gapCard", 'display', 'block');
-    setHTML("competitorHas", (data.competitor?.has || []).map(h => `✓ ${h}`).join('<br>') || 'No data');
-    setHTML("youMissing", (data.you?.missing || []).map(m => `✗ ${m}`).join('<br>') || 'None!');
+    setHTML("competitorHas", (data.competitor?.has || []).map(h => `✓ ${escapeHtml(h)}`).join('<br>') || 'No data');
+    setHTML("youMissing", (data.you?.missing || []).map(m => `✗ ${escapeHtml(m)}`).join('<br>') || 'None!');
     setHTML("gapImpact", `<div class="badge badge-red">${(data.you?.missing || []).length} Gaps Found</div>`);
   } catch (err) {
     hideLoading();
@@ -1568,8 +1600,8 @@ async function keywordTheft() {
   const compEl = document.getElementById("competitorUrl");
   if (!urlEl || !compEl) return alert("Input fields not found");
   
-  const url = urlEl.value;
-  const comp = compEl.value;
+  const url = urlEl.value.trim();
+  const comp = compEl.value.trim();
   if (!comp) return alert("Competitor URL dalo");
   
   showLoading();
@@ -1583,10 +1615,10 @@ async function keywordTheft() {
     setStyle("keywordTheftCard", 'display', 'block');
     setHTML("keywordTheftResults", `
       <div class="grid-3">
-        <div><h4>🔥 Top Keywords:</h4>${(data.topCompetitorKeywords || []).map(k => `<span class="badge badge-red" style="margin: 2px;">${k}</span>`).join('') || 'None'}</div>
-        <div><h4>💎 Missing:</h4>${(data.missingKeywords || []).map(k => `<span class="badge badge-orange" style="margin: 2px;">${k}</span>`).join('') || 'None!'}</div>
-        <div><h4>✅ Shared:</h4>${(data.sharedKeywords || []).map(k => `<span class="badge badge-green" style="margin: 2px;">${k}</span>`).join('') || 'None'}</div>
-      </div><p style="margin-top: 15px; text-align: center; font-weight: 600;">${data.opportunity || 'No opportunity data'}</p>`);
+        <div><h4>🔥 Top Keywords:</h4>${(data.topCompetitorKeywords || []).map(k => `<span class="badge badge-red" style="margin: 2px;">${escapeHtml(k)}</span>`).join('') || 'None'}</div>
+        <div><h4>💎 Missing:</h4>${(data.missingKeywords || []).map(k => `<span class="badge badge-orange" style="margin: 2px;">${escapeHtml(k)}</span>`).join('') || 'None!'}</div>
+        <div><h4>✅ Shared:</h4>${(data.sharedKeywords || []).map(k => `<span class="badge badge-green" style="margin: 2px;">${escapeHtml(k)}</span>`).join('') || 'None'}</div>
+      </div><p style="margin-top: 15px; text-align: center; font-weight: 600;">${escapeHtml(data.opportunity || 'No opportunity data')}</p>`);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);
@@ -1596,12 +1628,12 @@ async function keywordTheft() {
 async function contentBrief() {
   const keywordEl = document.getElementById("keyword");
   if (!keywordEl) return alert("Keyword input not found");
-  const keyword = keywordEl.value;
+  const keyword = keywordEl.value.trim();
   if (!keyword) return alert("Keyword dalo");
   
   showLoading();
   try {
-   const res = await fetch(`${API_BASE}/content-brief?keyword=${encodeURIComponent(keyword)}`);
+    const res = await fetch(`${API_BASE}/content-brief?keyword=${encodeURIComponent(keyword)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     hideLoading();
@@ -1609,11 +1641,11 @@ async function contentBrief() {
     
     setStyle("briefCard", 'display', 'block');
     setHTML("briefResults", `
-      <h4>H1: ${data.h1 || keyword}</h4>
+      <h4>H1: ${escapeHtml(data.h1 || keyword)}</h4>
       <h4>H2s:</h4>
-      <ul>${(data.h2s || []).map(h => `<li>${h}</li>`).join('') || '<li>No H2s found</li>'}</ul>
+      <ul>${(data.h2s || []).map(h => `<li>${escapeHtml(h)}</li>`).join('') || '<li>No H2s found</li>'}</ul>
       <h4>FAQs:</h4>
-      ${(data.faqs || []).map(f => `<p><b>Q: ${f.q || ''}</b><br>A: ${f.a || ''}</p>`).join('') || '<p>No FAQs</p>'}`);
+      ${(data.faqs || []).map(f => `<p><b>Q: ${escapeHtml(f.q || '')}</b><br>A: ${escapeHtml(f.a || '')}</p>`).join('') || '<p>No FAQs</p>'}`);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);
@@ -1634,12 +1666,12 @@ async function runAutopilot() {
       return `
         <div style="display:flex; justify-content:space-between; padding:12px; border-left:4px solid ${color}; background:#f8f9fa; margin:8px 0; border-radius:6px;">
           <div>
-            <strong>${task.task || 'No task'}</strong>
-            <div style="font-size:12px; color:#666; margin-top:4px;">Effort: ${task.effort || 'Low'}</div>
+            <strong style="color: #1e293b;">${escapeHtml(task.task || 'No task')}</strong>
+            <div style="font-size:12px; color:#666; margin-top:4px;">Effort: ${escapeHtml(task.effort || 'Low')}</div>
           </div>
           <div style="text-align:right;">
-            <div style="color:${color}; font-weight:bold; font-size:16px;">${task.impact || '+10'}</div>
-            <div style="font-size:11px; background:${color}; color:#fff; padding:2px 8px; border-radius:3px; display:inline-block; margin-top:4px;">${task.priority || 'MEDIUM'}</div>
+            <div style="color:${color}; font-weight:bold; font-size:16px;">${escapeHtml(task.impact || '+10')}</div>
+            <div style="font-size:11px; background:${color}; color:#fff; padding:2px 8px; border-radius:3px; display:inline-block; margin-top:4px;">${escapeHtml(task.priority || 'MEDIUM')}</div>
           </div>
         </div>
       `;
@@ -1648,7 +1680,7 @@ async function runAutopilot() {
     setHTML('autopilotResults', `
       <div style="text-align:center;margin:20px 0;">
         <div style="font-size:48px;font-weight:bold;color:#10b981;">${data.score || 0}/100</div>
-        <div style="font-size:18px;">${data.aiVisibilityLevel || 'Good'}</div>
+        <div style="font-size:18px;">${escapeHtml(data.aiVisibilityLevel || 'Good')}</div>
       </div>
       <h3>🚀 AI Autopilot - Quick Wins</h3>
       ${tasksHTML}
@@ -1662,7 +1694,7 @@ async function downloadPDF() {
   const el = document.getElementById("result");
   if (!el || !el.innerHTML.trim()) return alert("Scan first!");
 
-  const hiddenCards = el.querySelectorAll('.card');
+  const hiddenCards = document.querySelectorAll('.card');
   const originalStyles = [];
 
   hiddenCards.forEach((card, i) => {
@@ -1683,14 +1715,19 @@ async function downloadPDF() {
       scale: 2,
       useCORS: true,
       scrollY: 0,
-      windowWidth: el.scrollWidth,
-      windowHeight: el.scrollHeight
+      windowWidth: document.body.scrollWidth,
+      windowHeight: document.body.scrollHeight
     },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['css', 'legacy'] }
   };
 
-  html2pdf().from(el).set(opt).save().then(() => {
+  html2pdf().from(document.body).set(opt).save().then(() => {
+    hiddenCards.forEach((card, i) => {
+      card.style.display = originalStyles[i];
+    });
+  }).catch(err => {
+    console.error("PDF download failure:", err);
     hiddenCards.forEach((card, i) => {
       card.style.display = originalStyles[i];
     });
@@ -1712,9 +1749,9 @@ async function loadHistory() {
       <h3>📊 Scan History</h3>
       ${history.map(item => `
         <div class="card">
-          <p><b>URL:</b> ${item.url}</p>
+          <p><b>URL:</b> ${escapeHtml(item.url || '')}</p>
           <p><b>AI Visibility:</b> ${item.score || 0}/100</p>
-          <p><b>SEO Score:</b> ${item.seoScore} | <b>AEO Score:</b> ${item.aeoScore || 0}</p>
+          <p><b>SEO Score:</b> ${item.seoScore || 0} | <b>AEO Score:</b> ${item.aeoScore || 0}</p>
           <p><b>Scanned:</b> ${new Date(item.timestamp).toLocaleString()}</p>
         </div>
       `).join("")}
@@ -1726,6 +1763,5 @@ async function loadHistory() {
 
 window.onload = () => {}
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
 </html>

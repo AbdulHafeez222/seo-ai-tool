@@ -19,7 +19,7 @@ const safeArray = (v) => Array.isArray(v) ? v : [];
 const safeNumber = (v, d = 0) => isNaN(Number(v)) ? d : Number(v);
 const safeArraySlice = (arr, start, end) => safeArray(arr).slice(start, end);
 const clamp = (num, min = 0, max = 100) => Math.min(max, Math.max(min, isNaN(num) ? 0 : num));
-const safe = (val, fallback = '') => val !== undefined && val !== null ? val : fallback;
+const safe = (val, fallback = '') => (val !== undefined && val !== null) ? val : fallback;
 
 // ========== RESILIENT FETCH ENGINE (SOLVES 403/500 ISSUES) ==========
 async function safeFetch(url, options = {}) {
@@ -177,10 +177,11 @@ function analyzeInternalLinks($, url, h2s) {
   const uniquePages = Object.keys(linkMap).length;
   const linkDepths = Object.keys(linkMap).map(link => link.split('/').filter(Boolean).length);
   const avgDepth = linkDepths.length > 0 ? (linkDepths.reduce((a, b) => a + b, 0) / linkDepths.length).toFixed(1) : 0;
-  const authorityFlow = h2s.length > 0 ? Math.round((internalLinks / h2s.length) * 100) : 0;
-  const weakLinking = internalLinks < h2s.length;
+  const h2Length = safeArray(h2s).length;
+  const authorityFlow = h2Length > 0 ? Math.round((internalLinks / h2Length) * 100) : 0;
+  const weakLinking = internalLinks < h2Length;
   const suggestions = [];
-  if (weakLinking) h2s.slice(0, 3).forEach(h2 => suggestions.push(`Add internal link to section: ${h2}`));
+  if (weakLinking) safeArraySlice(h2s, 0, 3).forEach(h2 => suggestions.push(`Add internal link to section: ${h2}`));
 
   console.log("Internal Links Counted:", { internalLinks, uniquePages, averageDepth: parseFloat(avgDepth), authorityFlow });
 
@@ -209,28 +210,30 @@ function calculateEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactP
     trustworthiness: { score: 0, max: 25, factors: [] }
   };
 
+  const safeBody = safeString(bodyText);
+
   // Experiential signals
   if (hasAuthor) { breakdown.experience.score += 10; breakdown.experience.factors.push("✓ Author attribution"); }
-  if (bodyText.match(/I have|we have|our experience|years of/i)) { breakdown.experience.score += 8; breakdown.experience.factors.push("✓ First-hand experience"); }
-  if (bodyText.match(/case study|portfolio|client/i)) { breakdown.experience.score += 7; breakdown.experience.factors.push("✓ Case studies"); }
+  if (safeBody.match(/I have|we have|our experience|years of/i)) { breakdown.experience.score += 8; breakdown.experience.factors.push("✓ First-hand experience"); }
+  if (safeBody.match(/case study|portfolio|client/i)) { breakdown.experience.score += 7; breakdown.experience.factors.push("✓ Case studies"); }
 
   // Expertise signals
   if (hasAboutPage) { breakdown.expertise.score += 10; breakdown.expertise.factors.push("✓ About page"); }
-  if (hasAuthor && bodyText.match(/expert|specialist|certified|degree/i)) { breakdown.expertise.score += 8; breakdown.expertise.factors.push("✓ Expert credentials"); }
-  if (schemas.Organization?.present) { breakdown.expertise.score += 7; breakdown.expertise.factors.push("✓ Organization schema"); }
+  if (hasAuthor && safeBody.match(/expert|specialist|certified|degree/i)) { breakdown.expertise.score += 8; breakdown.expertise.factors.push("✓ Expert credentials"); }
+  if (schemas?.Organization?.present) { breakdown.expertise.score += 7; breakdown.expertise.factors.push("✓ Organization schema"); }
 
   // Authoritative signals
   if (hasLinkedIn) { breakdown.authoritativeness.score += 8; breakdown.authoritativeness.factors.push("✓ LinkedIn Link"); }
   if (hasFacebook) { breakdown.authoritativeness.score += 5; breakdown.authoritativeness.factors.push("✓ Facebook Link"); }
   if ($('a[href*="wikipedia"]').length > 0 || $('a[href*="gov"]').length > 0) { breakdown.authoritativeness.score += 7; breakdown.authoritativeness.factors.push("✓ Authoritative citations"); }
-  if (bodyText.match(/featured|award|recognition/i)) { breakdown.authoritativeness.score += 5; breakdown.authoritativeness.factors.push("✓ Awards/recognition mentioned"); }
+  if (safeBody.match(/featured|award|recognition/i)) { breakdown.authoritativeness.score += 5; breakdown.authoritativeness.factors.push("✓ Awards/recognition mentioned"); }
 
   // Trustworthiness signals
   if (isHttps) { breakdown.trustworthiness.score += 6; breakdown.trustworthiness.factors.push("✓ HTTPS Connection"); }
   if (hasPrivacyPolicy) { breakdown.trustworthiness.score += 5; breakdown.trustworthiness.factors.push("✓ Privacy policy page"); }
   if (hasContactPage) { breakdown.trustworthiness.score += 6; breakdown.trustworthiness.factors.push("✓ Contact details"); }
   if (hasLastModified) { breakdown.trustworthiness.score += 4; breakdown.trustworthiness.factors.push("✓ Last updated proof"); }
-  if (schemas.LocalBusiness?.present) { breakdown.trustworthiness.score += 4; breakdown.trustworthiness.factors.push("✓ LocalBusiness schema"); }
+  if (schemas?.LocalBusiness?.present) { breakdown.trustworthiness.score += 4; breakdown.trustworthiness.factors.push("✓ LocalBusiness schema"); }
 
   const totalScore = breakdown.experience.score + breakdown.expertise.score + breakdown.authoritativeness.score + breakdown.trustworthiness.score;
   return { 
@@ -249,6 +252,11 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
   const organizations = [];
   const prices = [];
   const keywords = [];
+
+  const safeTitle = safeString(title);
+  const safeH1 = safeString(h1);
+  const safeDesc = safeString(metaDescription);
+  const safeBody = safeString(bodyText);
 
   // Parse Schemas for entities
   $('script[type="application/ld+json"]').each((i, el) => {
@@ -293,13 +301,13 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
   }
 
   // Parse title & headings
-  if (title.includes('|')) {
-    brands.push(title.split('|').pop().trim());
-  } else if (title.includes('-')) {
-    brands.push(title.split('-').pop().trim());
+  if (safeTitle.includes('|')) {
+    brands.push(safeTitle.split('|').pop().trim());
+  } else if (safeTitle.includes('-')) {
+    brands.push(safeTitle.split('-').pop().trim());
   }
 
-  const combinedText = h1 + " " + h2s.join(" ") + " " + h3s.join(" ") + " " + bodyText;
+  const combinedText = safeH1 + " " + safeArray(h2s).join(" ") + " " + safeArray(h3s).join(" ") + " " + safeBody;
 
   // Person extraction
   const peopleRegex = /\b(?:Mr|Mrs|Ms|Dr|CEO|Founder|Author|by)\.?\s+([A-Z][a-z]+\s+[A-Z][a-z]+)\b/g;
@@ -319,7 +327,7 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
   ];
   locationKeywords.forEach(loc => {
     const regex = new RegExp(`\\b${loc}\\b`, 'i');
-    if (regex.test(combinedText) || regex.test(metaDescription)) {
+    if (regex.test(combinedText) || regex.test(safeDesc)) {
       locations.push(loc);
     }
   });
@@ -333,7 +341,7 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
   ];
   serviceKeywords.forEach(srv => {
     const regex = new RegExp(`\\b${srv}\\b`, 'i');
-    if (regex.test(combinedText) || regex.test(metaDescription)) {
+    if (regex.test(combinedText) || regex.test(safeDesc)) {
       services.push(srv);
     }
   });
@@ -355,7 +363,7 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
   const sortedKeywords = Object.keys(wordFrequency).sort((a, b) => wordFrequency[b] - wordFrequency[a]);
   keywords.push(...sortedKeywords.slice(0, 15));
 
-  const cleanArray = (arr) => [...new Set(arr.filter(Boolean).map(x => String(x).trim()))].slice(0, 10);
+  const cleanArray = (arr) => [...new Set(safeArray(arr).filter(Boolean).map(x => String(x).trim()))].slice(0, 10);
 
   const finalEntities = {
     brands: cleanArray(brands),
@@ -374,8 +382,8 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
 
 // 1. TOPICAL AUTHORITY ENGINE
 const calculateTopicalAuthority = ($, keywords, h2s, h3s) => {
-  const allHeadings = [...safeArray(h2s), ...safeArray(h3s)].map(h => h.toLowerCase());
-  const keywordSet = new Set(safeArray(keywords).map(k => k.toLowerCase()));
+  const allHeadings = [...safeArray(h2s), ...safeArray(h3s)].map(h => safeString(h).toLowerCase());
+  const keywordSet = new Set(safeArray(keywords).map(k => safeString(k).toLowerCase()));
 
   const coreTopics = ['what', 'why', 'how', 'best', 'guide', 'tutorial', 'examples', 'tips', 'benefits', 'pricing', 'reviews', 'comparison'];
   const topicsCovered = coreTopics.filter(topic =>
@@ -400,12 +408,12 @@ const calculateTopicalAuthority = ($, keywords, h2s, h3s) => {
 
 // 2. ADVANCED SEMANTIC SEO ANALYZER
 const analyzeSemanticSEO = ($, bodyText, keywords) => {
-  const text = safe(bodyText).toLowerCase();
-  const keywordSet = safeArray(keywords).slice(0, 10);
-  const matchedKeywords = keywordSet.filter(k => text.includes(k.toLowerCase()));
+  const text = safeString(bodyText).toLowerCase();
+  const keywordSet = safeArraySlice(keywords, 0, 10);
+  const matchedKeywords = keywordSet.filter(k => text.includes(safeString(k).toLowerCase()));
   const nlpScore = clamp(Math.round((matchedKeywords.length / Math.max(1, keywordSet.length)) * 100));
 
-  const semanticGaps = keywordSet.filter(k => !text.includes(k.toLowerCase()));
+  const semanticGaps = keywordSet.filter(k => !text.includes(safeString(k).toLowerCase()));
 
   return {
     entities: keywordSet,
@@ -418,7 +426,7 @@ const analyzeSemanticSEO = ($, bodyText, keywords) => {
 // 3. AI CITATION OPPORTUNITY FINDER
 const findCitationOpportunities = (data) => {
   const opportunities = [];
-  const { hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatScore } = data;
+  const { hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount } = data;
 
   if (!hasFAQ) opportunities.push({ engine: 'ChatGPT', reason: 'Missing FAQ Schema - ChatGPT maps structured Q&As', impact: '+20%', fix: 'Deploy FAQ JSON-LD schema with exact queries.' });
   if (!hasDirectAnswer) opportunities.push({ engine: 'Perplexity', reason: 'No clear, direct semantic summary at top of page', impact: '+15%', fix: 'Add a 50-word "Quick Answer" component under H1.' });
@@ -430,11 +438,14 @@ const findCitationOpportunities = (data) => {
 
 // 4. AI SNIPPET GENERATOR
 const generateAISnippets = (h1, metaDescription, bodyText, keywords) => {
-  const contentSentence = bodyText && bodyText.length > 50 ? bodyText.split('.').slice(0, 2).join('.') + '.' : '';
+  const safeBody = safeString(bodyText);
+  const safeH1 = safeString(h1);
+  const safeDesc = safeString(metaDescription);
+  const contentSentence = safeBody.length > 50 ? safeBody.split('.').slice(0, 2).join('.') + '.' : '';
   const keyword = safeArray(keywords)[0] || 'the page';
 
-  const directAnswer = metaDescription || contentSentence || `About ${h1}: This resource covers core components of ${keyword}.`;
-  const featuredSnippet = `## ${h1 || 'Overview'}\n\n${directAnswer}\n\n${contentSentence ? `Key facts discussed:\n- ${contentSentence.substring(0, 150)}` : ""}`;
+  const directAnswer = safeDesc || contentSentence || `About ${safeH1}: This resource covers core components of ${keyword}.`;
+  const featuredSnippet = `## ${safeH1 || 'Overview'}\n\n${directAnswer}\n\n${contentSentence ? `Key facts discussed:\n- ${contentSentence.substring(0, 150)}` : ""}`;
 
   return {
     directAnswer: directAnswer.substring(0, 300),
@@ -445,7 +456,7 @@ const generateAISnippets = (h1, metaDescription, bodyText, keywords) => {
 
 // 5. LOCAL SEO & ADVANCED TRUST SIGNAL SCANNER
 const analyzeLocalSEO = ($, bodyText) => {
-  const text = safe(bodyText);
+  const text = safeString(bodyText);
   const hasNAP = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(text) || text.includes('address') || text.includes('phone');
   const hasLocalBusiness = $('[itemtype*="LocalBusiness"]').length > 0;
   const hasMap = $('iframe[src*="google.com/maps"], iframe[src*="maps"]').length > 0;
@@ -953,6 +964,11 @@ async function analyzeSingleUrl(url) {
     lcpScore: 1200
   };
 
+  // Push successfully processed scans to local history
+  if (!fetchError && scanHistory.length < 50) {
+    scanHistory.push({ url, score: overallAIVisibilityScore, timestamp: new Date().toISOString() });
+  }
+
   return payload;
 }
 
@@ -963,7 +979,7 @@ function competitorContentGap(userData, compData) {
   const userKeywords = new Set(safeArray(userData.keywords));
   const compKeywords = new Set(safeArray(compData.keywords));
 
-  const headingGaps = compHeadings.filter(h => !userHeadings.some(uh => uh.toLowerCase().includes(h.toLowerCase().substring(0, 10))));
+  const headingGaps = compHeadings.filter(h => !userHeadings.some(uh => safeString(uh).toLowerCase().includes(safeString(h).toLowerCase().substring(0, 10))));
   const keywordGaps = [...compKeywords].filter(k => !userKeywords.has(k));
 
   const schemaGaps = [];
@@ -1227,7 +1243,7 @@ app.get("/content-brief", async (req, res) => {
 });
 
 app.get("/history", (req, res) => {
-  res.json([]);
+  res.json(scanHistory);
 });
 
 app.listen(PORT, () => {

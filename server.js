@@ -13,7 +13,7 @@ app.use(express.json());
 app.use(express.static("."));
 app.use(express.static("public"));
 
-// ========== HELPER UTILITIES ==========
+// ========== HELPER UTILITIES (DEFENSIVE CODING) ==========
 const safeString = (v) => typeof v === "string" ? v : (v ? String(v) : "");
 const safeArray = (v) => Array.isArray(v) ? v : [];
 const safeNumber = (v, d = 0) => isNaN(Number(v)) ? d : Number(v);
@@ -32,13 +32,12 @@ async function safeFetch(url, options = {}) {
     ...options.headers
   };
 
-  // Try Axios first (best for TLS handshake and session/headers handling)
   try {
     const response = await axios.get(url, {
       headers,
       timeout: 15000,
       maxRedirects: 5,
-      validateStatus: (status) => status < 500, // Process 4xx safely rather than crashing
+      validateStatus: (status) => status < 500, // Process 4xx safely
     });
     if (response.data && typeof response.data === 'string' && response.data.length > 100) {
       return response.data;
@@ -47,7 +46,6 @@ async function safeFetch(url, options = {}) {
     console.warn(`Axios fetch failed for ${url}, trying fallback native fetch... Reason:`, axiosError.message);
   }
 
-  // Fallback to standard global Fetch
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -149,7 +147,13 @@ function detectAllSchemas($, html) {
 
 // ========== INTERNAL LINK INTELLIGENCE ==========
 function analyzeInternalLinks($, url, h2s) {
-  const baseHostname = new URL(url).hostname;
+  let baseHostname = "";
+  try {
+    baseHostname = new URL(url).hostname;
+  } catch {
+    baseHostname = "localhost";
+  }
+  
   let internalLinks = 0;
   let externalLinks = 0;
   const linkMap = {};
@@ -182,8 +186,6 @@ function analyzeInternalLinks($, url, h2s) {
   const weakLinking = internalLinks < h2Length;
   const suggestions = [];
   if (weakLinking) safeArraySlice(h2s, 0, 3).forEach(h2 => suggestions.push(`Add internal link to section: ${h2}`));
-
-  console.log("Internal Links Counted:", { internalLinks, uniquePages, averageDepth: parseFloat(avgDepth), authorityFlow });
 
   return {
     internalLinks,
@@ -258,7 +260,7 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
   const safeDesc = safeString(metaDescription);
   const safeBody = safeString(bodyText);
 
-  // Parse Schemas for entities
+  // Parse JSON-LD Schemas cleanly
   $('script[type="application/ld+json"]').each((i, el) => {
     try {
       const raw = $(el).html();
@@ -294,13 +296,19 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
     } catch (e) {}
   });
 
+  // Extract from meta tags & title elements
+  const ogSiteName = safeString($('meta[property="og:site_name"]').attr("content"));
+  if (ogSiteName) brands.push(ogSiteName);
+
+  const publisher = safeString($('meta[property="article:publisher"]').attr("content"));
+  if (publisher) organizations.push(publisher);
+
   const canonicalUrl = $('link[rel="canonical"]').attr('href') || 'https://unknown.com';
   const brandNameFallback = getBrandName(canonicalUrl);
   if (brandNameFallback && brandNameFallback.toLowerCase() !== 'unknown') {
     brands.push(brandNameFallback);
   }
 
-  // Parse title & headings
   if (safeTitle.includes('|')) {
     brands.push(safeTitle.split('|').pop().trim());
   } else if (safeTitle.includes('-')) {
@@ -309,40 +317,45 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
 
   const combinedText = safeH1 + " " + safeArray(h2s).join(" ") + " " + safeArray(h3s).join(" ") + " " + safeBody;
 
-  // Person extraction
-  const peopleRegex = /\b(?:Mr|Mrs|Ms|Dr|CEO|Founder|Author|by)\.?\s+([A-Z][a-z]+\s+[A-Z][a-z]+)\b/g;
-  let match;
-  while ((match = peopleRegex.exec(combinedText)) !== null) {
-    const name = match[1];
-    if (!['The', 'This', 'That', 'Your', 'With', 'From', 'What', 'How', 'Why', 'Click'].includes(name.split(' ')[0])) {
-      people.push(name);
+  // Exact service and core terms detection from meta and body content
+  const serviceKeywords = [
+    'SEO', 'Search Engine Optimization', 'Web Design', 'Graphic Design', 'WordPress Development',
+    'WordPress', 'Digital Marketing', 'Web Development', 'Content Writing', 'Copywriting',
+    'Social Media Marketing', 'E-commerce', 'Shopify', 'Lead Generation', 'App Development',
+    'Branding', 'Analytics', 'Enterprise Software', 'AI Integration', 'Consulting'
+  ];
+  serviceKeywords.forEach(srv => {
+    const regex = new RegExp(`\\b${srv}\\b`, 'i');
+    if (regex.test(combinedText) || regex.test(safeDesc)) {
+      services.push(srv);
     }
+  });
+
+  // Dynamic noun phrases extraction for potential entities
+  const sentenceEntities = safeBody.match(/[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*/g);
+  if (sentenceEntities) {
+    sentenceEntities.forEach(ent => {
+      const entStr = safeString(ent).trim();
+      if (entStr.length > 3 && !['The', 'This', 'That', 'Your', 'With', 'From', 'What', 'How', 'Why', 'Click', 'Our'].includes(entStr.split(' ')[0])) {
+        if (entStr.match(/Inc\.|LLC|Corp|Group|Agency|Co\./i)) {
+          organizations.push(entStr);
+        } else if (entStr.match(/Dr\.|Mr\.|Mrs\.|Ms\.|CEO|Founder/i)) {
+          people.push(entStr);
+        }
+      }
+    });
   }
 
   // Location extraction
   const locationKeywords = [
     'USA', 'United States', 'UK', 'United Kingdom', 'Canada', 'Pakistan', 'India', 'Australia', 
     'Germany', 'France', 'UAE', 'Dubai', 'London', 'New York', 'Karachi', 'Lahore', 'Islamabad', 
-    'Sydney', 'Toronto', 'Melbourne'
+    'Sydney', 'Toronto', 'Melbourne', 'California', 'San Francisco', 'Chicago', 'Texas'
   ];
   locationKeywords.forEach(loc => {
     const regex = new RegExp(`\\b${loc}\\b`, 'i');
     if (regex.test(combinedText) || regex.test(safeDesc)) {
       locations.push(loc);
-    }
-  });
-
-  // Services extraction
-  const serviceKeywords = [
-    'SEO', 'Search Engine Optimization', 'Web Design', 'Graphic Design', 'WordPress Development',
-    'WordPress', 'Digital Marketing', 'Web Development', 'Content Writing', 'Copywriting',
-    'Social Media Marketing', 'E-commerce', 'Shopify', 'Lead Generation', 'App Development',
-    'Branding'
-  ];
-  serviceKeywords.forEach(srv => {
-    const regex = new RegExp(`\\b${srv}\\b`, 'i');
-    if (regex.test(combinedText) || regex.test(safeDesc)) {
-      services.push(srv);
     }
   });
 
@@ -353,10 +366,10 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
     prices.push(priceMatch[0]);
   }
 
-  // Auto Keywords
+  // Auto Keywords tokenization & frequency scoring
   const wordFrequency = {};
   combinedText.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).forEach(w => {
-    if (w.length > 4 && !['about', 'would', 'their', 'there', 'other', 'which', 'these'].includes(w)) {
+    if (w.length > 4 && !['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'about', 'under'].includes(w)) {
       wordFrequency[w] = (wordFrequency[w] || 0) + 1;
     }
   });
@@ -366,17 +379,16 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
   const cleanArray = (arr) => [...new Set(safeArray(arr).filter(Boolean).map(x => String(x).trim()))].slice(0, 10);
 
   const finalEntities = {
-    brands: cleanArray(brands),
-    locations: cleanArray(locations),
-    services: cleanArray(services),
+    brands: cleanArray(brands).length > 0 ? cleanArray(brands) : [brandNameFallback],
+    locations: cleanArray(locations).length > 0 ? cleanArray(locations) : ["Global"],
+    services: cleanArray(services).length > 0 ? cleanArray(services) : ["Digital Consulting"],
     people: cleanArray(people),
-    organizations: cleanArray(organizations.length > 0 ? organizations : brands),
+    organizations: cleanArray(organizations).length > 0 ? cleanArray(organizations) : [brandNameFallback],
     prices: cleanArray(prices),
     keywords: cleanArray(keywords),
     entities: cleanArray([...brands, ...services, ...locations, ...people])
   };
 
-  console.log("Entities Extracted:", finalEntities);
   return finalEntities;
 }
 
@@ -466,7 +478,10 @@ const analyzeLocalSEO = ($, bodyText) => {
   const score = Object.values(signals).filter(Boolean).length;
 
   return {
-    ...signals,
+    hasNAP,
+    hasLocalBusiness,
+    hasMap,
+    hasCity,
     localScore: clamp((score / 4) * 100),
     napConsistency: hasNAP ? 'Active' : 'Incomplete/Missing',
     recommendations: !hasLocalBusiness ? ['Deploy LocalBusiness JSON-LD Schema markup immediately'] : []
@@ -536,7 +551,6 @@ const scanTrustSignals = ($, url) => {
     socialLinks: [...new Set(socialLinks)].slice(0, 10)
   };
 
-  console.log("Trust Signals Scanned:", signals);
   return signals;
 };
 
@@ -558,7 +572,7 @@ function trackAIVisibilityTrend(url, currentScore) {
 
   return {
     current: currentScore,
-    history: history.slice(-7), // Retrieve last 7 entries for graphs
+    history: history.slice(-7), 
     trend: trend >= 0 ? `+${trend}` : `${trend}`,
     direction: trend > 0 ? 'improving' : trend < 0 ? 'declining' : 'stable',
     average: Math.round(history.reduce((sum, h) => sum + h.score, 0) / history.length)
@@ -599,10 +613,8 @@ async function analyzeSingleUrl(url) {
   const loadTime = Date.now() - startTime;
   const $ = cheerio.load(html || "<html></html>");
 
-  // Isolate body text before script removal safely
   const rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
 
-  // Clean elements for targeted parsing
   $('script, style, nav, footer, header, noscript, svg').remove();
 
   const title = safeString($("title").text()).trim() || "No Title Found";
@@ -757,7 +769,8 @@ async function analyzeSingleUrl(url) {
     opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
   }));
 
-  const mainTopic = h1 || safeArraySlice(title.split(" "), 0, 3).join(" ");
+  const brandName = brands[0] || getBrandName(url);
+  const mainTopic = h1 || safeArraySlice(title.split(" "), 0, 3).join(" ") || "this service";
   const subtopics = h2s;
   const expectedSubtopics = [`What is ${mainTopic}`, `${mainTopic} Benefits`, `How to ${mainTopic}`, `${mainTopic} Examples`, `${mainTopic} vs Alternatives`];
   const missingSubtopicsList = expectedSubtopics.filter(exp => !subtopics.some(sub => safeString(sub).toLowerCase().includes(exp.toLowerCase().split(' ')[0])));
@@ -765,34 +778,51 @@ async function analyzeSingleUrl(url) {
 
   const topicalAuthorityScore = Math.round((topicCoverage * 0.4) + (subtopics.length >= 5 ? 30 : subtopics.length * 6) + (hasFAQ ? 15 : 0) + (wordCount > 1200 ? 15 : wordCount > 800 ? 10 : 5));
 
+  // FAQ Generator (SaaS requirement: Logical questions, never use raw H1)
   const autoFAQ = [];
-  if (h1) autoFAQ.push({ q: `What is ${h1}?`, a: metaDescription || safeArraySlice(bodyText, 0, 120) });
-  if (prices.length > 0) autoFAQ.push({ q: `How much does ${services[0] || 'the service'} cost?`, a: `Pricing starts at ${prices[0]}. Contact us for custom quotes.` });
-  if (locations.length > 0) autoFAQ.push({ q: `Do you serve ${locations[0]} clients?`, a: `Yes, we serve clients in ${safeArraySlice(locations, 0, 3).join(', ')}.` });
+  if (brandName && mainTopic) {
+    autoFAQ.push({ 
+      q: `What services does ${brandName} provide for ${mainTopic}?`, 
+      a: metaDescription || `We offer complete solutions for ${mainTopic} with industry-leading practices.` 
+    });
+  }
+  if (services.length > 0) {
+    autoFAQ.push({
+      q: `How can I get started with ${services[0]}?`,
+      a: `To get started with ${services[0]}, you can contact our expert team via our website portal.`
+    });
+  }
+  if (prices.length > 0) {
+    autoFAQ.push({ 
+      q: `What is the cost of our services?`, 
+      a: `Pricing packages start at ${prices[0]}. Custom enterprise quotes are available upon request.` 
+    });
+  }
+  if (locations.length > 0 && !locations.includes("Global")) {
+    autoFAQ.push({ 
+      q: `Are ${brandName} services available in ${locations[0]}?`, 
+      a: `Yes, we actively serve clients in ${safeArraySlice(locations, 0, 3).join(', ')} and globally.` 
+    });
+  }
 
   let aiExtractedAnswer = "No clear answer found";
-  if (bodyText) {
+  if (bodyText && bodyText.length > 50) {
     const firstPara = bodyText.split('.')[0];
-    const brandName = brands[0] || getBrandName(url);
-    const serviceName = services[0] || 'services';
+    const serviceName = services[0] || 'expert digital solutions';
     const priceInfo = prices[0] ? ` starting at ${prices[0]}` : '';
-    const locationInfo = locations.length > 0 ? ` for ${locations[0]} clients` : '';
-    if (firstPara.length > 50) {
-      aiExtractedAnswer = `${brandName} offers ${serviceName}${priceInfo}${locationInfo}. ${safeArraySlice(firstPara, 0, 100)}...`;
-    } else {
-      aiExtractedAnswer = `${brandName} provides ${serviceName}${priceInfo}${locationInfo}. ${safeArraySlice(bodyText, 0, 150)}...`;
-    }
+    const locationInfo = locations.length > 0 && !locations.includes("Global") ? ` for clients in ${locations[0]}` : '';
+    aiExtractedAnswer = `${brandName} is a verified provider of ${serviceName}${priceInfo}${locationInfo}. Key highlights include: ${safeArraySlice(firstPara.split(' '), 0, 20).join(' ')}...`;
   }
 
   const aiSearchSimulation = {
-    query: `What is ${mainTopic}?`,
+    query: `What is the primary offering of ${brandName}?`,
     chatgpt: {
-      answer: hasDirectAnswer ? `${brands[0] || getBrandName(url)} offers ${services[0] || mainTopic}${prices[0] ? ' starting at ' + prices[0] : ''}. ${safeArraySlice(metaDescription, 0, 100)}` : `Based on available data, ${mainTopic} relates to ${safeArraySlice(keywords, 0, 3).join(', ')}. For specific details, check the official website.`,
+      answer: hasDirectAnswer ? `${brandName} offers ${services[0] || mainTopic}${prices[0] ? ' starting at ' + prices[0] : ''}. ${safeArraySlice(metaDescription, 0, 100)}` : `Based on live indexes, ${brandName} specializes in ${safeArraySlice(keywords, 0, 3).join(', ')}. For specific details, explore their web services.`,
       sources: hasAuthor ? ["Official Website", "Author Profile"] : ["Official Website"],
       willCite: hasDirectAnswer && hasFAQ && listCount >= 2
     },
     gemini: {
-      answer: hasSchemaMarkup ? `According to structured data: ${title}. Key services include ${safeArraySlice(services, 0, 2).join(' and ')}. ${hasLastModified ? 'Last updated: ' + lastModified : ''}` : `${title}. ${safeArraySlice(metaDescription, 0, 120)}`,
+      answer: hasSchemaMarkup ? `According to structured JSON-LD data: ${title}. Core solutions include ${safeArraySlice(services, 0, 2).join(' and ')}. ${hasLastModified ? 'Last updated: ' + lastModified : ''}` : `${title}. ${safeArraySlice(metaDescription, 0, 120)}`,
       sources: hasSchemaMarkup ? ["Schema.org Data", "Website"] : ["Website"],
       willCite: hasSchemaMarkup && tableCount > 0 && hasAuthor
     },
@@ -819,7 +849,6 @@ async function analyzeSingleUrl(url) {
     afterAll: Math.min(100, overallAIVisibilityScore + recommendationScore)
   };
 
-  // ========== SCHEMA GENERATOR ==========
   const schemaGenerator = {};
   if (!schemas.FAQPage?.present && autoFAQ.length > 0) {
     schemaGenerator.FAQPage = {
@@ -837,7 +866,6 @@ async function analyzeSingleUrl(url) {
     };
   }
 
-  // AI Autopilot Tasks
   const aiAutopilot = [
     !hasFAQ && { task: "Add FAQ Schema", impact: "+15", effort: "15 mins", priority: "CRITICAL" },
     !hasAuthor && { task: "Add Author Bio", impact: "+8", effort: "10 mins", priority: "HIGH" },
@@ -949,7 +977,6 @@ async function analyzeSingleUrl(url) {
     recommendationScore,
     visibilityForecast,
     
-    // SaaS Advanced Module Outputs
     topicalAuthority,
     semanticSEO,
     citationOpportunities,
@@ -959,12 +986,10 @@ async function analyzeSingleUrl(url) {
     visibilityTrend,
     aiEntities: { brands, services, locations, people, organizations, totalEntities: brands.length + services.length + locations.length + people.length },
     
-    // Backward compatibility mappings
     brokenLinkCount: 0,
     lcpScore: 1200
   };
 
-  // Push successfully processed scans to local history
   if (!fetchError && scanHistory.length < 50) {
     scanHistory.push({ url, score: overallAIVisibilityScore, timestamp: new Date().toISOString() });
   }
@@ -1035,7 +1060,6 @@ app.get("/compare", async (req, res) => {
       analyzeSingleUrl(competitor)
     ]);
 
-    // Competitor scan reliability check
     if (site2.competitorBlocked || site2.fetchError) {
       return res.json({ competitorBlocked: true, warning: "Competitor scan unavailable due to website restrictions." });
     }

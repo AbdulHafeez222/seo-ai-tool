@@ -925,7 +925,7 @@ async function analyzeSingleUrl(url) {
   };
 
   return payload;
-}
+
 
 // ========== SCAN ENDPOINT (HARDENED - NO HTTP 500 CRASH) ==========
 app.get("/scan", async (req, res) => {
@@ -1081,7 +1081,7 @@ app.get("/scan", async (req, res) => {
   };
 
   return payload;
-}
+ 
 
 // ========== COMPETITOR CONTENT GAP ENGINE ==========
 function competitorContentGap(userData, compData) {

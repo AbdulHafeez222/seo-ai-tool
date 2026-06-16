@@ -13,6 +13,14 @@ app.use(express.json());
 app.use(express.static("."));
 app.use(express.static("public"));
 
+// ========== HELPER UTILITIES ==========
+const safeString = (v) => typeof v === "string" ? v : (v ? String(v) : "");
+const safeArray = (v) => Array.isArray(v) ? v : [];
+const safeNumber = (v, d = 0) => isNaN(Number(v)) ? d : Number(v);
+const safeArraySlice = (arr, start, end) => safeArray(arr).slice(start, end);
+const clamp = (num, min = 0, max = 100) => Math.min(max, Math.max(min, isNaN(num) ? 0 : num));
+const safe = (val, fallback = '') => val !== undefined && val !== null ? val : fallback;
+
 // ========== RESILIENT FETCH ENGINE (SOLVES 403/500 ISSUES) ==========
 async function safeFetch(url, options = {}) {
   const headers = {
@@ -73,7 +81,7 @@ function getBrandName(url) {
 }
 
 function getKeywordDifficulty(keyword) {
-  const len = keyword.length;
+  const len = safeString(keyword).length;
   if (len < 10) return "High";
   if (len < 18) return "Medium";
   return "Low";
@@ -83,7 +91,7 @@ function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
   let score = 0;
   if (hasFAQ) score++;
   if (hasSchema) score++;
-  if (keyword.split(' ').length > 2) score++;
+  if (safeString(keyword).split(' ').length > 2) score++;
   if (score >= 2) return "High";
   if (score === 1) return "Medium";
   return "Low";
@@ -109,6 +117,7 @@ function detectAllSchemas($, html) {
       const json = JSON.parse(raw);
       const items = Array.isArray(json) ? json : [json];
       const processItem = (item) => {
+        if (!item) return;
         if (item['@graph'] && Array.isArray(item['@graph'])) {
           item['@graph'].forEach(processItem);
           return;
@@ -138,7 +147,7 @@ function detectAllSchemas($, html) {
   return schemas;
 }
 
-// ========== INTERNAL LINK INTELLIGENCE (UPGRADED - FIX 3) ==========
+// ========== INTERNAL LINK INTELLIGENCE ==========
 function analyzeInternalLinks($, url, h2s) {
   const baseHostname = new URL(url).hostname;
   let internalLinks = 0;
@@ -231,13 +240,15 @@ function calculateEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactP
   };
 }
 
-// ========== ENTITY EXTRACTION ENGINE (UPGRADED - FIX 1) ==========
+// ========== ENTITY EXTRACTION ENGINE ==========
 function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, bodyText) {
   const brands = [];
   const locations = [];
   const services = [];
   const people = [];
   const organizations = [];
+  const prices = [];
+  const keywords = [];
 
   // Parse Schemas for entities
   $('script[type="application/ld+json"]').each((i, el) => {
@@ -327,6 +338,23 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
     }
   });
 
+  // Simple Price Extraction
+  const priceRegex = /\$\d+(?:,\d{3})*(?:\.\d{2})?/g;
+  let priceMatch;
+  while ((priceMatch = priceRegex.exec(combinedText)) !== null) {
+    prices.push(priceMatch[0]);
+  }
+
+  // Auto Keywords
+  const wordFrequency = {};
+  combinedText.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).forEach(w => {
+    if (w.length > 4 && !['about', 'would', 'their', 'there', 'other', 'which', 'these'].includes(w)) {
+      wordFrequency[w] = (wordFrequency[w] || 0) + 1;
+    }
+  });
+  const sortedKeywords = Object.keys(wordFrequency).sort((a, b) => wordFrequency[b] - wordFrequency[a]);
+  keywords.push(...sortedKeywords.slice(0, 15));
+
   const cleanArray = (arr) => [...new Set(arr.filter(Boolean).map(x => String(x).trim()))].slice(0, 10);
 
   const finalEntities = {
@@ -334,17 +362,15 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
     locations: cleanArray(locations),
     services: cleanArray(services),
     people: cleanArray(people),
-    organizations: cleanArray(organizations.length > 0 ? organizations : brands)
+    organizations: cleanArray(organizations.length > 0 ? organizations : brands),
+    prices: cleanArray(prices),
+    keywords: cleanArray(keywords),
+    entities: cleanArray([...brands, ...services, ...locations, ...people])
   };
 
   console.log("Entities Extracted:", finalEntities);
   return finalEntities;
 }
-
-// ========== SAAS UTILITY HELPERS ==========
-const safe = (val, fallback = '') => val !== undefined && val !== null ? val : fallback;
-const clamp = (num, min = 0, max = 100) => Math.min(max, Math.max(min, isNaN(num) ? 0 : num));
-const safeArray = (arr) => Array.isArray(arr) ? arr : [];
 
 // 1. TOPICAL AUTHORITY ENGINE
 const calculateTopicalAuthority = ($, keywords, h2s, h3s) => {
@@ -372,7 +398,7 @@ const calculateTopicalAuthority = ($, keywords, h2s, h3s) => {
   };
 };
 
-// 2. ADVANCED SEMANTIC SEO ANALYZER (FIX 6)
+// 2. ADVANCED SEMANTIC SEO ANALYZER
 const analyzeSemanticSEO = ($, bodyText, keywords) => {
   const text = safe(bodyText).toLowerCase();
   const keywordSet = safeArray(keywords).slice(0, 10);
@@ -402,7 +428,7 @@ const findCitationOpportunities = (data) => {
   return opportunities;
 };
 
-// 4. AI SNIPPET GENERATOR (FIX 5)
+// 4. AI SNIPPET GENERATOR
 const generateAISnippets = (h1, metaDescription, bodyText, keywords) => {
   const contentSentence = bodyText && bodyText.length > 50 ? bodyText.split('.').slice(0, 2).join('.') + '.' : '';
   const keyword = safeArray(keywords)[0] || 'the page';
@@ -417,7 +443,7 @@ const generateAISnippets = (h1, metaDescription, bodyText, keywords) => {
   };
 };
 
-// 5. LOCAL SEO & ADVANCED TRUST SIGNAL SCANNER (FIX 2)
+// 5. LOCAL SEO & ADVANCED TRUST SIGNAL SCANNER
 const analyzeLocalSEO = ($, bodyText) => {
   const text = safe(bodyText);
   const hasNAP = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(text) || text.includes('address') || text.includes('phone');
@@ -594,7 +620,6 @@ async function analyzeSingleUrl(url) {
   const tableCount = $("table").length || 0;
   const totalImages = $("img").length || 0;
   const imagesWithoutAlt = $("img").filter((i, el) => !$(el).attr("alt")).length || 0;
-  const externalLinks = $("a[href^='http']").not(`a[href^='${url}']`).length || 0;
   const isHttps = url.startsWith("https://");
   const mobileViewport = $('meta[name="viewport"]').length > 0;
   const canonical = safeString($('link[rel="canonical"]').attr("href"));
@@ -666,6 +691,9 @@ async function analyzeSingleUrl(url) {
   const importantIssues = [];
   const minorIssues = [];
 
+  const robotsExists = false;
+  const sitemapExists = false;
+
   if (!title || title === "No Title Found") { seoScore -= 10; criticalIssues.push("Title tag missing"); }
   if (title.length > 60) { seoScore -= 5; importantIssues.push("Title too long (>60 chars)"); }
   if (!metaDescription) { seoScore -= 10; criticalIssues.push("Meta description missing"); }
@@ -695,9 +723,10 @@ async function analyzeSingleUrl(url) {
   const answerQuality = Math.min(100, Math.round((hasDirectAnswer ? 30 : 0) + (hasFAQ ? 25 : 0) + (listCount > 0 ? 15 : 0) + (h2Count >= 3 ? 15 : 0) + (readabilityScore * 0.15))) || 50;
   const aiTrustScore = Math.round((eeatData.score * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
 
+  const externalLinksCount = $("a[href^='http']").not(`a[href^='${url}']`).length || 0;
   const citationChatGPT = Math.min(95, 20 + (hasFAQ ? 25 : 0) + (listCount > 2 ? 15 : 0) + (hasDirectAnswer ? 20 : 0) + (hasAuthor ? 10 : 0));
   const citationGemini = Math.min(95, 20 + (hasSchemaMarkup ? 30 : 0) + (tableCount > 0 ? 20 : 0) + (hasAuthor ? 15 : 0) + (wordCount > 800 ? 15 : 0));
-  const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer ? 25 : 0) + (hasLastModified ? 15 : 0) + (externalLinks > 5 ? 15 : 0) + (listCount > 0 ? 15 : 0));
+  const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer ? 25 : 0) + (hasLastModified ? 15 : 0) + (externalLinksCount > 5 ? 15 : 0) + (listCount > 0 ? 15 : 0));
   const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
 
   const schemaScore = (hasFAQ ? 25 : 0) + (hasHowTo ? 25 : 0) + (hasDirectAnswer ? 20 : 0) + (uniqueSchemas.length > 0 ? 30 : 0);
@@ -720,8 +749,8 @@ async function analyzeSingleUrl(url) {
   const mainTopic = h1 || safeArraySlice(title.split(" "), 0, 3).join(" ");
   const subtopics = h2s;
   const expectedSubtopics = [`What is ${mainTopic}`, `${mainTopic} Benefits`, `How to ${mainTopic}`, `${mainTopic} Examples`, `${mainTopic} vs Alternatives`];
-  const missingSubtopics = expectedSubtopics.filter(exp => !subtopics.some(sub => safeString(sub).toLowerCase().includes(exp.toLowerCase().split(' ')[0])));
-  const topicCoverage = Math.round(((expectedSubtopics.length - missingSubtopics.length) / expectedSubtopics.length) * 100);
+  const missingSubtopicsList = expectedSubtopics.filter(exp => !subtopics.some(sub => safeString(sub).toLowerCase().includes(exp.toLowerCase().split(' ')[0])));
+  const topicCoverage = Math.round(((expectedSubtopics.length - missingSubtopicsList.length) / expectedSubtopics.length) * 100);
 
   const topicalAuthorityScore = Math.round((topicCoverage * 0.4) + (subtopics.length >= 5 ? 30 : subtopics.length * 6) + (hasFAQ ? 15 : 0) + (wordCount > 1200 ? 15 : wordCount > 800 ? 10 : 5));
 
@@ -759,7 +788,7 @@ async function analyzeSingleUrl(url) {
     perplexity: {
       answer: hasLastModified ? `${aiExtractedAnswer} [Updated ${lastModified}]` : aiExtractedAnswer,
       sources: hasLastModified ? ["Official Site (2026)", "Cited Sources"] : ["Official Site"],
-      willCite: hasDirectAnswer && hasLastModified && externalLinks > 3
+      willCite: hasDirectAnswer && hasLastModified && externalLinksCount > 3
     },
     status: "live"
   };
@@ -848,7 +877,7 @@ async function analyzeSingleUrl(url) {
     totalImages,
     imagesWithoutAlt,
     internalLinks: internalLinkData.totalInternalLinks,
-    externalLinks,
+    externalLinks: externalLinksCount,
     mobileFriendly: mobileViewport,
     isHttps,
     loadTime,
@@ -925,35 +954,7 @@ async function analyzeSingleUrl(url) {
   };
 
   return payload;
-
-  };
-// ========== SCAN ENDPOINT (HARDENED - NO HTTP 500 CRASH) ==========
-app.get("/scan", async (req, res) => {
-  const url = req.query.url;
-  if (!url) return res.status(400).json({ error: "URL required" });
-  
-  try {
-    const data = await analyzeSingleUrl(url);
-    res.json(data);
-  } catch (err) {
-    console.error("CRITICAL SCAN ERROR:", err);
-    res.json({
-      success: false,
-      error: err.message,
-      fallback: true,
-      fetchError: true,
-      competitorBlocked: true,
-      warning: "An unexpected evaluation error occurred on this domain.",
-      score: 0,
-      aeoScore: 0,
-      overallAIVisibilityScore: 0,
-      citationProbability: 0,
-      keywords: [],
-      entities: []
-    });
-  }
-});
-
+}
 
 // ========== COMPETITOR CONTENT GAP ENGINE ==========
 function competitorContentGap(userData, compData) {
@@ -985,12 +986,26 @@ app.get("/", (req, res) => res.json({ status: "running", tool: "AI Visibility Pl
 app.get("/scan", async (req, res) => {
   const url = req.query.url;
   if (!url) return res.status(400).json({ error: "URL required" });
+  
   try {
     const data = await analyzeSingleUrl(url);
     res.json(data);
   } catch (err) {
-    console.error("SCAN ENDPOINT ERROR:", err);
-    res.status(500).json({ error: "Scan failed completely", message: err.message });
+    console.error("CRITICAL SCAN ERROR:", err);
+    res.json({
+      success: false,
+      error: err.message,
+      fallback: true,
+      fetchError: true,
+      competitorBlocked: true,
+      warning: "An unexpected evaluation error occurred on this domain.",
+      score: 0,
+      aeoScore: 0,
+      overallAIVisibilityScore: 0,
+      citationProbability: 0,
+      keywords: [],
+      entities: []
+    });
   }
 });
 
@@ -1004,7 +1019,7 @@ app.get("/compare", async (req, res) => {
       analyzeSingleUrl(competitor)
     ]);
 
-    // Competitor scan reliability check (FIX 4)
+    // Competitor scan reliability check
     if (site2.competitorBlocked || site2.fetchError) {
       return res.json({ competitorBlocked: true, warning: "Competitor scan unavailable due to website restrictions." });
     }

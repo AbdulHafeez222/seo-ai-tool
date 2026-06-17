@@ -21,34 +21,59 @@ const safeArraySlice = (arr, start, end) => safeArray(arr).slice(start, end);
 const clamp = (num, min = 0, max = 100) => Math.min(max, Math.max(min, isNaN(num) ? 0 : num));
 const safe = (val, fallback = '') => (val !== undefined && val !== null) ? val : fallback;
 
-// ========== RESILIENT FETCH ENGINE (SOLVES 403/500 ISSUES) ==========
+// ========== RESILIENT USER-AGENT ROTATION ENGINE ==========
+const USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
+];
+
+// ========== RESILIENT FETCH ENGINE ==========
 async function safeFetch(url, options = {}) {
+  const urlObj = new URL(url);
+  const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
   const headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": ua,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Language": "en-US,en;q=0.9,en-GB;q=0.8",
+    "Referer": "https://www.google.com/",
+    "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "cross-site",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
     "Cache-Control": "no-cache",
     "Pragma": "no-cache",
     ...options.headers
   };
 
-  try {
-    const response = await axios.get(url, {
-      headers,
-      timeout: 15000,
-      maxRedirects: 5,
-      validateStatus: (status) => status < 500, // Process 4xx safely
-    });
-    if (response.data && typeof response.data === 'string' && response.data.length > 100) {
-      return response.data;
+  let lastError;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const response = await axios.get(url, {
+        headers: {
+          ...headers,
+          "User-Agent": USER_AGENTS[attempt - 1] || headers["User-Agent"]
+        },
+        timeout: 12000,
+        maxRedirects: 5,
+        validateStatus: (status) => status < 500, 
+      });
+      if (response.data && typeof response.data === 'string' && response.data.length > 100) {
+        return { data: response.data, status: response.status };
+      }
+    } catch (axiosError) {
+      lastError = axiosError;
     }
-  } catch (axiosError) {
-    console.warn(`Axios fetch failed for ${url}, trying fallback native fetch... Reason:`, axiosError.message);
   }
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 12000);
     const res = await fetch(url, {
       ...options,
       headers,
@@ -57,10 +82,10 @@ async function safeFetch(url, options = {}) {
     });
     clearTimeout(timeout);
     const text = await res.text();
-    if (text && text.length > 100) return text;
-    throw new Error("Empty HTML or extremely short response");
+    if (text && text.length > 100) return { data: text, status: res.status };
+    throw new Error("Response was empty or too short");
   } catch (fetchError) {
-    throw new Error(`All crawling attempts failed. Site blocks scraping or is offline. (${fetchError.message})`);
+    throw new Error(`All crawling attempts failed. Site blocks scraping or is offline. (${fetchError.message || lastError?.message})`);
   }
 }
 
@@ -87,6 +112,74 @@ function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
   if (score >= 2) return "High";
   if (score === 1) return "Medium";
   return "Low";
+}
+
+// ========== ROBUST PAGE VALIDATOR (NO FALSE POSITIVES) ==========
+function validateHtmlContent(html) {
+  if (!html || typeof html !== 'string') {
+    return { crawlBlocked: true, reason: "Empty HTML response received", crawlQuality: { score: 0, status: "Blocked" } };
+  }
+
+  const lowercaseHtml = html.toLowerCase();
+  
+  const blockIndicators = [
+    "just a moment",
+    "cloudflare",
+    "challenge-form",
+    "turnstile",
+    "__cf_chl_opt",
+    "hcaptcha",
+    "recaptcha",
+    "security check",
+    "access denied",
+    "error code 1020",
+    "anti-bot",
+    "ddos protection",
+    "ray id"
+  ];
+
+  for (const indicator of blockIndicators) {
+    if (lowercaseHtml.includes(indicator)) {
+      return { 
+        crawlBlocked: true, 
+        reason: `Anti-bot protection / Cloudflare challenge page detected (${indicator})`, 
+        crawlQuality: { score: 10, status: "Blocked" } 
+      };
+    }
+  }
+
+  const $ = cheerio.load(html);
+  $('script, style, svg, noscript').remove();
+  const textContent = $('body').text().replace(/\s+/g, ' ').trim();
+  const wordCount = textContent.split(/\s+/).filter(Boolean).length;
+
+  if (wordCount < 10) {
+    if (html.includes('__NEXT_DATA__') || html.includes('root') || html.includes('app')) {
+      return {
+        crawlBlocked: true,
+        reason: "JavaScript SPA / Client-Side Rendering (CSR) detected without server rendered text",
+        crawlQuality: { score: 20, status: "JS Restricted" }
+      };
+    }
+    return {
+      crawlBlocked: true,
+      reason: "No readable textual content found (possible JS rendering required)",
+      crawlQuality: { score: 15, status: "Empty" }
+    };
+  }
+
+  let score = 95;
+  if (wordCount < 100) score -= 15;
+  if (html.includes('__NEXT_DATA__') || html.includes('nuxt')) score -= 5;
+  
+  return {
+    crawlBlocked: false,
+    reason: "Fully Accessible",
+    crawlQuality: {
+      score: clamp(score, 0, 100),
+      status: score >= 85 ? "Excellent" : "Fair"
+    }
+  };
 }
 
 // ========== SCHEMA DETECTION ==========
@@ -268,23 +361,19 @@ function calculateEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactP
 
   const safeBody = safeString(bodyText);
 
-  // Experiential signals
   if (hasAuthor) { breakdown.experience.score += 10; breakdown.experience.factors.push("✓ Author attribution"); }
   if (safeBody.match(/I have|we have|our experience|years of/i)) { breakdown.experience.score += 8; breakdown.experience.factors.push("✓ First-hand experience"); }
   if (safeBody.match(/case study|portfolio|client/i)) { breakdown.experience.score += 7; breakdown.experience.factors.push("✓ Case studies"); }
 
-  // Expertise signals
   if (hasAboutPage) { breakdown.expertise.score += 10; breakdown.expertise.factors.push("✓ About page"); }
   if (hasAuthor && safeBody.match(/expert|specialist|certified|degree/i)) { breakdown.expertise.score += 8; breakdown.expertise.factors.push("✓ Expert credentials"); }
   if (schemas?.Organization?.present) { breakdown.expertise.score += 7; breakdown.expertise.factors.push("✓ Organization schema"); }
 
-  // Authoritative signals
   if (hasLinkedIn) { breakdown.authoritativeness.score += 8; breakdown.authoritativeness.factors.push("✓ LinkedIn Link"); }
   if (hasFacebook) { breakdown.authoritativeness.score += 5; breakdown.authoritativeness.factors.push("✓ Facebook Link"); }
   if ($('a[href*="wikipedia"]').length > 0 || $('a[href*="gov"]').length > 0) { breakdown.authoritativeness.score += 7; breakdown.authoritativeness.factors.push("✓ Authoritative citations"); }
   if (safeBody.match(/featured|award|recognition/i)) { breakdown.authoritativeness.score += 5; breakdown.authoritativeness.factors.push("✓ Awards/recognition mentioned"); }
 
-  // Trustworthiness signals
   if (isHttps) { breakdown.trustworthiness.score += 6; breakdown.trustworthiness.factors.push("✓ HTTPS Connection"); }
   if (hasPrivacyPolicy) { breakdown.trustworthiness.score += 5; breakdown.trustworthiness.factors.push("✓ Privacy policy page"); }
   if (hasContactPage) { breakdown.trustworthiness.score += 6; breakdown.trustworthiness.factors.push("✓ Contact details"); }
@@ -486,47 +575,6 @@ const analyzeSemanticSEO = ($, bodyText, keywords) => {
   };
 };
 
-// 3. AI CITATION OPPORTUNITY FINDER
-const findCitationOpportunities = (data) => {
-  const opportunities = [];
-  const { hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount } = data;
-
-  if (!hasFAQ) {
-    opportunities.push({ 
-      engine: 'ChatGPT', 
-      reason: 'Missing FAQ Schema - ChatGPT maps structured Q&As', 
-      impact: '+20%', 
-      fix: 'Deploy FAQ JSON-LD schema with exact queries.' 
-    });
-  }
-  if (!hasDirectAnswer) {
-    opportunities.push({ 
-      engine: 'Perplexity', 
-      reason: 'No clear, direct semantic summary at top of page', 
-      impact: '+15%', 
-      fix: 'Add a 50-word "Quick Answer" component under H1.' 
-    });
-  }
-  if (!hasAuthor) {
-    opportunities.push({ 
-      engine: 'Gemini', 
-      reason: 'Missing Author Profile credentials - Gemini checks E-E-A-T', 
-      impact: '+12%', 
-      fix: 'Add a schema-marked Author Bio block.' 
-    });
-  }
-  if (!hasHowTo && wordCount > 1000) {
-    opportunities.push({ 
-      engine: 'All Engines', 
-      reason: 'Educational structure detected without structural steps', 
-      impact: '+10%', 
-      fix: 'Integrate HowTo Schema steps with lists.' 
-    });
-  }
-
-  return opportunities;
-};
-
 // 4. AI SNIPPET GENERATOR
 const generateAISnippets = (h1, metaDescription, bodyText, keywords) => {
   const safeBody = safeString(bodyText);
@@ -667,38 +715,61 @@ function trackAIVisibilityTrend(url, currentScore) {
   };
 }
 
-// ========== MAIN ANALYZER PIPELINE ==========
+// ========== MAIN ANALYZER PIPELINE (HARDENED) ==========
 async function analyzeSingleUrl(url) {
   url = safeString(url).trim();
   if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
   url = url.replace(/\s+/g, '');
 
-  let html;
+  let htmlData;
   let fetchError = false;
   let warning = "";
   const startTime = Date.now();
 
   try {
-    html = await safeFetch(url);
+    htmlData = await safeFetch(url);
   } catch (err) {
-    console.error(`CRAWL ERROR (BLOCKED/OFFLINE) for ${url}:`, err.message);
+    console.error(`CRAWL ERROR for ${url}:`, err.message);
     fetchError = true;
     warning = "Website scan unavailable due to website restrictions.";
-    html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${getBrandNameEnhanced(url, cheerio.load("<html></html>"), "", {})} - Fallback Evaluation</title>
-          <meta name="description" content="Scanner fallback mode active.">
-        </head>
-        <body>
-          <h1>${getBrandNameEnhanced(url, cheerio.load("<html></html>"), "", {})}</h1>
-        </body>
-      </html>
-    `;
   }
 
   const loadTime = Date.now() - startTime;
+  
+  // Validate crawled content
+  const validation = validateHtmlContent(htmlData?.data);
+  
+  if (fetchError || validation.crawlBlocked) {
+    const brandFallback = getBrandNameEnhanced(url, cheerio.load("<html></html>"), "", {});
+    return {
+      crawlBlocked: true,
+      fetchError: fetchError || validation.crawlBlocked,
+      crawlQuality: validation.crawlQuality || { score: 10, status: "Blocked" },
+      warning: validation.reason || warning || "Crawler blocked or site offline.",
+      url,
+      title: "Blocked / Protected",
+      h1: "",
+      h2s: [],
+      h3s: [],
+      metaDescription: "",
+      wordCount: 0,
+      score: 0,
+      overallAIVisibilityScore: 0,
+      citationProbability: 0,
+      keywords: [],
+      entities: [],
+      breakdown: {
+        seo: 0,
+        aeo: 0,
+        trust: 0,
+        citation: 0,
+        readability: 0,
+        schema: 0
+      }
+    };
+  }
+
+  const html = htmlData.data;
   const $ = cheerio.load(html || "<html></html>");
 
   const rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
@@ -979,6 +1050,8 @@ async function analyzeSingleUrl(url) {
 
   const payload = {
     fetchError,
+    crawlBlocked: false,
+    crawlQuality: validation.crawlQuality,
     warning,
     schemaGenerator,
     aiAutopilot,

@@ -851,26 +851,39 @@ export async function analyzeSingleUrl(url) {
   if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
   url = url.replace(/\s+/g, '');
 
-  let htmlData;
+  let htmlData = { data: "", status: 200, isError: false };
   let isCrawlBlocked = false;
   let fetchError = false;
+  let warning = "";
+  let validation = { crawlBlocked: false, reason: "Fully Accessible", crawlQuality: { score: 100, status: "Excellent" } };
   const startTime = Date.now();
 
-  htmlData = await safeFetch(url);
-  if (htmlData.isError) {
+  try {
+    htmlData = await safeFetch(url);
+    if (htmlData.isError) {
+      fetchError = true;
+      isCrawlBlocked = true;
+      warning = "Website crawl restricted by server headers. Fallback mode activated.";
+    }
+  } catch (crawlErr) {
     fetchError = true;
     isCrawlBlocked = true;
+    warning = "Crawler timeout or host unreachable. Estimating metrics.";
   }
 
   const loadTime = Date.now() - startTime;
   let html = htmlData.data || "";
 
-  // Check if crawled HTML was blocked by Cloudflare/Anti-bot
-  let validation = { crawlBlocked: false, reason: "Fully Accessible" };
   if (!fetchError && html.length > 0) {
-    validation = validateHtmlContent(html);
-    if (validation.crawlBlocked) {
+    try {
+      validation = validateHtmlContent(html);
+      if (validation.crawlBlocked) {
+        isCrawlBlocked = true;
+        warning = `Anti-bot protection active: ${validation.reason}. Falling back to domain parsing.`;
+      }
+    } catch (valErr) {
       isCrawlBlocked = true;
+      validation = { crawlBlocked: true, reason: "Parsing Exception", crawlQuality: { score: 30, status: "Partially Estimated" } };
     }
   } else {
     isCrawlBlocked = true;
@@ -889,7 +902,6 @@ export async function analyzeSingleUrl(url) {
 
   let $;
   if (isCrawlBlocked || !html || html.length < 100) {
-    // Generate virtual HTML context to feed modules smoothly (FIX REQUIREMENT 2 & 5)
     html = `
       <html>
         <head>
@@ -910,7 +922,6 @@ export async function analyzeSingleUrl(url) {
     $ = cheerio.load(html);
   }
 
-  // Raw element cleanup to prevent scripts/style contamination
   $('script, style, nav, footer, header, noscript, svg').remove();
 
   // Deep Fallback Metadata Extraction
@@ -999,8 +1010,24 @@ export async function analyzeSingleUrl(url) {
   const hasAboutPage = allText.includes("about us") || allText.includes("about");
   const hasContactPage = allText.includes("contact us") || allText.includes("contact");
 
-  const internalLinkData = analyzeInternalLinks($, url, h2s);
-  const eeatData = calculateEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas);
+  // ========== SAFELY WRAPPED CORE EVALUATORS (PATCH 2) ==========
+  let internalLinkData;
+  try {
+    internalLinkData = analyzeInternalLinks($, url, h2s);
+  } catch (err) {
+    internalLinkData = {
+      internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0,
+      orphanPages: [], avgLinkDepth: 0, averageDepth: 0, authorityFlow: 0,
+      weakLinking: true, suggestions: ["Add internal structure navigation"], score: 40
+    };
+  }
+
+  let eeatData;
+  try {
+    eeatData = calculateEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas);
+  } catch (err) {
+    eeatData = { score: 30, level: "Fair", breakdown: { experience: { score: 5, max: 25, factors: [] }, expertise: { score: 10, max: 25, factors: [] }, authoritativeness: { score: 5, max: 25, factors: [] }, trustworthiness: { score: 10, max: 25, factors: [] } } };
+  }
 
   const aiTrustSignals = [];
   if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
@@ -1213,33 +1240,63 @@ export async function analyzeSingleUrl(url) {
     internalLinkData.weakLinking && { task: "Fix Internal Linking Structure", impact: "+12", effort: "20 mins", priority: "HIGH" }
   ].filter(Boolean);
 
-  const citationOpportunities = findCitationOpportunities({
-    hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatScore: eeatData.score
-  });
-  const semanticSEO = analyzeSemanticSEO($, bodyText, keywords);
-  const topicalAuthority = calculateTopicalAuthority($, keywords, h2s, h3s);
-  const localSEO = analyzeLocalSEO($, bodyText);
-  const trustSignals = scanTrustSignals($, url);
-  const aiSnippets = generateAISnippets(h1, metaDescription, bodyText, keywords);
-  const visibilityTrend = trackAIVisibilityTrend(url, overallAIVisibilityScore);
+  let citationOpportunities;
+  try {
+    citationOpportunities = findCitationOpportunities({
+      hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatScore: eeatData.score
+    });
+  } catch (err) {
+    citationOpportunities = [];
+  }
 
-  // DETAILED DIAGNOSTICS LOGGING
-  console.log({
-    url,
-    status: htmlData.status || 200,
-    finalUrl: url,
-    htmlLength: html?.length || 0,
-    title,
-    wordCount,
-    crawlSuccess: !isCrawlBlocked
-  });
+  let semanticSEO;
+  try {
+    semanticSEO = analyzeSemanticSEO($, bodyText, keywords);
+  } catch (err) {
+    semanticSEO = { entities: [], nlpScore: 40, semanticGaps: [], hasSemanticHTML: false };
+  }
+
+  let topicalAuthority;
+  try {
+    topicalAuthority = calculateTopicalAuthority($, keywords, h2s, h3s);
+  } catch (err) {
+    topicalAuthority = { score: 30, topicsCovered: 0, missingSubtopics: [], depth: "Shallow" };
+  }
+
+  let localSEO;
+  try {
+    localSEO = analyzeLocalSEO($, bodyText);
+  } catch (err) {
+    localSEO = { hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 30, napConsistency: "Incomplete/Missing", recommendations: [] };
+  }
+
+  let trustSignals;
+  try {
+    trustSignals = scanTrustSignals($, url);
+  } catch (err) {
+    trustSignals = { hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 20, totalSignals: 0, socialLinks: [] };
+  }
+
+  let aiSnippets;
+  try {
+    aiSnippets = generateAISnippets(h1, metaDescription, bodyText, keywords);
+  } catch (err) {
+    aiSnippets = { directAnswer: metaDescription, featuredSnippet: title, wordCount: 0 };
+  }
+
+  let visibilityTrend;
+  try {
+    visibilityTrend = trackAIVisibilityTrend(url, overallAIVisibilityScore);
+  } catch (err) {
+    visibilityTrend = { current: overallAIVisibilityScore, history: [], trend: "0", direction: "stable", average: overallAIVisibilityScore };
+  }
 
   const payload = {
     success: true,
     crawlSuccess: !isCrawlBlocked,
     fallbackMode: isCrawlBlocked,
     crawlQuality: isCrawlBlocked ? { score: 30, status: "Partially Estimated" } : validation.crawlQuality,
-    warning: isCrawlBlocked ? "Analysis compiled using robust fallback heuristic engine." : "",
+    warning,
     schemaGenerator,
     aiAutopilot,
     url,

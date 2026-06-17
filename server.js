@@ -48,6 +48,23 @@ export function safe(val, fallback = '') {
   return (val !== undefined && val !== null) ? val : fallback;
 }
 
+export function getKeywordDifficulty(keyword) {
+  const len = safeString(keyword).length;
+  if (len < 10) return "High";
+  if (len < 18) return "Medium";
+  return "Low";
+}
+
+export function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
+  let score = 0;
+  if (hasFAQ) score++;
+  if (hasSchema) score++;
+  if (safeString(keyword).split(' ').length > 2) score++;
+  if (score >= 2) return "High";
+  if (score === 1) return "Medium";
+  return "Low";
+}
+
 // ========== RESILIENT USER-AGENT ROTATION ENGINE ==========
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -175,6 +192,14 @@ async function safeFetch(url, options = {}) {
   }
 
   return { data: "", status: lastStatus, isError: true, errorMsg: lastError?.message || "Fetch timeout" };
+}
+
+function extractDomain(url) {
+  try {
+    return new URL(url).hostname.replace("www.", "");
+  } catch {
+    return "";
+  }
 }
 
 // ========== ROBUST PAGE VALIDATOR (NO FALSE POSITIVES) ==========
@@ -1198,6 +1223,17 @@ export async function analyzeSingleUrl(url) {
   const aiSnippets = generateAISnippets(h1, metaDescription, bodyText, keywords);
   const visibilityTrend = trackAIVisibilityTrend(url, overallAIVisibilityScore);
 
+  // DETAILED DIAGNOSTICS LOGGING
+  console.log({
+    url,
+    status: htmlData.status || 200,
+    finalUrl: url,
+    htmlLength: html?.length || 0,
+    title,
+    wordCount,
+    crawlSuccess: !isCrawlBlocked
+  });
+
   const payload = {
     success: true,
     crawlSuccess: !isCrawlBlocked,
@@ -1351,10 +1387,10 @@ app.get("/scan", async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error("SCAN ENDPOINT ERROR:", err.message);
-    res.status(500).json({
+    res.status(200).json({
       success: false,
       crawlSuccess: false,
-      httpStatus: 500,
+      httpStatus: err.status || 500,
       reason: err.message || "An unexpected error occurred during scan process."
     });
   }
@@ -1582,6 +1618,8 @@ function validateRequiredSystemHelpers() {
     { name: "clamp", fn: clamp },
     { name: "safe", fn: safe },
     { name: "getBrandNameEnhanced", fn: getBrandNameEnhanced },
+    { name: "getKeywordDifficulty", fn: getKeywordDifficulty },
+    { name: "getKeywordOpportunity", fn: getKeywordOpportunity },
     { name: "analyzeInternalLinks", fn: analyzeInternalLinks },
     { name: "calculateEEATAdvanced", fn: calculateEEATAdvanced },
     { name: "extractEntitiesEnhanced", fn: extractEntitiesEnhanced },

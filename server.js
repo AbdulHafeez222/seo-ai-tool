@@ -67,7 +67,9 @@ async function safeFetch(url, options = {}) {
   const headers = {
     "User-Agent": ua,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9,en-GB;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
     "Referer": "https://www.google.com/",
     "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
     "Sec-Ch-Ua-Mobile": "?0",
@@ -83,6 +85,7 @@ async function safeFetch(url, options = {}) {
   };
 
   let lastError;
+  let lastStatus = 500;
 
   // Layer 1: Native fetch
   try {
@@ -95,9 +98,13 @@ async function safeFetch(url, options = {}) {
       redirect: 'follow'
     });
     clearTimeout(timeoutId);
+    lastStatus = res.status;
     const text = await res.text();
     console.log(`[Crawl Layer 1 Success] URL: ${url} | Length: ${text?.length || 0} | Status: ${res.status}`);
-    if (text && text.length > 200) return { data: text, status: res.status };
+    if (res.status >= 400) {
+      throw new Error(`HTTP Error Status ${res.status}`);
+    }
+    if (text && text.length >= 100) return { data: text, status: res.status };
   } catch (err) {
     lastError = err;
     console.warn(`[Crawl Layer 1 Failed] URL: ${url} | Error: ${err.message}`);
@@ -109,22 +116,28 @@ async function safeFetch(url, options = {}) {
       headers,
       timeout: 10000,
       maxRedirects: 5,
-      validateStatus: (status) => status < 500, 
+      validateStatus: (status) => status < 400, 
     });
+    lastStatus = response.status;
     console.log(`[Crawl Layer 2 Success] URL: ${url} | Length: ${response.data?.length || 0} | Status: ${response.status}`);
-    if (response.data && typeof response.data === 'string' && response.data.length > 200) {
+    if (response.data && typeof response.data === 'string' && response.data.length >= 100) {
       return { data: response.data, status: response.status };
     }
   } catch (axiosError) {
     lastError = axiosError;
+    if (axiosError.response) lastStatus = axiosError.response.status;
     console.warn(`[Crawl Layer 2 Failed] URL: ${url} | Error: ${axiosError.message}`);
   }
 
   // Layer 3: Direct https client
   try {
     const response = await fetchHttpsLayer(url, headers);
+    lastStatus = response.status;
     console.log(`[Crawl Layer 3 Success] URL: ${url} | Length: ${response.data?.length || 0} | Status: ${response.status}`);
-    if (response.data && response.data.length > 200) {
+    if (response.status >= 400) {
+      throw new Error(`HTTP Error Status ${response.status}`);
+    }
+    if (response.data && response.data.length >= 100) {
       return response;
     }
   } catch (httpsError) {
@@ -142,18 +155,22 @@ async function safeFetch(url, options = {}) {
     const response = await axios.get(url, {
       headers: altHeaders,
       timeout: 12000,
-      validateStatus: (status) => status < 500,
+      validateStatus: (status) => status < 400,
     });
+    lastStatus = response.status;
     console.log(`[Crawl Layer 4 Success] URL: ${url} | Length: ${response.data?.length || 0} | Status: ${response.status}`);
-    if (response.data && typeof response.data === 'string' && response.data.length > 200) {
+    if (response.data && typeof response.data === 'string' && response.data.length >= 100) {
       return { data: response.data, status: response.status };
     }
   } catch (layer4Error) {
     lastError = layer4Error;
+    if (layer4Error.response) lastStatus = layer4Error.response.status;
     console.error(`[Crawl Layer 4 Failed] URL: ${url} | Error: ${layer4Error.message}`);
   }
 
-  throw new Error(`All multi-layer crawling pathways exhausted. (${lastError?.message})`);
+  const customError = new Error(`All multi-layer crawling pathways exhausted. (${lastError?.message})`);
+  customError.status = lastStatus;
+  throw customError;
 }
 
 function extractDomain(url) {
@@ -830,62 +847,41 @@ async function analyzeSingleUrl(url) {
   url = url.replace(/\s+/g, '');
 
   let htmlData;
-  let fetchError = false;
-  let warning = "";
   const startTime = Date.now();
 
   try {
     htmlData = await safeFetch(url);
   } catch (err) {
     console.error(`CRAWL ERROR for ${url}:`, err.message);
-    fetchError = true;
-    warning = "Website scan unavailable due to website restrictions.";
+    const crawlErr = new Error(`Website could not be crawled: ${err.message}`);
+    crawlErr.status = err.status || 500;
+    throw crawlErr;
   }
 
   const loadTime = Date.now() - startTime;
+  const html = htmlData.data;
   
-  // Validate crawled content
-  const validation = validateHtmlContent(htmlData?.data);
-  
-  if (fetchError || validation.crawlBlocked) {
-    return {
-      crawlBlocked: true,
-      fetchError: fetchError || validation.crawlBlocked,
-      crawlQuality: validation.crawlQuality || { score: 10, status: "Blocked" },
-      warning: validation.reason || warning || "Crawler blocked or site offline.",
-      url,
-      title: "Blocked / Protected",
-      h1: "",
-      h2s: [],
-      h3s: [],
-      metaDescription: "",
-      wordCount: 0,
-      score: 0,
-      overallAIVisibilityScore: 0,
-      citationProbability: 0,
-      keywords: [],
-      entities: [],
-      breakdown: {
-        seo: 0,
-        aeo: 0,
-        trust: 0,
-        citation: 0,
-        readability: 0,
-        schema: 0
-      }
-    };
+  if (!html || html.length < 100) {
+    const minLengthErr = new Error("Website could not be crawled: Insufficient HTML response length.");
+    minLengthErr.status = htmlData.status || 500;
+    throw minLengthErr;
   }
 
-  const html = htmlData.data;
-  const $ = cheerio.load(html || "<html></html>");
+  const validation = validateHtmlContent(html);
+  if (validation.crawlBlocked) {
+    const blockErr = new Error(`Website could not be crawled: ${validation.reason}`);
+    blockErr.status = htmlData.status || 403;
+    throw blockErr;
+  }
 
+  const $ = cheerio.load(html || "<html></html>");
   const rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
 
   $('script, style, nav, footer, header, noscript, svg').remove();
 
-  const title = safeString($("title").text()).trim() || "No Title Found";
-  const h1 = safeString($("h1").first().text()).trim() || "";
-  const metaDescription = safeString($('meta[name="description"]').attr("content")).trim() || "";
+  const title = safeString($("title").text()).trim();
+  const h1 = safeString($("h1").first().text()).trim();
+  const metaDescription = safeString($('meta[name="description"]').attr("content")).trim();
   const bodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim() || rawBodyText || "No content scanned.";
   const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
   const h2s = $("h2").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean) || [];
@@ -983,10 +979,25 @@ async function analyzeSingleUrl(url) {
   const robotsExists = false;
   const sitemapExists = false;
 
-  if (!title || title === "No Title Found") { seoScore -= 10; criticalIssues.push("Title tag missing"); }
-  if (title.length > 60) { seoScore -= 5; importantIssues.push("Title too long (>60 chars)"); }
-  if (!metaDescription) { seoScore -= 10; criticalIssues.push("Meta description missing"); }
-  if (!h1) { seoScore -= 10; criticalIssues.push("H1 tag missing"); }
+  // STRICT SEO ISSUE ASSIGNMENT - IF MISSING, PUSH TO ISSUES
+  if (!title || title === "No Title Found" || title.trim() === "") { 
+    seoScore -= 15; 
+    criticalIssues.push("Title tag missing"); 
+  } else if (title.length > 60) { 
+    seoScore -= 5; 
+    importantIssues.push("Title too long (>60 chars)"); 
+  }
+  
+  if (!metaDescription || metaDescription.trim() === "") { 
+    seoScore -= 15; 
+    criticalIssues.push("Meta description missing"); 
+  }
+  
+  if (!h1 || h1.trim() === "") { 
+    seoScore -= 15; 
+    criticalIssues.push("H1 tag missing"); 
+  }
+  
   if (imagesWithoutAlt > 0) { seoScore -= 5; importantIssues.push(`${imagesWithoutAlt} images missing ALT text`); }
   if (!isHttps) { seoScore -= 15; criticalIssues.push("Site not using HTTPS"); }
   if (!mobileViewport) { seoScore -= 10; criticalIssues.push("Mobile viewport not set"); }
@@ -1149,14 +1160,20 @@ async function analyzeSingleUrl(url) {
   const aiSnippets = generateAISnippets(h1, metaDescription, bodyText, keywords);
   const visibilityTrend = trackAIVisibilityTrend(url, overallAIVisibilityScore);
 
-  // DEBUG AUDIT LOGS
-  console.log("Entities:", entityData);
-  console.log("Internal Links:", internalLinkData);
-  console.log("Trust Signals:", trustSignals);
-  console.log("Local SEO:", localSEO);
+  // DETAILED DIAGNOSTICS LOGGING
+  console.log({
+    url,
+    status: htmlData.status || 200,
+    finalUrl: url,
+    htmlLength: html?.length || 0,
+    title,
+    wordCount,
+    crawlSuccess: true
+  });
 
   const payload = {
-    fetchError,
+    success: true,
+    crawlSuccess: true,
     crawlBlocked: false,
     crawlQuality: validation.crawlQuality,
     warning,
@@ -1264,7 +1281,7 @@ async function analyzeSingleUrl(url) {
     lcpScore: 1200
   };
 
-  if (!fetchError && scanHistory.length < 50) {
+  if (scanHistory.length < 50) {
     scanHistory.push({ url, score: overallAIVisibilityScore, timestamp: new Date().toISOString() });
   }
 
@@ -1306,20 +1323,12 @@ app.get("/scan", async (req, res) => {
     const data = await analyzeSingleUrl(url);
     res.json(data);
   } catch (err) {
-    console.error("CRITICAL SCAN ERROR:", err);
-    res.json({
+    console.error("SCAN ENDPOINT CRAWL ERROR:", err.message);
+    res.status(200).json({
       success: false,
-      error: err.message,
-      fallback: true,
-      fetchError: true,
-      competitorBlocked: true,
-      warning: "An unexpected evaluation error occurred on this domain.",
-      score: 0,
-      aeoScore: 0,
-      overallAIVisibilityScore: 0,
-      citationProbability: 0,
-      keywords: [],
-      entities: []
+      crawlSuccess: false,
+      httpStatus: err.status || 500,
+      reason: err.message || "Website could not be crawled"
     });
   }
 });
@@ -1329,17 +1338,28 @@ app.get("/compare", async (req, res) => {
     const { url, competitor } = req.query;
     if (!url || !competitor) return res.status(400).json({ error: "Both URLs required" });
 
-    const [site1, site2] = await Promise.all([
+    const results = await Promise.allSettled([
       analyzeSingleUrl(url),
       analyzeSingleUrl(competitor)
     ]);
 
-    if (site2.crawlBlocked || site2.fetchError) {
-      return res.json({ competitorBlocked: true, warning: "Competitor scan unavailable due to website restrictions." });
+    const site1Res = results[0];
+    const site2Res = results[1];
+
+    if (site1Res.status === "rejected" || site2Res.status === "rejected") {
+      const failedUrl = site1Res.status === "rejected" ? url : competitor;
+      const rejectReason = site1Res.status === "rejected" ? site1Res.reason.message : site2Res.reason.message;
+      return res.status(200).json({
+        success: false,
+        crawlSuccess: false,
+        competitorBlocked: true,
+        reason: "Comparison unavailable due to crawl failure.",
+        warning: `Crawl failed on ${failedUrl}: ${rejectReason}`
+      });
     }
-    if (site1.crawlBlocked || site1.fetchError) {
-      return res.json({ fetchError: true, warning: "Your website scan was blocked or is offline." });
-    }
+
+    const site1 = site1Res.value;
+    const site2 = site2Res.value;
 
     const seoAdvantage = site1.score - site2.score;
     const aeoAdvantage = site1.aeoScore - site2.aeoScore;
@@ -1384,7 +1404,7 @@ app.get("/compare", async (req, res) => {
       winnerReason
     });
   } catch (err) {
-    console.error("COMPARE ERROR:", err);
+    console.error("COMPARE ENDPOINT CRITICAL ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1399,15 +1419,17 @@ app.get("/content-gap", async (req, res) => {
       analyzeSingleUrl(competitor)
     ]);
 
-    if (compData.crawlBlocked || compData.fetchError) {
-      return res.json({ competitorBlocked: true, warning: "Competitor scan unavailable due to website restrictions." });
-    }
-
     const gapData = competitorContentGap(userData, compData);
     res.json(gapData);
   } catch (err) {
-    console.error("CONTENT GAP ERROR:", err);
-    res.status(500).json({ error: err.message });
+    console.error("CONTENT GAP CRAWL ERROR:", err.message);
+    res.status(200).json({
+      success: false,
+      crawlSuccess: false,
+      competitorBlocked: true,
+      reason: "Comparison unavailable due to crawl failure.",
+      warning: err.message
+    });
   }
 });
 
@@ -1454,8 +1476,13 @@ app.get("/roadmap", async (req, res) => {
       estimatedTime: `${Math.ceil(roadmap.length * 0.5)} hours`
     });
   } catch (err) {
-    console.error('ROADMAP ERROR:', err);
-    res.status(500).json({ error: err.message });
+    console.error('ROADMAP CRAWL ERROR:', err.message);
+    res.status(200).json({
+      success: false,
+      crawlSuccess: false,
+      reason: "Roadmap unavailable due to crawl failure.",
+      warning: err.message
+    });
   }
 });
 
@@ -1468,10 +1495,6 @@ app.get("/gap-analysis", async (req, res) => {
       analyzeSingleUrl(url),
       analyzeSingleUrl(competitor)
     ]);
-
-    if (compData.crawlBlocked || compData.fetchError) {
-      return res.json({ competitorBlocked: true, warning: "Competitor scan unavailable due to website restrictions." });
-    }
 
     const checks = [
       { key: 'hasFAQ', label: 'FAQ Schema' }, { key: 'hasHowTo', label: 'HowTo Schema' },
@@ -1487,7 +1510,14 @@ app.get("/gap-analysis", async (req, res) => {
 
     res.json({ competitor: { has: competitorHas }, you: { missing: youMissing } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('GAP ANALYSIS CRAWL ERROR:', err.message);
+    res.status(200).json({
+      success: false,
+      crawlSuccess: false,
+      competitorBlocked: true,
+      reason: "Gap analysis unavailable due to crawl failure.",
+      warning: err.message
+    });
   }
 });
 
@@ -1501,10 +1531,6 @@ app.get("/keyword-theft", async (req, res) => {
       analyzeSingleUrl(competitor)
     ]);
 
-    if (compData.crawlBlocked || compData.fetchError) {
-      return res.json({ competitorBlocked: true, warning: "Competitor scan unavailable due to website restrictions." });
-    }
-
     const yourKeywords = new Set(userData.keywords || []);
     const compKeywords = new Set(compData.keywords || []);
     const missingKeywords = [...compKeywords].filter(k => !yourKeywords.has(k));
@@ -1517,7 +1543,14 @@ app.get("/keyword-theft", async (req, res) => {
       opportunity: `${missingKeywords.length} targeted keyword semantic variants to reclaim topical authority.`
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('KEYWORD THEFT CRAWL ERROR:', err.message);
+    res.status(200).json({
+      success: false,
+      crawlSuccess: false,
+      competitorBlocked: true,
+      reason: "Keyword theft intelligence unavailable due to crawl failure.",
+      warning: err.message
+    });
   }
 });
 
@@ -1592,5 +1625,3 @@ app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform v5.1 running on port ${PORT}`);
   console.log(`📊 Advanced Enterprise modules loaded | Dual-Fetch engine integrated`);
 });
-
-

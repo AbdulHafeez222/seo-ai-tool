@@ -2,6 +2,7 @@ import express from "express";
 import * as cheerio from "cheerio";
 import cors from "cors";
 import axios from "axios";
+import https from "https";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -29,7 +30,38 @@ const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
 ];
 
-// ========== RESILIENT FETCH ENGINE ==========
+// ========== LAYER 3 HTTPS REQUEST FALLBACK ==========
+function fetchHttpsLayer(url, headers) {
+  return new Promise((resolve, reject) => {
+    try {
+      const parsedUrl = new URL(url);
+      const options = {
+        hostname: parsedUrl.hostname,
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: 'GET',
+        headers: headers,
+        timeout: 10000,
+        rejectUnauthorized: false
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          resolve({ data, status: res.statusCode });
+        });
+      });
+
+      req.on('error', (err) => { reject(err); });
+      req.on('timeout', () => { req.destroy(); reject(new Error('HTTPS request timeout')); });
+      req.end();
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+// ========== RESILIENT MULTI-LAYER FETCH ENGINE ==========
 async function safeFetch(url, options = {}) {
   const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
   const headers = {
@@ -51,41 +83,77 @@ async function safeFetch(url, options = {}) {
   };
 
   let lastError;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const response = await axios.get(url, {
-        headers: {
-          ...headers,
-          "User-Agent": USER_AGENTS[attempt - 1] || headers["User-Agent"]
-        },
-        timeout: 12000,
-        maxRedirects: 5,
-        validateStatus: (status) => status < 500, 
-      });
-      if (response.data && typeof response.data === 'string' && response.data.length > 100) {
-        return { data: response.data, status: response.status };
-      }
-    } catch (axiosError) {
-      lastError = axiosError;
-    }
-  }
 
+  // Layer 1: Native fetch
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(url, {
       ...options,
       headers,
       signal: controller.signal,
       redirect: 'follow'
     });
-    clearTimeout(timeout);
+    clearTimeout(timeoutId);
     const text = await res.text();
-    if (text && text.length > 100) return { data: text, status: res.status };
-    throw new Error("Response was empty or too short");
-  } catch (fetchError) {
-    throw new Error(`All crawling attempts failed. Site blocks scraping or is offline. (${fetchError.message || lastError?.message})`);
+    console.log(`[Crawl Layer 1 Success] URL: ${url} | Length: ${text?.length || 0} | Status: ${res.status}`);
+    if (text && text.length > 200) return { data: text, status: res.status };
+  } catch (err) {
+    lastError = err;
+    console.warn(`[Crawl Layer 1 Failed] URL: ${url} | Error: ${err.message}`);
   }
+
+  // Layer 2: Axios
+  try {
+    const response = await axios.get(url, {
+      headers,
+      timeout: 10000,
+      maxRedirects: 5,
+      validateStatus: (status) => status < 500, 
+    });
+    console.log(`[Crawl Layer 2 Success] URL: ${url} | Length: ${response.data?.length || 0} | Status: ${response.status}`);
+    if (response.data && typeof response.data === 'string' && response.data.length > 200) {
+      return { data: response.data, status: response.status };
+    }
+  } catch (axiosError) {
+    lastError = axiosError;
+    console.warn(`[Crawl Layer 2 Failed] URL: ${url} | Error: ${axiosError.message}`);
+  }
+
+  // Layer 3: Direct https client
+  try {
+    const response = await fetchHttpsLayer(url, headers);
+    console.log(`[Crawl Layer 3 Success] URL: ${url} | Length: ${response.data?.length || 0} | Status: ${response.status}`);
+    if (response.data && response.data.length > 200) {
+      return response;
+    }
+  } catch (httpsError) {
+    lastError = httpsError;
+    console.warn(`[Crawl Layer 3 Failed] URL: ${url} | Error: ${httpsError.message}`);
+  }
+
+  // Layer 4: Retry with alternate browser header configuration
+  try {
+    const altHeaders = {
+      ...headers,
+      "User-Agent": USER_AGENTS[0],
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    };
+    const response = await axios.get(url, {
+      headers: altHeaders,
+      timeout: 12000,
+      validateStatus: (status) => status < 500,
+    });
+    console.log(`[Crawl Layer 4 Success] URL: ${url} | Length: ${response.data?.length || 0} | Status: ${response.status}`);
+    if (response.data && typeof response.data === 'string' && response.data.length > 200) {
+      return { data: response.data, status: response.status };
+    }
+  } catch (layer4Error) {
+    lastError = layer4Error;
+    console.error(`[Crawl Layer 4 Failed] URL: ${url} | Error: ${layer4Error.message}`);
+  }
+
+  throw new Error(`All multi-layer crawling pathways exhausted. (${lastError?.message})`);
 }
 
 function extractDomain(url) {
@@ -1266,10 +1334,10 @@ app.get("/compare", async (req, res) => {
       analyzeSingleUrl(competitor)
     ]);
 
-    if (site2.competitorBlocked || site2.fetchError) {
+    if (site2.crawlBlocked || site2.fetchError) {
       return res.json({ competitorBlocked: true, warning: "Competitor scan unavailable due to website restrictions." });
     }
-    if (site1.fetchError) {
+    if (site1.crawlBlocked || site1.fetchError) {
       return res.json({ fetchError: true, warning: "Your website scan was blocked or is offline." });
     }
 
@@ -1331,7 +1399,7 @@ app.get("/content-gap", async (req, res) => {
       analyzeSingleUrl(competitor)
     ]);
 
-    if (compData.competitorBlocked || compData.fetchError) {
+    if (compData.crawlBlocked || compData.fetchError) {
       return res.json({ competitorBlocked: true, warning: "Competitor scan unavailable due to website restrictions." });
     }
 
@@ -1401,7 +1469,7 @@ app.get("/gap-analysis", async (req, res) => {
       analyzeSingleUrl(competitor)
     ]);
 
-    if (compData.competitorBlocked || compData.fetchError) {
+    if (compData.crawlBlocked || compData.fetchError) {
       return res.json({ competitorBlocked: true, warning: "Competitor scan unavailable due to website restrictions." });
     }
 
@@ -1433,7 +1501,7 @@ app.get("/keyword-theft", async (req, res) => {
       analyzeSingleUrl(competitor)
     ]);
 
-    if (compData.competitorBlocked || compData.fetchError) {
+    if (compData.crawlBlocked || compData.fetchError) {
       return res.json({ competitorBlocked: true, warning: "Competitor scan unavailable due to website restrictions." });
     }
 
@@ -1475,6 +1543,50 @@ app.get("/content-brief", async (req, res) => {
 app.get("/history", (req, res) => {
   res.json(scanHistory);
 });
+
+// ========== STARTUP SELF-VALIDATION ROUTINE ==========
+function validateRequiredSystemHelpers() {
+  const requiredHelpers = [
+    { name: "safeString", fn: safeString },
+    { name: "safeArray", fn: safeArray },
+    { name: "safeNumber", fn: safeNumber },
+    { name: "safeArraySlice", fn: safeArraySlice },
+    { name: "clamp", fn: clamp },
+    { name: "safe", fn: safe },
+    { name: "getBrandNameEnhanced", fn: getBrandNameEnhanced },
+    { name: "analyzeInternalLinks", fn: analyzeInternalLinks },
+    { name: "calculateEEATAdvanced", fn: calculateEEATAdvanced },
+    { name: "extractEntitiesEnhanced", fn: extractEntitiesEnhanced },
+    { name: "calculateTopicalAuthority", fn: calculateTopicalAuthority },
+    { name: "analyzeSemanticSEO", fn: analyzeSemanticSEO },
+    { name: "findCitationOpportunities", fn: findCitationOpportunities },
+    { name: "generateAISnippets", fn: generateAISnippets },
+    { name: "analyzeLocalSEO", fn: analyzeLocalSEO },
+    { name: "scanTrustSignals", fn: scanTrustSignals },
+    { name: "trackAIVisibilityTrend", fn: trackAIVisibilityTrend },
+    { name: "validateHtmlContent", fn: validateHtmlContent },
+    { name: "detectAllSchemas", fn: detectAllSchemas }
+  ];
+
+  console.log("🔍 Running Startup System Integrity Audit...");
+  let failed = false;
+  requiredHelpers.forEach(helper => {
+    if (typeof helper.fn !== 'function') {
+      console.error(`❌ System failure: Required helper function "${helper.name}" is missing or undefined!`);
+      failed = true;
+    } else {
+      console.log(`✓ Helper Integrity verified: ${helper.name}`);
+    }
+  });
+
+  if (failed) {
+    throw new Error("System startup failed due to missing dependency helper functions.");
+  }
+  console.log("🚀 System Integrity Audit Complete: 100% Core Helper Coverage Verified.");
+}
+
+// Perform validation before starting HTTP listener
+validateRequiredSystemHelpers();
 
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform v5.1 running on port ${PORT}`);

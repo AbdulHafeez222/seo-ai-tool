@@ -925,8 +925,11 @@ export async function analyzeSingleUrl(url) {
       blocked: true
     });
     console.log("[PIPELINE STOPPED]", url, "BLOCKED");
+    console.log("[BLOCKED UI MODE]");
+    console.log("[SCORES SKIPPED]");
+    console.log("[CONTENT MODULES SKIPPED]");
 
-    // Immediately early-return empty scores, bypassing all modules
+    // Return absolutely null scores & hide modules as strictly required
     return {
       url,
       crawlSuccess: false,
@@ -937,16 +940,16 @@ export async function analyzeSingleUrl(url) {
       h1: "Protected Section",
       metaDescription: "Metadata block detected. Anti-scraping firewall prevents deep indexing audits.",
       wordCount: 0,
-      score: 55, // Baseline benchmark bounds
+      score: null, // Strict nullification of fallback defaults
       status: "BLOCKED",
       stopProcessing: true,
       warning: "Website is protected by an anti-bot system (Cloudflare/reCAPTCHA). Core crawlers were blocked.",
       
-      overallAIVisibilityScore: 35,
-      aiVisibilityLevel: "Poor",
-      citationProbability: 10,
-      aeoScore: 30,
-      aeoStatus: "Needs Work",
+      overallAIVisibilityScore: null,
+      aiVisibilityLevel: "N/A",
+      citationProbability: null,
+      aeoScore: null,
+      aeoStatus: "N/A",
       hasFAQ: false,
       hasHowTo: false,
       hasDirectAnswer: false,
@@ -957,8 +960,8 @@ export async function analyzeSingleUrl(url) {
       mobileFriendly: false,
       isHttps: url.startsWith("https://"),
       loadTime,
-      mobileScore: 40,
-      desktopScore: 55,
+      mobileScore: null,
+      desktopScore: null,
       hasSchemaMarkup: false,
       robotsExists: false,
       sitemapExists: false,
@@ -971,17 +974,17 @@ export async function analyzeSingleUrl(url) {
       ogDescription: "",
       ogImage: "",
       schemas: [],
-      recommendedSchemas: ["Organization", "WebSite"],
-      keywords: ["blocked-access"],
-      entities: ["Security Gateway"],
-      readabilityScore: 30,
-      aiTrustScore: 25,
-      answerQualityScore: 20,
-      featuredSnippetChance: 5,
-      contentStructureScore: 10,
-      citationChatGPT: 10,
-      citationGemini: 10,
-      citationPerplexity: 10,
+      recommendedSchemas: [],
+      keywords: [],
+      entities: [],
+      readabilityScore: null,
+      aiTrustScore: null,
+      answerQualityScore: null,
+      featuredSnippetChance: null,
+      contentStructureScore: null,
+      citationChatGPT: null,
+      citationGemini: null,
+      citationPerplexity: null,
       h1Count: 0,
       h2Count: 0,
       h3Count: 0,
@@ -1012,33 +1015,31 @@ export async function analyzeSingleUrl(url) {
       criticalIssues: ["Anti-scraping firewall active (Cloudflare/Turnstile)"],
       importantIssues: ["Programmatic content audits blocked"],
       minorIssues: [],
-      aiRecommendations: [
-        { priority: "CRITICAL", action: "Configure Cloudflare or WAF parameters", impact: "+45% Audit Accuracy", effort: "10 mins", code: "" }
-      ],
-      recommendationScore: 10,
-      visibilityForecast: { current: 35, afterFAQ: 35, afterHowTo: 35, afterAuthor: 35, afterSchema: 35, afterAll: 35 },
+      aiRecommendations: [],
+      recommendationScore: null,
+      visibilityForecast: null,
       
-      topicalAuthority: { score: 15, topicsCovered: 0, missingSubtopics: [], depth: "Shallow" },
-      semanticSEO: { entities: [], nlpScore: 20, semanticGaps: [], hasSemanticHTML: false },
-      citationOpportunities: [],
-      aiSnippets: { directAnswer: "Audit blocked", featuredSnippet: "Audit blocked", wordCount: 0 },
-      trustSignals: { hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 20, totalSignals: 0, socialLinks: [] },
-      localSEO: { hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 20, napConsistency: "Incomplete/Missing", recommendations: [] },
-      visibilityTrend: { current: 35, history: [], trend: "0", direction: "stable", average: 35 },
-      aiEntities: { brands: [], services: [], locations: [], people: [], organizations: [], totalEntities: 0 },
+      topicalAuthority: null,
+      semanticSEO: null,
+      citationOpportunities: null,
+      aiSnippets: null,
+      trustSignals: null,
+      localSEO: null,
+      visibilityTrend: null,
+      aiEntities: null,
       breakdown: {
-        seo: 45,
-        aeo: 30,
-        eeatScore: 25,
-        eeatBreakdown: { experience: { score: 5, max: 25, factors: [] }, expertise: { score: 5, max: 25, factors: [] }, authoritativeness: { score: 5, max: 25, factors: [] }, trustworthiness: { score: 10, max: 25, factors: [] } },
-        internalLinkingAudit: { internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0, orphanPages: [], avgLinkDepth: 0, averageDepth: 0, authorityFlow: 0, weakLinking: true, suggestions: [], score: 20 },
-        trust: 25,
-        citation: 10,
-        readability: 30,
-        schema: 10
+        seo: null,
+        aeo: null,
+        eeatScore: null,
+        eeatBreakdown: null,
+        internalLinkingAudit: null,
+        trust: null,
+        citation: null,
+        readability: null,
+        schema: null
       },
       brokenLinkCount: 0,
-      lcpScore: 3000
+      lcpScore: null
     };
   }
 
@@ -1605,10 +1606,10 @@ app.get("/compare", async (req, res) => {
     if (site1.stopProcessing || site2.stopProcessing) {
       return res.json({
         sites: [
-          { brand: site1.stopProcessing ? "Blocked Site" : getBrandNameEnhanced(site1.url, cheerio.load("<html></html>"), site1.title, {}), url: site1.url, aiVisibilityScore: site1.overallAIVisibilityScore, seoScore: site1.score, aeoScore: site1.aeoScore, trustScore: site1.aiTrustScore, citationProbability: site1.citationProbability },
-          { brand: site2.stopProcessing ? "Blocked Site" : getBrandNameEnhanced(site2.url, cheerio.load("<html></html>"), site2.title, {}), url: site2.url, aiVisibilityScore: site2.overallAIVisibilityScore, seoScore: site2.score, aeoScore: site2.aeoScore, trustScore: site2.aiTrustScore, citationProbability: site2.citationProbability }
+          { brand: site1.stopProcessing ? "Blocked Site" : getBrandNameEnhanced(site1.url, cheerio.load("<html></html>"), site1.title, {}), url: site1.url, aiVisibilityScore: null, seoScore: null, aeoScore: null, trustScore: null, citationProbability: null },
+          { brand: site2.stopProcessing ? "Blocked Site" : getBrandNameEnhanced(site2.url, cheerio.load("<html></html>"), site2.title, {}), url: site2.url, aiVisibilityScore: null, seoScore: null, aeoScore: null, trustScore: null, citationProbability: null }
         ],
-        winner: site1.overallAIVisibilityScore >= site2.overallAIVisibilityScore ? { url: site1.url } : { url: site2.url },
+        winner: null,
         advantages: { seo: { diff: 0, leader: "Blocked" }, aeo: { diff: 0, leader: "Blocked" }, trust: { diff: 0, leader: "Blocked" } },
         winnerReason: "Comparison not applicable: Deep crawl blocked."
       });
@@ -1691,15 +1692,9 @@ app.get("/roadmap", async (req, res) => {
     // Skip roadmap calculation if blocked
     if (data.stopProcessing) {
       return res.json({
-        currentScore: 35,
-        potentialScore: 35,
-        roadmap: [{
-          step: 1,
-          task: "WAF Anti-Scraping Firewall Detected",
-          priority: "CRITICAL",
-          why: "Programmatic audits blocked. Whitelist crawler agents to proceed.",
-          code: "Action blocked due to security protection."
-        }],
+        currentScore: null,
+        potentialScore: null,
+        roadmap: [],
         estimatedTime: "0 hours"
       });
     }
@@ -1708,15 +1703,9 @@ app.get("/roadmap", async (req, res) => {
     
     if (autopilotTasks.length === 0) {
       return res.json({
-        currentScore: data.overallAIVisibilityScore || 0,
-        potentialScore: data.overallAIVisibilityScore || 0,
-        roadmap: [{
-          step: 1,
-          task: "No Critical Issues Found",
-          priority: "LOW",
-          why: "Your page meets optimal system requirements.",
-          code: "No structural action needed."
-        }],
+        currentScore: data.overallAIVisibilityScore || null,
+        potentialScore: data.overallAIVisibilityScore || null,
+        roadmap: [],
         estimatedTime: "0 hours"
       });
     }

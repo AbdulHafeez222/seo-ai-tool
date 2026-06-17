@@ -14,13 +14,39 @@ app.use(express.json());
 app.use(express.static("."));
 app.use(express.static("public"));
 
-// ========== HELPER UTILITIES (DEFENSIVE CODING) ==========
-const safeString = (v) => typeof v === "string" ? v : (v ? String(v) : "");
-const safeArray = (v) => Array.isArray(v) ? v : [];
-const safeNumber = (v, d = 0) => isNaN(Number(v)) ? d : Number(v);
-const safeArraySlice = (arr, start, end) => safeArray(arr).slice(start, end);
-const clamp = (num, min = 0, max = 100) => Math.min(max, Math.max(min, isNaN(num) ? 0 : num));
-const safe = (val, fallback = '') => (val !== undefined && val !== null) ? val : fallback;
+// =========================================================================
+// ========== PART 1: HOISTED HELPER UTILITIES (DEFENSIVE CODING) ==========
+// =========================================================================
+
+export function safeString(input) {
+  if (input === undefined || input === null) return "";
+  return String(input)
+    .replace(/<[^>]*>/g, "")
+    .replace(/undefined|null/g, "")
+    .trim();
+}
+
+export function safeArray(v) {
+  return Array.isArray(v) ? v : [];
+}
+
+export function safeNumber(v, d = 0) {
+  const num = Number(v);
+  return isNaN(num) ? d : num;
+}
+
+export function safeArraySlice(arr, start, end) {
+  return safeArray(arr).slice(start, end);
+}
+
+export function clamp(num, min = 0, max = 100) {
+  const val = Number(num);
+  return Math.min(max, Math.max(min, isNaN(val) ? 0 : val));
+}
+
+export function safe(val, fallback = '') {
+  return (val !== undefined && val !== null) ? val : fallback;
+}
 
 // ========== RESILIENT USER-AGENT ROTATION ENGINE ==========
 const USER_AGENTS = [
@@ -195,7 +221,7 @@ function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
 }
 
 // ========== ROBUST PAGE VALIDATOR (NO FALSE POSITIVES) ==========
-function validateHtmlContent(html) {
+export function validateHtmlContent(html) {
   if (!html || typeof html !== 'string') {
     return { crawlBlocked: true, reason: "Empty HTML response received", crawlQuality: { score: 0, status: "Blocked" } };
   }
@@ -263,7 +289,7 @@ function validateHtmlContent(html) {
 }
 
 // ========== SCHEMA DETECTION ==========
-function detectAllSchemas($, html) {
+export function detectAllSchemas($, html) {
   const schemas = {
     FAQPage: { present: false, count: 0, data: [], recommended: false },
     HowTo: { present: false, count: 0, data: [], recommended: false },
@@ -313,7 +339,7 @@ function detectAllSchemas($, html) {
 }
 
 // ========== ROBUST BRAND DETECTION ENGINE ==========
-function getBrandNameEnhanced(url, $, title, schemas) {
+export function getBrandNameEnhanced(url, $, title, schemas) {
   if (schemas?.Organization?.present && schemas?.Organization?.data?.length > 0) {
     const orgName = schemas.Organization.data[0]?.name;
     if (orgName && typeof orgName === 'string' && orgName.trim().length > 0) {
@@ -357,7 +383,7 @@ function getBrandNameEnhanced(url, $, title, schemas) {
 }
 
 // ========== INTERNAL LINK INTELLIGENCE ==========
-function analyzeInternalLinks($, url, h2s) {
+export function analyzeInternalLinks($, url, h2s) {
   let baseHostname = "";
   let baseProto = "https:";
   try {
@@ -431,7 +457,7 @@ function analyzeInternalLinks($, url, h2s) {
 }
 
 // ========== ENTITY EXTRACTION ENGINE ==========
-function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas) {
+export function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas) {
   const brands = [];
   const locations = [];
   const services = [];
@@ -575,7 +601,7 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
 }
 
 // 1. TOPICAL AUTHORITY ENGINE
-const calculateTopicalAuthority = ($, keywords, h2s, h3s) => {
+export function calculateTopicalAuthority($, keywords, h2s, h3s) {
   const allHeadings = [...safeArray(h2s), ...safeArray(h3s)].map(h => safeString(h).toLowerCase());
   const keywordSet = new Set(safeArray(keywords).map(k => safeString(k).toLowerCase()));
 
@@ -598,10 +624,10 @@ const calculateTopicalAuthority = ($, keywords, h2s, h3s) => {
     missingSubtopics, 
     depth: topicsCovered >= 7 ? 'Deep' : topicsCovered >= 4 ? 'Medium' : 'Shallow' 
   };
-};
+}
 
 // 2. ADVANCED SEMANTIC SEO ANALYZER
-const analyzeSemanticSEO = ($, bodyText, keywords) => {
+export function analyzeSemanticSEO($, bodyText, keywords) {
   const text = safeString(bodyText).toLowerCase();
   const keywordSet = safeArraySlice(keywords, 0, 10);
   const matchedKeywords = keywordSet.filter(k => text.includes(safeString(k).toLowerCase()));
@@ -615,10 +641,10 @@ const analyzeSemanticSEO = ($, bodyText, keywords) => {
     semanticGaps,
     hasSemanticHTML: $('article, section, aside, nav').length > 0
   };
-};
+}
 
 // 3. AI CITATION OPPORTUNITY FINDER
-const findCitationOpportunities = (data) => {
+export function findCitationOpportunities(data) {
   const opportunities = [];
   const { hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount } = data;
 
@@ -660,10 +686,10 @@ const findCitationOpportunities = (data) => {
   }
 
   return opportunities;
-};
+}
 
 // 4. AI SNIPPET GENERATOR
-const generateAISnippets = (h1, metaDescription, bodyText, keywords) => {
+export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
   const safeBody = safeString(bodyText);
   const safeH1 = safeString(h1);
   const safeDesc = safeString(metaDescription);
@@ -678,10 +704,10 @@ const generateAISnippets = (h1, metaDescription, bodyText, keywords) => {
     featuredSnippet: featuredSnippet.substring(0, 600),
     wordCount: directAnswer.split(' ').length
   };
-};
+}
 
 // 5. LOCAL SEO & ADVANCED TRUST SIGNAL SCANNER
-const analyzeLocalSEO = ($, bodyText) => {
+export function analyzeLocalSEO($, bodyText) {
   const text = safeString(bodyText);
   const hasNAP = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(text) || text.toLowerCase().includes('address') || text.toLowerCase().includes('phone');
   const hasLocalBusiness = $('[itemtype*="LocalBusiness"]').length > 0;
@@ -700,9 +726,9 @@ const analyzeLocalSEO = ($, bodyText) => {
     napConsistency: hasNAP ? 'Active' : 'Incomplete/Missing',
     recommendations: !hasLocalBusiness ? ['Deploy LocalBusiness JSON-LD Schema markup immediately'] : []
   };
-};
+}
 
-const scanTrustSignals = ($, url) => {
+export function scanTrustSignals($, url) {
   const bodyText = $('body').text().toLowerCase();
   
   let hasContact = false;
@@ -775,10 +801,10 @@ const scanTrustSignals = ($, url) => {
   };
 
   return signals;
-};
+}
 
 // ========== E-E-A-T ADVANCED & SCANNER ==========
-function calculateEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas) {
+export function calculateEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas) {
   const breakdown = {
     experience: { score: 0, max: 25, factors: [] },
     expertise: { score: 0, max: 25, factors: [] },
@@ -816,7 +842,7 @@ function calculateEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactP
 }
 
 // 6. HISTORICAL TREND TRACKER
-function trackAIVisibilityTrend(url, currentScore) {
+export function trackAIVisibilityTrend(url, currentScore) {
   const key = Buffer.from(url).toString('base64');
   if (!trendDB[key]) trendDB[key] = [];
 
@@ -841,7 +867,7 @@ function trackAIVisibilityTrend(url, currentScore) {
 }
 
 // ========== MAIN ANALYZER PIPELINE (HARDENED) ==========
-async function analyzeSingleUrl(url) {
+export async function analyzeSingleUrl(url) {
   url = safeString(url).trim();
   if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
   url = url.replace(/\s+/g, '');
@@ -1177,7 +1203,7 @@ async function analyzeSingleUrl(url) {
     crawlSuccess: true,
     crawlBlocked: false,
     crawlQuality: validation.crawlQuality,
-    warning,
+    warning: "",
     schemaGenerator,
     aiAutopilot,
     url,
@@ -1290,7 +1316,7 @@ async function analyzeSingleUrl(url) {
 }
 
 // ========== COMPETITOR CONTENT GAP ENGINE ==========
-function competitorContentGap(userData, compData) {
+export function competitorContentGap(userData, compData) {
   const userHeadings = [...safeArray(userData.h2s), ...safeArray(userData.h3s)];
   const compHeadings = [...safeArray(compData.h2s), ...safeArray(compData.h3s)];
   const userKeywords = new Set(safeArray(userData.keywords));

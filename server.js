@@ -40,7 +40,7 @@ function fetchHttpsLayer(url, headers) {
         path: parsedUrl.pathname + parsedUrl.search,
         method: 'GET',
         headers: headers,
-        timeout: 10000,
+        timeout: 12000,
         rejectUnauthorized: false
       };
 
@@ -71,13 +71,6 @@ async function safeFetch(url, options = {}) {
     "Accept-Encoding": "gzip, deflate, br",
     "Connection": "keep-alive",
     "Referer": "https://www.google.com/",
-    "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-    "Sec-Ch-Ua-Mobile": "?0",
-    "Sec-Ch-Ua-Platform": '"Windows"',
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "cross-site",
-    "Sec-Fetch-User": "?1",
     "Upgrade-Insecure-Requests": "1",
     "Cache-Control": "no-cache",
     "Pragma": "no-cache",
@@ -90,7 +83,7 @@ async function safeFetch(url, options = {}) {
   // Layer 1: Native fetch
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     const res = await fetch(url, {
       ...options,
       headers,
@@ -101,10 +94,13 @@ async function safeFetch(url, options = {}) {
     lastStatus = res.status;
     const text = await res.text();
     console.log(`[Crawl Layer 1 Success] URL: ${url} | Length: ${text?.length || 0} | Status: ${res.status}`);
+    
     if (res.status >= 400) {
       throw new Error(`HTTP Error Status ${res.status}`);
     }
-    if (text && text.length >= 100) return { data: text, status: res.status };
+    if (text && text.length >= 100) {
+      return { data: text, status: res.status };
+    }
   } catch (err) {
     lastError = err;
     console.warn(`[Crawl Layer 1 Failed] URL: ${url} | Error: ${err.message}`);
@@ -114,7 +110,7 @@ async function safeFetch(url, options = {}) {
   try {
     const response = await axios.get(url, {
       headers,
-      timeout: 10000,
+      timeout: 12000,
       maxRedirects: 5,
       validateStatus: (status) => status < 400, 
     });
@@ -129,7 +125,7 @@ async function safeFetch(url, options = {}) {
     console.warn(`[Crawl Layer 2 Failed] URL: ${url} | Error: ${axiosError.message}`);
   }
 
-  // Layer 3: Direct https client
+  // Layer 3: Direct HTTPS Client
   try {
     const response = await fetchHttpsLayer(url, headers);
     lastStatus = response.status;
@@ -145,7 +141,7 @@ async function safeFetch(url, options = {}) {
     console.warn(`[Crawl Layer 3 Failed] URL: ${url} | Error: ${httpsError.message}`);
   }
 
-  // Layer 4: Retry with alternate browser header configuration
+  // Layer 4: Retry with alternate browser configurations
   try {
     const altHeaders = {
       ...headers,
@@ -154,7 +150,7 @@ async function safeFetch(url, options = {}) {
     };
     const response = await axios.get(url, {
       headers: altHeaders,
-      timeout: 12000,
+      timeout: 15000,
       validateStatus: (status) => status < 400,
     });
     lastStatus = response.status;
@@ -631,6 +627,7 @@ const findCitationOpportunities = (data) => {
       engine: 'ChatGPT', 
       reason: 'Missing FAQ Schema - ChatGPT maps structured Q&As', 
       impact: '+20%', 
+      maxScore: 20,
       fix: 'Deploy FAQ JSON-LD schema with exact queries.' 
     });
   }
@@ -639,6 +636,7 @@ const findCitationOpportunities = (data) => {
       engine: 'Perplexity', 
       reason: 'No clear, direct semantic summary at top of page', 
       impact: '+15%', 
+      maxScore: 15,
       fix: 'Add a 50-word "Quick Answer" component under H1.' 
     });
   }
@@ -647,6 +645,7 @@ const findCitationOpportunities = (data) => {
       engine: 'Gemini', 
       reason: 'Missing Author Profile credentials - Gemini checks E-E-A-T', 
       impact: '+12%', 
+      maxScore: 12,
       fix: 'Add a schema-marked Author Bio block.' 
     });
   }
@@ -655,6 +654,7 @@ const findCitationOpportunities = (data) => {
       engine: 'All Engines', 
       reason: 'Educational structure detected without structural steps', 
       impact: '+10%', 
+      maxScore: 10,
       fix: 'Integrate HowTo Schema steps with lists.' 
     });
   }
@@ -860,7 +860,8 @@ async function analyzeSingleUrl(url) {
 
   const loadTime = Date.now() - startTime;
   const html = htmlData.data;
-  
+
+  // STRICT VALIDATION ACCORDING TO PART 3 — STOP FAKE REPORTS
   if (!html || html.length < 100) {
     const minLengthErr = new Error("Website could not be crawled: Insufficient HTML response length.");
     minLengthErr.status = htmlData.status || 500;
@@ -979,7 +980,7 @@ async function analyzeSingleUrl(url) {
   const robotsExists = false;
   const sitemapExists = false;
 
-  // STRICT SEO ISSUE ASSIGNMENT - IF MISSING, PUSH TO ISSUES
+  // ========== STRICT SEO ISSUE AUDIT (NO MORE FALSE POSITIVES / NO ZERO REPORTS) ==========
   if (!title || title === "No Title Found" || title.trim() === "") { 
     seoScore -= 15; 
     criticalIssues.push("Title tag missing"); 
@@ -1328,7 +1329,7 @@ app.get("/scan", async (req, res) => {
       success: false,
       crawlSuccess: false,
       httpStatus: err.status || 500,
-      reason: err.message || "Website could not be crawled"
+      reason: "Website could not be crawled"
     });
   }
 });

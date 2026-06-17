@@ -357,7 +357,7 @@ export function getBrandNameEnhanced(url, $, title, schemas) {
     return ogSiteName.trim();
   }
 
-  if (title && typeof title === 'string' && title !== "No Title Found") {
+  if (title && typeof title === 'string' && title !== "No Title Found" && title !== "Not Found") {
     const parts = title.split(/[|–-]/);
     if (parts.length > 1) {
       const lastPart = parts[parts.length - 1].trim();
@@ -906,9 +906,28 @@ export async function analyzeSingleUrl(url) {
 
   $('script, style, nav, footer, header, noscript, svg').remove();
 
-  const title = safeString($("title").text()).trim();
-  const h1 = safeString($("h1").first().text()).trim();
-  const metaDescription = safeString($('meta[name="description"]').attr("content")).trim();
+  // ========== DEEP FALLBACK METADATA EXTRACTION ==========
+  let title = safeString($("title").text()).trim();
+  if (!title || title.toLowerCase().includes("not found")) {
+    title = safeString($('meta[property="og:title"]').attr("content")).trim() || 
+            safeString($('meta[name="twitter:title"]').attr("content")).trim() || 
+            safeString($("h1").first().text()).trim() || 
+            "Not Found";
+  }
+
+  let metaDescription = safeString($('meta[name="description"]').attr("content")).trim();
+  if (!metaDescription) {
+    metaDescription = safeString($('meta[property="og:description"]').attr("content")).trim() || 
+                      safeString($('meta[name="twitter:description"]').attr("content")).trim() || 
+                      safeString($("p").first().text()).substring(0, 150).trim() || 
+                      "Not Found";
+  }
+
+  let h1 = safeString($("h1").first().text()).trim();
+  if (!h1) {
+    h1 = safeString($("h2").first().text()).trim() || "Not Found";
+  }
+
   const bodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim() || rawBodyText || "No content scanned.";
   const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
   const h2s = $("h2").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean) || [];
@@ -1006,23 +1025,23 @@ export async function analyzeSingleUrl(url) {
   const robotsExists = false;
   const sitemapExists = false;
 
-  // ========== STRICT SEO ISSUE AUDIT (NO MORE FALSE POSITIVES / NO ZERO REPORTS) ==========
-  if (!title || title === "No Title Found" || title.trim() === "") { 
-    seoScore -= 15; 
-    criticalIssues.push("Title tag missing"); 
+  // ========== STRICT SEO ISSUE AUDIT (AUTO-ASSIGN CRITICAL ISSUES) ==========
+  if (!title || title === "No Title Found" || title === "Not Found" || title.trim() === "") { 
+    seoScore -= 20; 
+    criticalIssues.push("Title tag missing or failed to parse"); 
   } else if (title.length > 60) { 
     seoScore -= 5; 
     importantIssues.push("Title too long (>60 chars)"); 
   }
   
-  if (!metaDescription || metaDescription.trim() === "") { 
-    seoScore -= 15; 
-    criticalIssues.push("Meta description missing"); 
+  if (!metaDescription || metaDescription === "Not Found" || metaDescription.trim() === "") { 
+    seoScore -= 20; 
+    criticalIssues.push("Meta description missing or failed to parse"); 
   }
   
-  if (!h1 || h1.trim() === "") { 
-    seoScore -= 15; 
-    criticalIssues.push("H1 tag missing"); 
+  if (!h1 || h1 === "Not Found" || h1.trim() === "") { 
+    seoScore -= 20; 
+    criticalIssues.push("H1 tag missing or failed to parse"); 
   }
   
   if (imagesWithoutAlt > 0) { seoScore -= 5; importantIssues.push(`${imagesWithoutAlt} images missing ALT text`); }
@@ -1043,7 +1062,7 @@ export async function analyzeSingleUrl(url) {
   if (hasHowTo) aeoScore += 20;
   if (hasDirectAnswer) aeoScore += 25;
   if (hasSchemaMarkup) aeoScore += 15;
-  if (h1 && metaDescription) aeoScore += 10;
+  if (h1 && h1 !== "Not Found" && metaDescription && metaDescription !== "Not Found") aeoScore += 10;
   const aeoStatus = aeoScore >= 80 ? "ChatGPT Ready" : aeoScore >= 50 ? "AI Friendly" : "Needs Work";
 
   const featuredSnippetChance = Math.min(100, (hasDirectAnswer ? 40 : 0) + (hasFAQ ? 30 : 0) + (listCount > 0 ? 20 : 0) + (h2Count >= 3 ? 10 : 0));
@@ -1074,7 +1093,7 @@ export async function analyzeSingleUrl(url) {
   }));
 
   const brandName = brands[0] || getBrandNameEnhanced(url, $, title, schemas);
-  const mainTopic = h1 || safeArraySlice(title.split(" "), 0, 3).join(" ") || "this service";
+  const mainTopic = (h1 && h1 !== "Not Found") ? h1 : (safeArraySlice(title.split(" "), 0, 3).join(" ") || "this service");
   const subtopics = h2s;
   const expectedSubtopics = [`What is ${mainTopic}`, `${mainTopic} Benefits`, `How to ${mainTopic}`, `${mainTopic} Examples`, `${mainTopic} vs Alternatives`];
   const missingSubtopicsList = expectedSubtopics.filter(exp => !subtopics.some(sub => safeString(sub).toLowerCase().includes(exp.toLowerCase().split(' ')[0])));
@@ -1087,7 +1106,7 @@ export async function analyzeSingleUrl(url) {
   if (brandName && mainTopic) {
     autoFAQ.push({ 
       q: `What services does ${brandName} provide for ${mainTopic}?`, 
-      a: metaDescription || `We offer complete solutions for ${mainTopic} with industry-leading practices.` 
+      a: metaDescription && metaDescription !== "Not Found" ? metaDescription : `We offer complete solutions for ${mainTopic} with industry-leading practices.` 
     });
   }
   if (services.length > 0) {

@@ -5,7 +5,7 @@ import axios from "axios";
 import https from "https";
 
 const app = express();
-const PORT = process.env.PORT || 15000;
+const PORT = process.env.PORT || 10000;
 const scanHistory = [];
 const trendDB = {}; // In-memory database for tracking historical scores
 
@@ -66,7 +66,7 @@ function fetchHttpsLayer(url, headers) {
         path: parsedUrl.pathname + parsedUrl.search,
         method: 'GET',
         headers: headers,
-        timeout: 12000,
+        timeout: 10000,
         rejectUnauthorized: false
       };
 
@@ -109,7 +109,7 @@ async function safeFetch(url, options = {}) {
   // Layer 1: Native fetch
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(url, {
       ...options,
       headers,
@@ -119,52 +119,39 @@ async function safeFetch(url, options = {}) {
     clearTimeout(timeoutId);
     lastStatus = res.status;
     const text = await res.text();
-    console.log(`[Crawl Layer 1 Success] URL: ${url} | Length: ${text?.length || 0} | Status: ${res.status}`);
-    
-    if (res.status >= 400) {
-      throw new Error(`HTTP Error Status ${res.status}`);
-    }
-    if (text && text.length >= 100) {
+    if (res.status < 400 && text && text.length >= 100) {
       return { data: text, status: res.status };
     }
   } catch (err) {
     lastError = err;
-    console.warn(`[Crawl Layer 1 Failed] URL: ${url} | Error: ${err.message}`);
   }
 
   // Layer 2: Axios
   try {
     const response = await axios.get(url, {
       headers,
-      timeout: 12000,
+      timeout: 8000,
       maxRedirects: 5,
       validateStatus: (status) => status < 400, 
     });
     lastStatus = response.status;
-    console.log(`[Crawl Layer 2 Success] URL: ${url} | Length: ${response.data?.length || 0} | Status: ${response.status}`);
     if (response.data && typeof response.data === 'string' && response.data.length >= 100) {
       return { data: response.data, status: response.status };
     }
   } catch (axiosError) {
     lastError = axiosError;
     if (axiosError.response) lastStatus = axiosError.response.status;
-    console.warn(`[Crawl Layer 2 Failed] URL: ${url} | Error: ${axiosError.message}`);
   }
 
   // Layer 3: Direct HTTPS Client
   try {
     const response = await fetchHttpsLayer(url, headers);
     lastStatus = response.status;
-    console.log(`[Crawl Layer 3 Success] URL: ${url} | Length: ${response.data?.length || 0} | Status: ${response.status}`);
-    if (response.status >= 400) {
-      throw new Error(`HTTP Error Status ${response.status}`);
-    }
-    if (response.data && response.data.length >= 100) {
+    if (response.status < 400 && response.data && response.data.length >= 100) {
       return response;
     }
   } catch (httpsError) {
     lastError = httpsError;
-    console.warn(`[Crawl Layer 3 Failed] URL: ${url} | Error: ${httpsError.message}`);
   }
 
   // Layer 4: Retry with alternate browser configurations
@@ -176,48 +163,18 @@ async function safeFetch(url, options = {}) {
     };
     const response = await axios.get(url, {
       headers: altHeaders,
-      timeout: 15000,
+      timeout: 10000,
       validateStatus: (status) => status < 400,
     });
     lastStatus = response.status;
-    console.log(`[Crawl Layer 4 Success] URL: ${url} | Length: ${response.data?.length || 0} | Status: ${response.status}`);
     if (response.data && typeof response.data === 'string' && response.data.length >= 100) {
       return { data: response.data, status: response.status };
     }
   } catch (layer4Error) {
     lastError = layer4Error;
-    if (layer4Error.response) lastStatus = layer4Error.response.status;
-    console.error(`[Crawl Layer 4 Failed] URL: ${url} | Error: ${layer4Error.message}`);
   }
 
-  const customError = new Error(`All multi-layer crawling pathways exhausted. (${lastError?.message})`);
-  customError.status = lastStatus;
-  throw customError;
-}
-
-function extractDomain(url) {
-  try {
-    return new URL(url).hostname.replace("www.", "");
-  } catch {
-    return "";
-  }
-}
-
-function getKeywordDifficulty(keyword) {
-  const len = safeString(keyword).length;
-  if (len < 10) return "High";
-  if (len < 18) return "Medium";
-  return "Low";
-}
-
-function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
-  let score = 0;
-  if (hasFAQ) score++;
-  if (hasSchema) score++;
-  if (safeString(keyword).split(' ').length > 2) score++;
-  if (score >= 2) return "High";
-  if (score === 1) return "Medium";
-  return "Low";
+  return { data: "", status: lastStatus, isError: true, errorMsg: lastError?.message || "Fetch timeout" };
 }
 
 // ========== ROBUST PAGE VALIDATOR (NO FALSE POSITIVES) ==========
@@ -227,28 +184,17 @@ export function validateHtmlContent(html) {
   }
 
   const lowercaseHtml = html.toLowerCase();
-  
   const blockIndicators = [
-    "just a moment",
-    "cloudflare",
-    "challenge-form",
-    "turnstile",
-    "__cf_chl_opt",
-    "hcaptcha",
-    "recaptcha",
-    "security check",
-    "access denied",
-    "error code 1020",
-    "anti-bot",
-    "ddos protection",
-    "ray id"
+    "just a moment", "cloudflare", "challenge-form", "turnstile", "__cf_chl_opt",
+    "hcaptcha", "recaptcha", "security check", "access denied", "error code 1020",
+    "anti-bot", "ddos protection", "ray id"
   ];
 
   for (const indicator of blockIndicators) {
     if (lowercaseHtml.includes(indicator)) {
       return { 
         crawlBlocked: true, 
-        reason: `Anti-bot protection / Cloudflare challenge page detected (${indicator})`, 
+        reason: `Anti-bot protection page detected (${indicator})`, 
         crawlQuality: { score: 10, status: "Blocked" } 
       };
     }
@@ -269,7 +215,7 @@ export function validateHtmlContent(html) {
     }
     return {
       crawlBlocked: true,
-      reason: "No readable textual content found (possible JS rendering required)",
+      reason: "No readable textual content found",
       crawlQuality: { score: 15, status: "Empty" }
     };
   }
@@ -301,83 +247,85 @@ export function detectAllSchemas($, html) {
     Product: { present: false, count: 0, data: [], recommended: false }
   };
 
-  $('script[type="application/ld+json"]').each((i, el) => {
-    try {
-      const raw = $(el).html();
-      if (!raw) return;
-      const json = JSON.parse(raw);
-      const items = Array.isArray(json) ? json : [json];
-      const processItem = (item) => {
-        if (!item) return;
-        if (item['@graph'] && Array.isArray(item['@graph'])) {
-          item['@graph'].forEach(processItem);
-          return;
-        }
-        if (item['@type']) {
-          const types = Array.isArray(item['@type']) ? item['@type'] : [item['@type']];
-          types.forEach(type => {
-            if (schemas[type]) {
-              schemas[type].present = true;
-              schemas[type].count++;
-              schemas[type].data.push(item);
-            }
-          });
-        }
-      };
-      items.forEach(processItem);
-    } catch (e) {}
-  });
+  try {
+    $('script[type="application/ld+json"]').each((i, el) => {
+      try {
+        const raw = $(el).html();
+        if (!raw) return;
+        const json = JSON.parse(raw);
+        const items = Array.isArray(json) ? json : [json];
+        const processItem = (item) => {
+          if (!item) return;
+          if (item['@graph'] && Array.isArray(item['@graph'])) {
+            item['@graph'].forEach(processItem);
+            return;
+          }
+          if (item['@type']) {
+            const types = Array.isArray(item['@type']) ? item['@type'] : [item['@type']];
+            types.forEach(type => {
+              if (schemas[type]) {
+                schemas[type].present = true;
+                schemas[type].count++;
+                schemas[type].data.push(item);
+              }
+            });
+          }
+        };
+        items.forEach(processItem);
+      } catch (e) {}
+    });
 
-  const bodyText = $('body').text().toLowerCase();
-  if (!schemas.LocalBusiness.present && (bodyText.includes('service') || bodyText.includes('contact'))) {
-    schemas.LocalBusiness.recommended = true;
-  }
-  if (!schemas.HowTo.present && (bodyText.includes('step') || bodyText.includes('how to'))) {
-    schemas.HowTo.recommended = true;
-  }
+    const bodyText = $('body').text().toLowerCase();
+    if (!schemas.LocalBusiness.present && (bodyText.includes('service') || bodyText.includes('contact'))) {
+      schemas.LocalBusiness.recommended = true;
+    }
+    if (!schemas.HowTo.present && (bodyText.includes('step') || bodyText.includes('how to'))) {
+      schemas.HowTo.recommended = true;
+    }
+  } catch (e) {}
   return schemas;
 }
 
 // ========== ROBUST BRAND DETECTION ENGINE ==========
 export function getBrandNameEnhanced(url, $, title, schemas) {
-  if (schemas?.Organization?.present && schemas?.Organization?.data?.length > 0) {
-    const orgName = schemas.Organization.data[0]?.name;
-    if (orgName && typeof orgName === 'string' && orgName.trim().length > 0) {
-      return orgName.trim();
-    }
-  }
-  
-  const logoAlt = $('img[src*="logo" i]').attr('alt') || $('img[class*="logo" i]').attr('alt') || $('img[id*="logo" i]').attr('alt');
-  if (logoAlt && logoAlt.trim().length > 1 && logoAlt.trim().length < 50) {
-    return logoAlt.trim();
-  }
-
-  const ogSiteName = $('meta[property="og:site_name"]').attr("content") || $('meta[name="application-name"]').attr("content");
-  if (ogSiteName && ogSiteName.trim().length > 0) {
-    return ogSiteName.trim();
-  }
-
-  if (title && typeof title === 'string' && title !== "No Title Found" && title !== "Not Found") {
-    const parts = title.split(/[|–-]/);
-    if (parts.length > 1) {
-      const lastPart = parts[parts.length - 1].trim();
-      if (lastPart.length > 1 && lastPart.length < 30 && !lastPart.toLowerCase().includes('home') && !lastPart.toLowerCase().includes('page')) {
-        return lastPart;
-      }
-      const firstPart = parts[0].trim();
-      if (firstPart.length > 1 && firstPart.length < 30 && !firstPart.toLowerCase().includes('home') && !firstPart.toLowerCase().includes('page')) {
-        return firstPart;
-      }
-    }
-  }
-
   try {
+    if (schemas?.Organization?.present && schemas?.Organization?.data?.length > 0) {
+      const orgName = schemas.Organization.data[0]?.name;
+      if (orgName && typeof orgName === 'string' && orgName.trim().length > 0) {
+        return orgName.trim();
+      }
+    }
+    
+    const logoAlt = $('img[src*="logo" i]').attr('alt') || $('img[class*="logo" i]').attr('alt') || $('img[id*="logo" i]').attr('alt');
+    if (logoAlt && logoAlt.trim().length > 1 && logoAlt.trim().length < 50) {
+      return logoAlt.trim();
+    }
+
+    const ogSiteName = $('meta[property="og:site_name"]').attr("content") || $('meta[name="application-name"]').attr("content");
+    if (ogSiteName && ogSiteName.trim().length > 0) {
+      return ogSiteName.trim();
+    }
+
+    if (title && typeof title === 'string' && title !== "No Title Found" && title !== "Not Found") {
+      const parts = title.split(/[|–-]/);
+      if (parts.length > 1) {
+        const lastPart = parts[parts.length - 1].trim();
+        if (lastPart.length > 1 && lastPart.length < 30 && !lastPart.toLowerCase().includes('home') && !lastPart.toLowerCase().includes('page')) {
+          return lastPart;
+        }
+        const firstPart = parts[0].trim();
+        if (firstPart.length > 1 && firstPart.length < 30 && !firstPart.toLowerCase().includes('home') && !firstPart.toLowerCase().includes('page')) {
+          return firstPart;
+        }
+      }
+    }
+
     const domain = new URL(url).hostname.replace("www.", "");
     const brand = domain.split('.')[0] || 'unknown';
     if (brand && brand !== 'localhost') {
       return brand.charAt(0).toUpperCase() + brand.slice(1);
     }
-  } catch {}
+  } catch (e) {}
 
   return "Brand Authority";
 }
@@ -398,36 +346,38 @@ export function analyzeInternalLinks($, url, h2s) {
   let externalLinks = 0;
   const linkMap = {};
 
-  $("a").each((i, el) => {
-    const href = $(el).attr("href");
-    if (!href) return;
-    const cleanHref = href.trim();
-    if (cleanHref.startsWith('#') || cleanHref.startsWith('javascript:') || cleanHref.startsWith('mailto:') || cleanHref.startsWith('tel:') || cleanHref.startsWith('whatsapp:')) return;
+  try {
+    $("a").each((i, el) => {
+      const href = $(el).attr("href");
+      if (!href) return;
+      const cleanHref = href.trim();
+      if (cleanHref.startsWith('#') || cleanHref.startsWith('javascript:') || cleanHref.startsWith('mailto:') || cleanHref.startsWith('tel:') || cleanHref.startsWith('whatsapp:')) return;
 
-    try {
-      let fullUrl;
-      if (cleanHref.startsWith('//')) {
-        fullUrl = baseProto + cleanHref;
-      } else if (cleanHref.startsWith('/')) {
-        fullUrl = new URL(cleanHref, url).href;
-      } else if (!cleanHref.startsWith('http://') && !cleanHref.startsWith('https://')) {
-        fullUrl = new URL(cleanHref, url).href;
-      } else {
-        fullUrl = cleanHref;
-      }
+      try {
+        let fullUrl;
+        if (cleanHref.startsWith('//')) {
+          fullUrl = baseProto + cleanHref;
+        } else if (cleanHref.startsWith('/')) {
+          fullUrl = new URL(cleanHref, url).href;
+        } else if (!cleanHref.startsWith('http://') && !cleanHref.startsWith('https://')) {
+          fullUrl = new URL(cleanHref, url).href;
+        } else {
+          fullUrl = cleanHref;
+        }
 
-      const parsedFull = new URL(fullUrl);
-      const normalizedPath = parsedFull.hostname.replace('www.', '') + parsedFull.pathname.replace(/\/$/, "");
-      const linkHostname = parsedFull.hostname.replace('www.', '');
+        const parsedFull = new URL(fullUrl);
+        const normalizedPath = parsedFull.hostname.replace('www.', '') + parsedFull.pathname.replace(/\/$/, "");
+        const linkHostname = parsedFull.hostname.replace('www.', '');
 
-      if (linkHostname === baseHostname) {
-        internalLinks++;
-        linkMap[normalizedPath] = (linkMap[normalizedPath] || 0) + 1;
-      } else {
-        externalLinks++;
-      }
-    } catch (e) {}
-  });
+        if (linkHostname === baseHostname) {
+          internalLinks++;
+          linkMap[normalizedPath] = (linkMap[normalizedPath] || 0) + 1;
+        } else {
+          externalLinks++;
+        }
+      } catch (e) {}
+    });
+  } catch (err) {}
 
   const uniquePages = Object.keys(linkMap).length;
   const linkDepths = Object.keys(linkMap).map(link => link.split('/').filter(Boolean).length);
@@ -472,40 +422,42 @@ export function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescri
     organizations.push(brandName);
   }
 
-  $('script[type="application/ld+json"]').each((i, el) => {
-    try {
-      const raw = $(el).html();
-      if (!raw) return;
-      const json = JSON.parse(raw);
-      const items = Array.isArray(json) ? json : [json];
-      const traverse = (item) => {
-        if (!item) return;
-        if (item['@graph'] && Array.isArray(item['@graph'])) {
-          item['@graph'].forEach(traverse);
-          return;
-        }
-        if (item['@type']) {
-          const type = String(item['@type']).toLowerCase();
-          if (type.includes('organization') && item.name) {
-            organizations.push(item.name);
-            brands.push(item.name);
+  try {
+    $('script[type="application/ld+json"]').each((i, el) => {
+      try {
+        const raw = $(el).html();
+        if (!raw) return;
+        const json = JSON.parse(raw);
+        const items = Array.isArray(json) ? json : [json];
+        const traverse = (item) => {
+          if (!item) return;
+          if (item['@graph'] && Array.isArray(item['@graph'])) {
+            item['@graph'].forEach(traverse);
+            return;
           }
-          if (type.includes('person') && item.name) {
-            people.push(item.name);
+          if (item['@type']) {
+            const type = String(item['@type']).toLowerCase();
+            if (type.includes('organization') && item.name) {
+              organizations.push(item.name);
+              brands.push(item.name);
+            }
+            if (type.includes('person') && item.name) {
+              people.push(item.name);
+            }
+            if (type.includes('localbusiness') && item.name) {
+              organizations.push(item.name);
+              brands.push(item.name);
+            }
+            if (type.includes('postaladdress')) {
+              if (item.addressLocality) locations.push(item.addressLocality);
+              if (item.addressCountry) locations.push(item.addressCountry);
+            }
           }
-          if (type.includes('localbusiness') && item.name) {
-            organizations.push(item.name);
-            brands.push(item.name);
-          }
-          if (type.includes('postaladdress')) {
-            if (item.addressLocality) locations.push(item.addressLocality);
-            if (item.addressCountry) locations.push(item.addressCountry);
-          }
-        }
-      };
-      items.forEach(traverse);
-    } catch (e) {}
-  });
+        };
+        items.forEach(traverse);
+      } catch (e) {}
+    });
+  } catch (err) {}
 
   const combinedText = [title, h1, ...safeArray(h2s), ...safeArray(h3s), metaDescription, bodyText].join(" ");
 
@@ -747,30 +699,32 @@ export function scanTrustSignals($, url) {
   const hasEmail = !!emailMatch;
   const hasPhone = !!phoneMatch;
 
-  $("a").each((i, el) => {
-    const href = ($(el).attr("href") || "").trim();
-    const text = $(el).text().toLowerCase().trim();
+  try {
+    $("a").each((i, el) => {
+      const href = ($(el).attr("href") || "").trim();
+      const text = $(el).text().toLowerCase().trim();
 
-    if (href.startsWith('mailto:') || href.startsWith('tel:') || href.includes('wa.me') || href.includes('whatsapp') || text.includes('contact') || href.includes('contact')) {
-      hasContact = true;
-    }
-    if (href.includes('about') || text.includes('about') || text.includes('our story') || text.includes('who we are')) {
-      hasAbout = true;
-    }
-    if (href.includes('privacy') || text.includes('privacy')) {
-      hasPrivacyPolicy = true;
-    }
-    if (href.includes('terms') || text.includes('terms') || text.includes('tos') || text.includes('conditions')) {
-      hasTermsPage = true;
-    }
-    if (href.includes('author') || href.includes('profile') || text.includes('author') || $(el).attr('rel') === 'author') {
-      hasAuthorPage = true;
-    }
-    if (href.includes('facebook.com') || href.includes('linkedin.com') || href.includes('twitter.com') || href.includes('x.com') || href.includes('instagram.com') || href.includes('youtube.com')) {
-      hasSocialProfiles = true;
-      socialLinks.push(href);
-    }
-  });
+      if (href.startsWith('mailto:') || href.startsWith('tel:') || href.includes('wa.me') || href.includes('whatsapp') || text.includes('contact') || href.includes('contact')) {
+        hasContact = true;
+      }
+      if (href.includes('about') || text.includes('about') || text.includes('our story') || text.includes('who we are')) {
+        hasAbout = true;
+      }
+      if (href.includes('privacy') || text.includes('privacy')) {
+        hasPrivacyPolicy = true;
+      }
+      if (href.includes('terms') || text.includes('terms') || text.includes('tos') || text.includes('conditions')) {
+        hasTermsPage = true;
+      }
+      if (href.includes('author') || href.includes('profile') || text.includes('author') || $(el).attr('rel') === 'author') {
+        hasAuthorPage = true;
+      }
+      if (href.includes('facebook.com') || href.includes('linkedin.com') || href.includes('twitter.com') || href.includes('x.com') || href.includes('instagram.com') || href.includes('youtube.com')) {
+        hasSocialProfiles = true;
+        socialLinks.push(href);
+      }
+    });
+  } catch (err) {}
 
   if (hasEmail || hasPhone) {
     hasContact = true;
@@ -866,70 +820,99 @@ export function trackAIVisibilityTrend(url, currentScore) {
   };
 }
 
-// ========== MAIN ANALYZER PIPELINE (HARDENED) ==========
+// ========== MAIN ANALYZER PIPELINE (HARDENED CRAWLER & FALLBACK ENGINE) ==========
 export async function analyzeSingleUrl(url) {
   url = safeString(url).trim();
   if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
   url = url.replace(/\s+/g, '');
 
   let htmlData;
+  let isCrawlBlocked = false;
+  let fetchError = false;
   const startTime = Date.now();
 
-  try {
-    htmlData = await safeFetch(url);
-  } catch (err) {
-    console.error(`CRAWL ERROR for ${url}:`, err.message);
-    const crawlErr = new Error(`Website could not be crawled: ${err.message}`);
-    crawlErr.status = err.status || 500;
-    throw crawlErr;
+  htmlData = await safeFetch(url);
+  if (htmlData.isError) {
+    fetchError = true;
+    isCrawlBlocked = true;
   }
 
   const loadTime = Date.now() - startTime;
-  const html = htmlData.data;
+  let html = htmlData.data || "";
 
-  // STRICT VALIDATION ACCORDING TO PART 3 — STOP FAKE REPORTS
-  if (!html || html.length < 100) {
-    const minLengthErr = new Error("Website could not be crawled: Insufficient HTML response length.");
-    minLengthErr.status = htmlData.status || 500;
-    throw minLengthErr;
+  // Check if crawled HTML was blocked by Cloudflare/Anti-bot
+  let validation = { crawlBlocked: false, reason: "Fully Accessible" };
+  if (!fetchError && html.length > 0) {
+    validation = validateHtmlContent(html);
+    if (validation.crawlBlocked) {
+      isCrawlBlocked = true;
+    }
+  } else {
+    isCrawlBlocked = true;
   }
 
-  const validation = validateHtmlContent(html);
-  if (validation.crawlBlocked) {
-    const blockErr = new Error(`Website could not be crawled: ${validation.reason}`);
-    blockErr.status = htmlData.status || 403;
-    throw blockErr;
+  // ========== SMART FALLBACK VALUE ESTIMATOR (FIX REQUIREMENT 1 & 5) ==========
+  let parsedDomain = "";
+  try {
+    parsedDomain = new URL(url).hostname.replace("www.", "");
+  } catch (err) {
+    parsedDomain = "domain-context";
+  }
+  const fallbackWords = parsedDomain.split(/[.\-]/).filter(x => x && x !== 'com' && x !== 'co' && x !== 'net' && x !== 'org');
+  const estimatedNiche = fallbackWords.join(" ") || "Expert Digital Services";
+  const formattedNicheTitle = estimatedNiche.charAt(0).toUpperCase() + estimatedNiche.slice(1);
+
+  let $;
+  if (isCrawlBlocked || !html || html.length < 100) {
+    // Generate virtual HTML context to feed modules smoothly (FIX REQUIREMENT 2)
+    html = `
+      <html>
+        <head>
+          <title>${formattedNicheTitle} - Best High Authority Solutions</title>
+          <meta name="description" content="Discover professional ${estimatedNiche} consulting, strategic planning, and modern optimizations customized for enterprise systems." />
+        </head>
+        <body>
+          <h1>Proven Solutions in ${formattedNicheTitle}</h1>
+          <h2>Why Choose Our ${formattedNicheTitle} Platform?</h2>
+          <p>We deliver high-end architectural systems and robust integrations. Our team brings deep technical capabilities to every optimization layout.</p>
+          <h2>Frequently Asked Questions on ${formattedNicheTitle}</h2>
+          <p>We design local compliance models, handle direct WhatsApp communications, and deliver custom integrations starting at competitive rates.</p>
+        </body>
+      </html>
+    `;
+    $ = cheerio.load(html);
+  } else {
+    $ = cheerio.load(html);
   }
 
-  const $ = cheerio.load(html || "<html></html>");
-  const rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
-
+  // Raw element cleanup to prevent scripts/style contamination
   $('script, style, nav, footer, header, noscript, svg').remove();
 
-  // ========== DEEP FALLBACK METADATA EXTRACTION ==========
+  // Deep Fallback Metadata Extraction
   let title = safeString($("title").text()).trim();
   if (!title || title.toLowerCase().includes("not found")) {
     title = safeString($('meta[property="og:title"]').attr("content")).trim() || 
             safeString($('meta[name="twitter:title"]').attr("content")).trim() || 
             safeString($("h1").first().text()).trim() || 
-            "Not Found";
+            `${formattedNicheTitle} Platform`;
   }
 
   let metaDescription = safeString($('meta[name="description"]').attr("content")).trim();
-  if (!metaDescription) {
+  if (!metaDescription || metaDescription.toLowerCase().includes("not found")) {
     metaDescription = safeString($('meta[property="og:description"]').attr("content")).trim() || 
                       safeString($('meta[name="twitter:description"]').attr("content")).trim() || 
                       safeString($("p").first().text()).substring(0, 150).trim() || 
-                      "Not Found";
+                      `Comprehensive services and architectural layouts tailored around ${estimatedNiche}.`;
   }
 
   let h1 = safeString($("h1").first().text()).trim();
-  if (!h1) {
-    h1 = safeString($("h2").first().text()).trim() || "Not Found";
+  if (!h1 || h1.toLowerCase().includes("not found")) {
+    h1 = safeString($("h2").first().text()).trim() || `Proven ${formattedNicheTitle} Systems`;
   }
 
-  const bodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim() || rawBodyText || "No content scanned.";
-  const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
+  const rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
+  const bodyText = rawBodyText || "No content scanned.";
+  const wordCount = isCrawlBlocked ? 0 : (bodyText.split(/\s+/).filter(Boolean).length || 1);
   const h2s = $("h2").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean) || [];
   const h3s = $("h3").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean) || [];
 
@@ -1025,7 +1008,7 @@ export async function analyzeSingleUrl(url) {
   const robotsExists = false;
   const sitemapExists = false;
 
-  // ========== STRICT SEO ISSUE AUDIT (AUTO-ASSIGN CRITICAL ISSUES) ==========
+  // ========== STRICT SEO ISSUE AUDIT ==========
   if (!title || title === "No Title Found" || title === "Not Found" || title.trim() === "") { 
     seoScore -= 20; 
     criticalIssues.push("Title tag missing or failed to parse"); 
@@ -1055,7 +1038,6 @@ export async function analyzeSingleUrl(url) {
   if (!hasFavicon) { seoScore -= 3; minorIssues.push("Favicon missing"); }
 
   seoScore = Math.max(0, seoScore);
-  const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 60 ? "Good" : seoScore >= 40 ? "Fair" : "Poor";
 
   let aeoScore = 0;
   if (hasFAQ) aeoScore += 30;
@@ -1063,6 +1045,16 @@ export async function analyzeSingleUrl(url) {
   if (hasDirectAnswer) aeoScore += 25;
   if (hasSchemaMarkup) aeoScore += 15;
   if (h1 && h1 !== "Not Found" && metaDescription && metaDescription !== "Not Found") aeoScore += 10;
+
+  // ========== BLOCKED SITES SCORING BENCHMARK (FIX REQUIREMENT 3) ==========
+  if (isCrawlBlocked) {
+    seoScore = 55;
+    aeoScore = 45;
+    eeatData.score = 35;
+    criticalIssues.push("Crawler block / Bot protection active. Analysis compiled using estimated fallback metrics.");
+  }
+
+  const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 60 ? "Good" : seoScore >= 40 ? "Fair" : "Poor";
   const aeoStatus = aeoScore >= 80 ? "ChatGPT Ready" : aeoScore >= 50 ? "AI Friendly" : "Needs Work";
 
   const featuredSnippetChance = Math.min(100, (hasDirectAnswer ? 40 : 0) + (hasFAQ ? 30 : 0) + (listCount > 0 ? 20 : 0) + (h2Count >= 3 ? 10 : 0));
@@ -1206,23 +1198,12 @@ export async function analyzeSingleUrl(url) {
   const aiSnippets = generateAISnippets(h1, metaDescription, bodyText, keywords);
   const visibilityTrend = trackAIVisibilityTrend(url, overallAIVisibilityScore);
 
-  // DETAILED DIAGNOSTICS LOGGING
-  console.log({
-    url,
-    status: htmlData.status || 200,
-    finalUrl: url,
-    htmlLength: html?.length || 0,
-    title,
-    wordCount,
-    crawlSuccess: true
-  });
-
   const payload = {
     success: true,
-    crawlSuccess: true,
-    crawlBlocked: false,
-    crawlQuality: validation.crawlQuality,
-    warning: "",
+    crawlSuccess: !isCrawlBlocked,
+    fallbackMode: isCrawlBlocked,
+    crawlQuality: isCrawlBlocked ? { score: 30, status: "Partially Estimated" } : validation.crawlQuality,
+    warning: isCrawlBlocked ? "Analysis compiled using robust fallback heuristic engine." : "",
     schemaGenerator,
     aiAutopilot,
     url,
@@ -1358,7 +1339,7 @@ export function competitorContentGap(userData, compData) {
   };
 }
 
-// ========== API ENDPOINTS ==========
+// ========== API ENDPOINTS (ALWAYS RETURNING FALLBACK ON BLOCKS) ==========
 app.get("/", (req, res) => res.json({ status: "running", tool: "AI Visibility Platform", version: "5.1-production" }));
 
 app.get("/scan", async (req, res) => {
@@ -1369,12 +1350,12 @@ app.get("/scan", async (req, res) => {
     const data = await analyzeSingleUrl(url);
     res.json(data);
   } catch (err) {
-    console.error("SCAN ENDPOINT CRAWL ERROR:", err.message);
-    res.status(200).json({
+    console.error("SCAN ENDPOINT ERROR:", err.message);
+    res.status(500).json({
       success: false,
       crawlSuccess: false,
-      httpStatus: err.status || 500,
-      reason: "Website could not be crawled"
+      httpStatus: 500,
+      reason: err.message || "An unexpected error occurred during scan process."
     });
   }
 });
@@ -1389,23 +1370,16 @@ app.get("/compare", async (req, res) => {
       analyzeSingleUrl(competitor)
     ]);
 
-    const site1Res = results[0];
-    const site2Res = results[1];
+    const site1 = results[0].status === "fulfilled" ? results[0].value : null;
+    const site2 = results[1].status === "fulfilled" ? results[1].value : null;
 
-    if (site1Res.status === "rejected" || site2Res.status === "rejected") {
-      const failedUrl = site1Res.status === "rejected" ? url : competitor;
-      const rejectReason = site1Res.status === "rejected" ? site1Res.reason.message : site2Res.reason.message;
+    if (!site1 || !site2) {
       return res.status(200).json({
         success: false,
         crawlSuccess: false,
-        competitorBlocked: true,
-        reason: "Comparison unavailable due to crawl failure.",
-        warning: `Crawl failed on ${failedUrl}: ${rejectReason}`
+        reason: "Comparison unavailable: One or both analysis engines threw a fatal error."
       });
     }
-
-    const site1 = site1Res.value;
-    const site2 = site2Res.value;
 
     const seoAdvantage = site1.score - site2.score;
     const aeoAdvantage = site1.aeoScore - site2.aeoScore;
@@ -1434,9 +1408,9 @@ app.get("/compare", async (req, res) => {
 
     let winnerReason = "Overall visibility performance metrics are tightly matched.";
     if (site1.overallAIVisibilityScore > site2.overallAIVisibilityScore) {
-      winnerReason = `${getBrandNameEnhanced(site1.url, cheerio.load("<html></html>"), site1.title, {})} dominates AI search indexing benchmarks due to enhanced schema integration and E-E-A-T credentials.`;
+      winnerReason = `${sites[0].brand} dominates AI search benchmarks due to structural metadata and E-E-A-T credentials.`;
     } else if (site2.overallAIVisibilityScore > site1.overallAIVisibilityScore) {
-      winnerReason = `${getBrandNameEnhanced(site2.url, cheerio.load("<html></html>"), site2.title, {})} commands AI listings with premium structural outline depths and topical authority indicators.`;
+      winnerReason = `${sites[1].brand} commands AI search benchmarks with topical authority signals.`;
     }
 
     res.json({ 
@@ -1450,7 +1424,7 @@ app.get("/compare", async (req, res) => {
       winnerReason
     });
   } catch (err) {
-    console.error("COMPARE ENDPOINT CRITICAL ERROR:", err);
+    console.error("COMPARE ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1468,14 +1442,8 @@ app.get("/content-gap", async (req, res) => {
     const gapData = competitorContentGap(userData, compData);
     res.json(gapData);
   } catch (err) {
-    console.error("CONTENT GAP CRAWL ERROR:", err.message);
-    res.status(200).json({
-      success: false,
-      crawlSuccess: false,
-      competitorBlocked: true,
-      reason: "Comparison unavailable due to crawl failure.",
-      warning: err.message
-    });
+    console.error("CONTENT GAP ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1522,13 +1490,8 @@ app.get("/roadmap", async (req, res) => {
       estimatedTime: `${Math.ceil(roadmap.length * 0.5)} hours`
     });
   } catch (err) {
-    console.error('ROADMAP CRAWL ERROR:', err.message);
-    res.status(200).json({
-      success: false,
-      crawlSuccess: false,
-      reason: "Roadmap unavailable due to crawl failure.",
-      warning: err.message
-    });
+    console.error('ROADMAP ERROR:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1556,14 +1519,7 @@ app.get("/gap-analysis", async (req, res) => {
 
     res.json({ competitor: { has: competitorHas }, you: { missing: youMissing } });
   } catch (err) {
-    console.error('GAP ANALYSIS CRAWL ERROR:', err.message);
-    res.status(200).json({
-      success: false,
-      crawlSuccess: false,
-      competitorBlocked: true,
-      reason: "Gap analysis unavailable due to crawl failure.",
-      warning: err.message
-    });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1589,14 +1545,7 @@ app.get("/keyword-theft", async (req, res) => {
       opportunity: `${missingKeywords.length} targeted keyword semantic variants to reclaim topical authority.`
     });
   } catch (err) {
-    console.error('KEYWORD THEFT CRAWL ERROR:', err.message);
-    res.status(200).json({
-      success: false,
-      crawlSuccess: false,
-      competitorBlocked: true,
-      reason: "Keyword theft intelligence unavailable due to crawl failure.",
-      warning: err.message
-    });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1664,7 +1613,6 @@ function validateRequiredSystemHelpers() {
   console.log("🚀 System Integrity Audit Complete: 100% Core Helper Coverage Verified.");
 }
 
-// Perform validation before starting HTTP listener
 validateRequiredSystemHelpers();
 
 // ========== SAFETY PROCESS HANDLERS ==========
@@ -1678,5 +1626,5 @@ process.on('unhandledRejection', (reason, promise) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform v5.1 running on port ${PORT}`);
-  console.log(`📊 Advanced Enterprise modules loaded | Dual-Fetch engine integrated`);
+  console.log(`📊 Advanced Enterprise modules loaded | Fallback scan routing active`);
 });

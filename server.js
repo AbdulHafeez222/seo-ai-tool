@@ -5,7 +5,7 @@ import axios from "axios";
 import https from "https";
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 15000;
 const scanHistory = [];
 const trendDB = {}; // In-memory database for tracking historical scores
 
@@ -1666,6 +1666,15 @@ function validateRequiredSystemHelpers() {
 
 // Perform validation before starting HTTP listener
 validateRequiredSystemHelpers();
+
+// ========== SAFETY PROCESS HANDLERS ==========
+process.on('uncaughtException', (err) => {
+  console.error('🔥 UNCAUGHT EXCEPTION:', err.stack || err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🔥 UNHANDLED REJECTION AT:', promise, 'REASON:', reason);
+});
 
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform v5.1 running on port ${PORT}`);

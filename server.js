@@ -493,6 +493,49 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
   };
 }
 
+// 1. TOPICAL AUTHORITY ENGINE
+const calculateTopicalAuthority = ($, keywords, h2s, h3s) => {
+  const allHeadings = [...safeArray(h2s), ...safeArray(h3s)].map(h => safeString(h).toLowerCase());
+  const keywordSet = new Set(safeArray(keywords).map(k => safeString(k).toLowerCase()));
+
+  const coreTopics = ['what', 'why', 'how', 'best', 'guide', 'tutorial', 'examples', 'tips', 'benefits', 'pricing', 'reviews', 'comparison'];
+  const topicsCovered = coreTopics.filter(topic =>
+    allHeadings.some(h => h.includes(topic))
+  ).length;
+
+  const depthScore = clamp((topicsCovered / coreTopics.length) * 60);
+  const keywordCoverage = clamp((keywordSet.size / 15) * 40);
+  const score = clamp(depthScore + keywordCoverage);
+
+  const missingSubtopics = coreTopics.filter(topic =>
+    !allHeadings.some(h => h.includes(topic))
+  );
+
+  return { 
+    score, 
+    topicsCovered, 
+    missingSubtopics, 
+    depth: topicsCovered >= 7 ? 'Deep' : topicsCovered >= 4 ? 'Medium' : 'Shallow' 
+  };
+};
+
+// 2. ADVANCED SEMANTIC SEO ANALYZER
+const analyzeSemanticSEO = ($, bodyText, keywords) => {
+  const text = safeString(bodyText).toLowerCase();
+  const keywordSet = safeArraySlice(keywords, 0, 10);
+  const matchedKeywords = keywordSet.filter(k => text.includes(safeString(k).toLowerCase()));
+  const nlpScore = clamp(Math.round((matchedKeywords.length / Math.max(1, keywordSet.length)) * 100));
+
+  const semanticGaps = keywordSet.filter(k => !text.includes(safeString(k).toLowerCase()));
+
+  return {
+    entities: keywordSet,
+    nlpScore,
+    semanticGaps,
+    hasSemanticHTML: $('article, section, aside, nav').length > 0
+  };
+};
+
 // 3. AI CITATION OPPORTUNITY FINDER
 const findCitationOpportunities = (data) => {
   const opportunities = [];
@@ -533,6 +576,184 @@ const findCitationOpportunities = (data) => {
 
   return opportunities;
 };
+
+// 4. AI SNIPPET GENERATOR
+const generateAISnippets = (h1, metaDescription, bodyText, keywords) => {
+  const safeBody = safeString(bodyText);
+  const safeH1 = safeString(h1);
+  const safeDesc = safeString(metaDescription);
+  const contentSentence = safeBody.length > 50 ? safeBody.split('.').slice(0, 2).join('.') + '.' : '';
+  const keyword = safeArray(keywords)[0] || 'the page';
+
+  const directAnswer = safeDesc || contentSentence || `About ${safeH1}: This resource covers core components of ${keyword}.`;
+  const featuredSnippet = `## ${safeH1 || 'Overview'}\n\n${directAnswer}\n\n${contentSentence ? `Key facts discussed:\n- ${contentSentence.substring(0, 150)}` : ""}`;
+
+  return {
+    directAnswer: directAnswer.substring(0, 300),
+    featuredSnippet: featuredSnippet.substring(0, 600),
+    wordCount: directAnswer.split(' ').length
+  };
+};
+
+// 5. LOCAL SEO & ADVANCED TRUST SIGNAL SCANNER
+const analyzeLocalSEO = ($, bodyText) => {
+  const text = safeString(bodyText);
+  const hasNAP = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(text) || text.toLowerCase().includes('address') || text.toLowerCase().includes('phone');
+  const hasLocalBusiness = $('[itemtype*="LocalBusiness"]').length > 0;
+  const hasMap = $('iframe[src*="google.com/maps"], iframe[src*="maps"]').length > 0;
+  const hasCity = /\b(Karachi|Lahore|Islamabad|London|New York|Dubai|Sydney|Toronto)\b/i.test(text);
+
+  const signals = { hasNAP, hasLocalBusiness, hasMap, hasCity };
+  const score = Object.values(signals).filter(Boolean).length;
+
+  return {
+    hasNAP,
+    hasLocalBusiness,
+    hasMap,
+    hasCity,
+    localScore: clamp((score / 4) * 100),
+    napConsistency: hasNAP ? 'Active' : 'Incomplete/Missing',
+    recommendations: !hasLocalBusiness ? ['Deploy LocalBusiness JSON-LD Schema markup immediately'] : []
+  };
+};
+
+const scanTrustSignals = ($, url) => {
+  const bodyText = $('body').text().toLowerCase();
+  
+  let hasContact = false;
+  let hasAbout = false;
+  let hasPrivacyPolicy = false;
+  let hasTermsPage = false;
+  let hasSocialProfiles = false;
+  let hasReviews = false;
+  let hasTestimonials = false;
+  let hasAuthorPage = false;
+
+  const socialLinks = [];
+
+  const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
+  const hasEmail = !!emailMatch;
+  const hasPhone = !!phoneMatch;
+
+  $("a").each((i, el) => {
+    const href = ($(el).attr("href") || "").trim();
+    const text = $(el).text().toLowerCase().trim();
+
+    if (href.startsWith('mailto:') || href.startsWith('tel:') || href.includes('wa.me') || href.includes('whatsapp') || text.includes('contact') || href.includes('contact')) {
+      hasContact = true;
+    }
+    if (href.includes('about') || text.includes('about') || text.includes('our story') || text.includes('who we are')) {
+      hasAbout = true;
+    }
+    if (href.includes('privacy') || text.includes('privacy')) {
+      hasPrivacyPolicy = true;
+    }
+    if (href.includes('terms') || text.includes('terms') || text.includes('tos') || text.includes('conditions')) {
+      hasTermsPage = true;
+    }
+    if (href.includes('author') || href.includes('profile') || text.includes('author') || $(el).attr('rel') === 'author') {
+      hasAuthorPage = true;
+    }
+    if (href.includes('facebook.com') || href.includes('linkedin.com') || href.includes('twitter.com') || href.includes('x.com') || href.includes('instagram.com') || href.includes('youtube.com')) {
+      hasSocialProfiles = true;
+      socialLinks.push(href);
+    }
+  });
+
+  if (hasEmail || hasPhone) {
+    hasContact = true;
+  }
+
+  if (bodyText.includes('review') || bodyText.includes('stars') || bodyText.includes('rated') || $('.review, .testimonial').length > 0) {
+    hasReviews = true;
+  }
+  if (bodyText.includes('testimonial') || bodyText.includes('what our clients say') || bodyText.includes('happy clients') || $('.testimonial, .client-feedback').length > 0) {
+    hasTestimonials = true;
+  }
+
+  const signalsCount = [hasContact, hasAbout, hasPrivacyPolicy, hasTermsPage, hasSocialProfiles, hasReviews, hasTestimonials, hasAuthorPage].filter(Boolean).length;
+  const trustScore = clamp((signalsCount / 8) * 100);
+
+  const signals = {
+    hasContact,
+    hasAbout,
+    hasPrivacyPolicy,
+    hasTermsPage,
+    hasSocialProfiles,
+    hasReviews,
+    hasTestimonials,
+    hasAuthorPage,
+    trustScore,
+    totalSignals: signalsCount,
+    socialLinks: [...new Set(socialLinks)].slice(0, 10)
+  };
+
+  return signals;
+};
+
+// ========== E-E-A-T ADVANCED & SCANNER ==========
+function calculateEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas) {
+  const breakdown = {
+    experience: { score: 0, max: 25, factors: [] },
+    expertise: { score: 0, max: 25, factors: [] },
+    authoritativeness: { score: 0, max: 25, factors: [] },
+    trustworthiness: { score: 0, max: 25, factors: [] }
+  };
+
+  const safeBody = safeString(bodyText);
+
+  if (hasAuthor) { breakdown.experience.score += 10; breakdown.experience.factors.push("✓ Author attribution"); }
+  if (safeBody.match(/I have|we have|our experience|years of/i)) { breakdown.experience.score += 8; breakdown.experience.factors.push("✓ First-hand experience"); }
+  if (safeBody.match(/case study|portfolio|client/i)) { breakdown.experience.score += 7; breakdown.experience.factors.push("✓ Case studies"); }
+
+  if (hasAboutPage) { breakdown.expertise.score += 10; breakdown.expertise.factors.push("✓ About page"); }
+  if (hasAuthor && safeBody.match(/expert|specialist|certified|degree/i)) { breakdown.expertise.score += 8; breakdown.expertise.factors.push("✓ Expert credentials"); }
+  if (schemas?.Organization?.present) { breakdown.expertise.score += 7; breakdown.expertise.factors.push("✓ Organization schema"); }
+
+  if (hasLinkedIn) { breakdown.authoritativeness.score += 8; breakdown.authoritativeness.factors.push("✓ LinkedIn Link"); }
+  if (hasFacebook) { breakdown.authoritativeness.score += 5; breakdown.authoritativeness.factors.push("✓ Facebook Link"); }
+  if ($('a[href*="wikipedia"]').length > 0 || $('a[href*="gov"]').length > 0) { breakdown.authoritativeness.score += 7; breakdown.authoritativeness.factors.push("✓ Authoritative citations"); }
+  if (safeBody.match(/featured|award|recognition/i)) { breakdown.authoritativeness.score += 5; breakdown.authoritativeness.factors.push("✓ Awards/recognition mentioned"); }
+
+  if (isHttps) { breakdown.trustworthiness.score += 6; breakdown.trustworthiness.factors.push("✓ HTTPS Connection"); }
+  if (hasPrivacyPolicy) { breakdown.trustworthiness.score += 5; breakdown.trustworthiness.factors.push("✓ Privacy policy page"); }
+  if (hasContactPage) { breakdown.trustworthiness.score += 6; breakdown.trustworthiness.factors.push("✓ Contact details"); }
+  if (hasLastModified) { breakdown.trustworthiness.score += 4; breakdown.trustworthiness.factors.push("✓ Last updated proof"); }
+  if (schemas?.LocalBusiness?.present) { breakdown.trustworthiness.score += 4; breakdown.trustworthiness.factors.push("✓ LocalBusiness schema"); }
+
+  const totalScore = breakdown.experience.score + breakdown.expertise.score + breakdown.authoritativeness.score + breakdown.trustworthiness.score;
+  return { 
+    score: totalScore, 
+    breakdown, 
+    level: totalScore >= 80 ? "Excellent" : totalScore >= 60 ? "Good" : totalScore >= 40 ? "Fair" : "Poor" 
+  };
+}
+
+// 6. HISTORICAL TREND TRACKER
+function trackAIVisibilityTrend(url, currentScore) {
+  const key = Buffer.from(url).toString('base64');
+  if (!trendDB[key]) trendDB[key] = [];
+
+  trendDB[key].push({
+    score: currentScore,
+    timestamp: new Date().toISOString(),
+    date: new Date().toISOString().split('T')[0]
+  });
+
+  if (trendDB[key].length > 30) trendDB[key] = trendDB[key].slice(-30);
+
+  const history = trendDB[key];
+  const trend = history.length > 1 ? history[history.length - 1].score - history[0].score : 0;
+
+  return {
+    current: currentScore,
+    history: history.slice(-7), 
+    trend: trend >= 0 ? `+${trend}` : `${trend}`,
+    direction: trend > 0 ? 'improving' : trend < 0 ? 'declining' : 'stable',
+    average: Math.round(history.reduce((sum, h) => sum + h.score, 0) / history.length)
+  };
+}
 
 // ========== MAIN ANALYZER PIPELINE (HARDENED) ==========
 async function analyzeSingleUrl(url) {
@@ -1259,3 +1480,5 @@ app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform v5.1 running on port ${PORT}`);
   console.log(`📊 Advanced Enterprise modules loaded | Dual-Fetch engine integrated`);
 });
+
+

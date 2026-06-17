@@ -72,12 +72,6 @@ function extractDomain(url) {
   }
 }
 
-function getBrandName(url) {
-  const domain = extractDomain(url);
-  const brand = domain.split('.')[0] || 'unknown';
-  return brand.charAt(0).toUpperCase() + brand.slice(1);
-}
-
 function getKeywordDifficulty(keyword) {
   const len = safeString(keyword).length;
   if (len < 10) return "High";
@@ -145,11 +139,58 @@ function detectAllSchemas($, html) {
   return schemas;
 }
 
+// ========== ROBUST BRAND DETECTION ENGINE ==========
+function getBrandNameEnhanced(url, $, title, schemas) {
+  if (schemas?.Organization?.present && schemas?.Organization?.data?.length > 0) {
+    const orgName = schemas.Organization.data[0]?.name;
+    if (orgName && typeof orgName === 'string' && orgName.trim().length > 0) {
+      return orgName.trim();
+    }
+  }
+  
+  const logoAlt = $('img[src*="logo" i]').attr('alt') || $('img[class*="logo" i]').attr('alt') || $('img[id*="logo" i]').attr('alt');
+  if (logoAlt && logoAlt.trim().length > 1 && logoAlt.trim().length < 50) {
+    return logoAlt.trim();
+  }
+
+  const ogSiteName = $('meta[property="og:site_name"]').attr("content") || $('meta[name="application-name"]').attr("content");
+  if (ogSiteName && ogSiteName.trim().length > 0) {
+    return ogSiteName.trim();
+  }
+
+  if (title && typeof title === 'string' && title !== "No Title Found") {
+    const parts = title.split(/[|–-]/);
+    if (parts.length > 1) {
+      const lastPart = parts[parts.length - 1].trim();
+      if (lastPart.length > 1 && lastPart.length < 30 && !lastPart.toLowerCase().includes('home') && !lastPart.toLowerCase().includes('page')) {
+        return lastPart;
+      }
+      const firstPart = parts[0].trim();
+      if (firstPart.length > 1 && firstPart.length < 30 && !firstPart.toLowerCase().includes('home') && !firstPart.toLowerCase().includes('page')) {
+        return firstPart;
+      }
+    }
+  }
+
+  try {
+    const domain = new URL(url).hostname.replace("www.", "");
+    const brand = domain.split('.')[0] || 'unknown';
+    if (brand && brand !== 'localhost') {
+      return brand.charAt(0).toUpperCase() + brand.slice(1);
+    }
+  } catch {}
+
+  return "Brand Authority";
+}
+
 // ========== INTERNAL LINK INTELLIGENCE ==========
 function analyzeInternalLinks($, url, h2s) {
   let baseHostname = "";
+  let baseProto = "https:";
   try {
-    baseHostname = new URL(url).hostname;
+    const parsedUrl = new URL(url);
+    baseHostname = parsedUrl.hostname.replace('www.', '');
+    baseProto = parsedUrl.protocol;
   } catch {
     baseHostname = "localhost";
   }
@@ -160,32 +201,45 @@ function analyzeInternalLinks($, url, h2s) {
 
   $("a").each((i, el) => {
     const href = $(el).attr("href");
-    if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+    if (!href) return;
+    const cleanHref = href.trim();
+    if (cleanHref.startsWith('#') || cleanHref.startsWith('javascript:') || cleanHref.startsWith('mailto:') || cleanHref.startsWith('tel:') || cleanHref.startsWith('whatsapp:')) return;
+
     try {
       let fullUrl;
-      if (href === '/') fullUrl = url;
-      else if (href.startsWith('/')) fullUrl = new URL(href, url).href;
-      else fullUrl = href;
+      if (cleanHref.startsWith('//')) {
+        fullUrl = baseProto + cleanHref;
+      } else if (cleanHref.startsWith('/')) {
+        fullUrl = new URL(cleanHref, url).href;
+      } else if (!cleanHref.startsWith('http://') && !cleanHref.startsWith('https://')) {
+        fullUrl = new URL(cleanHref, url).href;
+      } else {
+        fullUrl = cleanHref;
+      }
 
-      const linkHostname = new URL(fullUrl).hostname;
-      if (linkHostname.replace('www.', '') === baseHostname.replace('www.', '')) {
+      const parsedFull = new URL(fullUrl);
+      const normalizedPath = parsedFull.hostname.replace('www.', '') + parsedFull.pathname.replace(/\/$/, "");
+      const linkHostname = parsedFull.hostname.replace('www.', '');
+
+      if (linkHostname === baseHostname) {
         internalLinks++;
-        const clean = fullUrl.split('#')[0].split('?')[0];
-        linkMap[clean] = (linkMap[clean] || 0) + 1;
-      } else if (href.startsWith('http')) {
+        linkMap[normalizedPath] = (linkMap[normalizedPath] || 0) + 1;
+      } else {
         externalLinks++;
       }
-    } catch {}
+    } catch (e) {}
   });
 
   const uniquePages = Object.keys(linkMap).length;
   const linkDepths = Object.keys(linkMap).map(link => link.split('/').filter(Boolean).length);
   const avgDepth = linkDepths.length > 0 ? (linkDepths.reduce((a, b) => a + b, 0) / linkDepths.length).toFixed(1) : 0;
   const h2Length = safeArray(h2s).length;
-  const authorityFlow = h2Length > 0 ? Math.round((internalLinks / h2Length) * 100) : 0;
-  const weakLinking = internalLinks < h2Length;
+  const authorityFlow = h2Length > 0 ? Math.round((internalLinks / Math.max(1, h2Length)) * 10) : Math.min(100, Math.round(internalLinks * 5));
+  const weakLinking = internalLinks < Math.max(1, h2Length);
   const suggestions = [];
-  if (weakLinking) safeArraySlice(h2s, 0, 3).forEach(h2 => suggestions.push(`Add internal link to section: ${h2}`));
+  if (weakLinking) {
+    safeArraySlice(h2s, 0, 3).forEach(h2 => suggestions.push(`Add internal link to section: ${h2}`));
+  }
 
   return {
     internalLinks,
@@ -246,7 +300,7 @@ function calculateEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactP
 }
 
 // ========== ENTITY EXTRACTION ENGINE ==========
-function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, bodyText) {
+function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas) {
   const brands = [];
   const locations = [];
   const services = [];
@@ -255,12 +309,12 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
   const prices = [];
   const keywords = [];
 
-  const safeTitle = safeString(title);
-  const safeH1 = safeString(h1);
-  const safeDesc = safeString(metaDescription);
-  const safeBody = safeString(bodyText);
+  const brandName = getBrandNameEnhanced(url, $, title, schemas);
+  if (brandName) {
+    brands.push(brandName);
+    organizations.push(brandName);
+  }
 
-  // Parse JSON-LD Schemas cleanly
   $('script[type="application/ld+json"]').each((i, el) => {
     try {
       const raw = $(el).html();
@@ -296,100 +350,97 @@ function extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, 
     } catch (e) {}
   });
 
-  // Extract from meta tags & title elements
-  const ogSiteName = safeString($('meta[property="og:site_name"]').attr("content"));
-  if (ogSiteName) brands.push(ogSiteName);
+  const combinedText = [title, h1, ...safeArray(h2s), ...safeArray(h3s), metaDescription, bodyText].join(" ");
 
-  const publisher = safeString($('meta[property="article:publisher"]').attr("content"));
-  if (publisher) organizations.push(publisher);
-
-  const canonicalUrl = $('link[rel="canonical"]').attr('href') || 'https://unknown.com';
-  const brandNameFallback = getBrandName(canonicalUrl);
-  if (brandNameFallback && brandNameFallback.toLowerCase() !== 'unknown') {
-    brands.push(brandNameFallback);
-  }
-
-  if (safeTitle.includes('|')) {
-    brands.push(safeTitle.split('|').pop().trim());
-  } else if (safeTitle.includes('-')) {
-    brands.push(safeTitle.split('-').pop().trim());
-  }
-
-  const combinedText = safeH1 + " " + safeArray(h2s).join(" ") + " " + safeArray(h3s).join(" ") + " " + safeBody;
-
-  // Exact service and core terms detection from meta and body content
   const serviceKeywords = [
     'SEO', 'Search Engine Optimization', 'Web Design', 'Graphic Design', 'WordPress Development',
     'WordPress', 'Digital Marketing', 'Web Development', 'Content Writing', 'Copywriting',
     'Social Media Marketing', 'E-commerce', 'Shopify', 'Lead Generation', 'App Development',
-    'Branding', 'Analytics', 'Enterprise Software', 'AI Integration', 'Consulting'
+    'Branding', 'Analytics', 'Enterprise Software', 'AI Integration', 'Consulting', 'Software Development',
+    'Product Strategy', 'UI/UX Design', 'Cloud Hosting', 'Cybersecurity', 'IT Support'
   ];
   serviceKeywords.forEach(srv => {
     const regex = new RegExp(`\\b${srv}\\b`, 'i');
-    if (regex.test(combinedText) || regex.test(safeDesc)) {
+    if (regex.test(combinedText)) {
       services.push(srv);
     }
   });
 
-  // Dynamic noun phrases extraction for potential entities
-  const sentenceEntities = safeBody.match(/[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*/g);
-  if (sentenceEntities) {
-    sentenceEntities.forEach(ent => {
-      const entStr = safeString(ent).trim();
-      if (entStr.length > 3 && !['The', 'This', 'That', 'Your', 'With', 'From', 'What', 'How', 'Why', 'Click', 'Our'].includes(entStr.split(' ')[0])) {
-        if (entStr.match(/Inc\.|LLC|Corp|Group|Agency|Co\./i)) {
-          organizations.push(entStr);
-        } else if (entStr.match(/Dr\.|Mr\.|Mrs\.|Ms\.|CEO|Founder/i)) {
-          people.push(entStr);
-        }
-      }
-    });
-  }
-
-  // Location extraction
-  const locationKeywords = [
-    'USA', 'United States', 'UK', 'United Kingdom', 'Canada', 'Pakistan', 'India', 'Australia', 
-    'Germany', 'France', 'UAE', 'Dubai', 'London', 'New York', 'Karachi', 'Lahore', 'Islamabad', 
-    'Sydney', 'Toronto', 'Melbourne', 'California', 'San Francisco', 'Chicago', 'Texas'
+  const locationPatterns = [
+    'United States', 'USA', 'United Kingdom', 'UK', 'Canada', 'Australia', 'Germany', 'France', 'India', 'Pakistan',
+    'New York', 'London', 'Toronto', 'Sydney', 'Berlin', 'Paris', 'Dubai', 'UAE', 'Singapore', 'Tokyo', 'California',
+    'Texas', 'Florida', 'Chicago', 'San Francisco', 'Karachi', 'Lahore', 'Islamabad', 'Melbourne'
   ];
-  locationKeywords.forEach(loc => {
+  locationPatterns.forEach(loc => {
     const regex = new RegExp(`\\b${loc}\\b`, 'i');
-    if (regex.test(combinedText) || regex.test(safeDesc)) {
+    if (regex.test(combinedText)) {
       locations.push(loc);
     }
   });
 
-  // Simple Price Extraction
+  const logoAlt = $('img[src*="logo" i], img[class*="logo" i], img[id*="logo" i]').attr('alt');
+  if (logoAlt && logoAlt.trim().length > 1) {
+    brands.push(logoAlt.trim());
+    organizations.push(logoAlt.trim());
+  }
+
   const priceRegex = /\$\d+(?:,\d{3})*(?:\.\d{2})?/g;
   let priceMatch;
   while ((priceMatch = priceRegex.exec(combinedText)) !== null) {
     prices.push(priceMatch[0]);
   }
 
-  // Auto Keywords tokenization & frequency scoring
+  const sentenceEntities = bodyText.match(/[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/g);
+  if (sentenceEntities) {
+    const excludeList = ['The', 'This', 'That', 'Your', 'With', 'From', 'What', 'How', 'Why', 'Click', 'Our', 'In', 'On', 'At', 'By', 'An', 'If', 'To', 'About', 'Contact', 'Read', 'More', 'Privacy', 'Terms', 'Learn', 'Welcome', 'Services', 'Home', 'Blog'];
+    sentenceEntities.forEach(ent => {
+      const entStr = safeString(ent).trim();
+      const firstWord = entStr.split(' ')[0];
+      if (entStr.length > 5 && !excludeList.includes(firstWord)) {
+        if (entStr.match(/Dr\.|Mr\.|Mrs\.|Ms\.|CEO|Founder|Author|Director/i) || (!entStr.match(/and|or|the|of|for|with/i))) {
+          people.push(entStr);
+        }
+      }
+    });
+  }
+
   const wordFrequency = {};
-  combinedText.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).forEach(w => {
-    if (w.length > 4 && !['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'about', 'under'].includes(w)) {
-      wordFrequency[w] = (wordFrequency[w] || 0) + 1;
-    }
-  });
+  bodyText.toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .split(/\s+/)
+    .forEach(w => {
+      if (w.length > 3 && !['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'under', 'from', 'with', 'your', 'this', 'that', 'were', 'been', 'have', 'more', 'some', 'them', 'then', 'also'].includes(w)) {
+        if (w.length < 20) {
+          wordFrequency[w] = (wordFrequency[w] || 0) + 1;
+        }
+      }
+    });
   const sortedKeywords = Object.keys(wordFrequency).sort((a, b) => wordFrequency[b] - wordFrequency[a]);
   keywords.push(...sortedKeywords.slice(0, 15));
 
-  const cleanArray = (arr) => [...new Set(safeArray(arr).filter(Boolean).map(x => String(x).trim()))].slice(0, 10);
-
-  const finalEntities = {
-    brands: cleanArray(brands).length > 0 ? cleanArray(brands) : [brandNameFallback],
-    locations: cleanArray(locations).length > 0 ? cleanArray(locations) : ["Global"],
-    services: cleanArray(services).length > 0 ? cleanArray(services) : ["Digital Consulting"],
-    people: cleanArray(people),
-    organizations: cleanArray(organizations).length > 0 ? cleanArray(organizations) : [brandNameFallback],
-    prices: cleanArray(prices),
-    keywords: cleanArray(keywords),
-    entities: cleanArray([...brands, ...services, ...locations, ...people])
+  const cleanArray = (arr, fallbackVal) => {
+    const unique = [...new Set(safeArray(arr).filter(Boolean).map(x => String(x).trim()))].filter(x => x.length > 1);
+    if (unique.length === 0 && fallbackVal) {
+      unique.push(fallbackVal);
+    }
+    return unique.slice(0, 10);
   };
 
-  return finalEntities;
+  const cleanBrands = cleanArray(brands, brandName || "Brand Authority");
+  const cleanLocations = cleanArray(locations, "Global");
+  const cleanServices = cleanArray(services, "Digital Consulting");
+  const cleanOrganizations = cleanArray(organizations, brandName || "Brand Authority");
+
+  return {
+    brands: cleanBrands,
+    locations: cleanLocations,
+    services: cleanServices,
+    people: cleanArray(people).slice(0, 5),
+    organizations: cleanOrganizations,
+    prices: cleanArray(prices).slice(0, 5),
+    keywords: cleanArray(keywords).slice(0, 15),
+    entities: [...new Set([...cleanBrands, ...cleanServices, ...cleanLocations])]
+  };
 }
 
 // 1. TOPICAL AUTHORITY ENGINE
@@ -440,10 +491,38 @@ const findCitationOpportunities = (data) => {
   const opportunities = [];
   const { hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount } = data;
 
-  if (!hasFAQ) opportunities.push({ engine: 'ChatGPT', reason: 'Missing FAQ Schema - ChatGPT maps structured Q&As', impact: '+20%', fix: 'Deploy FAQ JSON-LD schema with exact queries.' });
-  if (!hasDirectAnswer) opportunities.push({ engine: 'Perplexity', reason: 'No clear, direct semantic summary at top of page', impact: '+15%', fix: 'Add a 50-word "Quick Answer" component under H1.' });
-  if (!hasAuthor) opportunities.push({ engine: 'Gemini', reason: 'Missing Author Profile credentials - Gemini checks E-E-A-T', impact: '+12%', fix: 'Add a schema-marked Author Bio block.' });
-  if (!hasHowTo && wordCount > 1000) opportunities.push({ engine: 'All Engines', reason: 'Educational structure detected without structural steps', impact: '+10%', fix: 'Integrate HowTo Schema steps with lists.' });
+  if (!hasFAQ) {
+    opportunities.push({ 
+      engine: 'ChatGPT', 
+      reason: 'Missing FAQ Schema - ChatGPT maps structured Q&As', 
+      impact: '+20%', 
+      fix: 'Deploy FAQ JSON-LD schema with exact queries.' 
+    });
+  }
+  if (!hasDirectAnswer) {
+    opportunities.push({ 
+      engine: 'Perplexity', 
+      reason: 'No clear, direct semantic summary at top of page', 
+      impact: '+15%', 
+      fix: 'Add a 50-word "Quick Answer" component under H1.' 
+    });
+  }
+  if (!hasAuthor) {
+    opportunities.push({ 
+      engine: 'Gemini', 
+      reason: 'Missing Author Profile credentials - Gemini checks E-E-A-T', 
+      impact: '+12%', 
+      fix: 'Add a schema-marked Author Bio block.' 
+    });
+  }
+  if (!hasHowTo && wordCount > 1000) {
+    opportunities.push({ 
+      engine: 'All Engines', 
+      reason: 'Educational structure detected without structural steps', 
+      impact: '+10%', 
+      fix: 'Integrate HowTo Schema steps with lists.' 
+    });
+  }
 
   return opportunities;
 };
@@ -469,7 +548,7 @@ const generateAISnippets = (h1, metaDescription, bodyText, keywords) => {
 // 5. LOCAL SEO & ADVANCED TRUST SIGNAL SCANNER
 const analyzeLocalSEO = ($, bodyText) => {
   const text = safeString(bodyText);
-  const hasNAP = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(text) || text.includes('address') || text.includes('phone');
+  const hasNAP = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(text) || text.toLowerCase().includes('address') || text.toLowerCase().includes('phone');
   const hasLocalBusiness = $('[itemtype*="LocalBusiness"]').length > 0;
   const hasMap = $('iframe[src*="google.com/maps"], iframe[src*="maps"]').length > 0;
   const hasCity = /\b(Karachi|Lahore|Islamabad|London|New York|Dubai|Sydney|Toronto)\b/i.test(text);
@@ -502,12 +581,17 @@ const scanTrustSignals = ($, url) => {
 
   const socialLinks = [];
 
+  const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
+  const hasEmail = !!emailMatch;
+  const hasPhone = !!phoneMatch;
+
   $("a").each((i, el) => {
-    const href = $(el).attr("href") || "";
+    const href = ($(el).attr("href") || "").trim();
     const text = $(el).text().toLowerCase().trim();
 
-    if (href.startsWith('mailto:') || href.startsWith('tel:') || text.includes('contact') || href.includes('contact')) {
-      if (href.includes('contact') || text.includes('contact')) hasContact = true;
+    if (href.startsWith('mailto:') || href.startsWith('tel:') || href.includes('wa.me') || href.includes('whatsapp') || text.includes('contact') || href.includes('contact')) {
+      hasContact = true;
     }
     if (href.includes('about') || text.includes('about') || text.includes('our story') || text.includes('who we are')) {
       hasAbout = true;
@@ -527,10 +611,14 @@ const scanTrustSignals = ($, url) => {
     }
   });
 
-  if (bodyText.includes('review') || bodyText.includes('stars') || $('.review, .testimonial').length > 0) {
+  if (hasEmail || hasPhone) {
+    hasContact = true;
+  }
+
+  if (bodyText.includes('review') || bodyText.includes('stars') || bodyText.includes('rated') || $('.review, .testimonial').length > 0) {
     hasReviews = true;
   }
-  if (bodyText.includes('testimonial') || bodyText.includes('what our clients say') || $('.testimonial, .client-feedback').length > 0) {
+  if (bodyText.includes('testimonial') || bodyText.includes('what our clients say') || bodyText.includes('happy clients') || $('.testimonial, .client-feedback').length > 0) {
     hasTestimonials = true;
   }
 
@@ -579,7 +667,7 @@ function trackAIVisibilityTrend(url, currentScore) {
   };
 }
 
-// ========== MAIN ANALYZER PIPELINE (HARDENED - ZERO CRASH GUARANTEE) ==========
+// ========== MAIN ANALYZER PIPELINE ==========
 async function analyzeSingleUrl(url) {
   url = safeString(url).trim();
   if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
@@ -600,11 +688,11 @@ async function analyzeSingleUrl(url) {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>${getBrandName(url)} - Fallback Evaluation</title>
+          <title>${getBrandNameEnhanced(url, cheerio.load("<html></html>"), "", {})} - Fallback Evaluation</title>
           <meta name="description" content="Scanner fallback mode active.">
         </head>
         <body>
-          <h1>${getBrandName(url)}</h1>
+          <h1>${getBrandNameEnhanced(url, cheerio.load("<html></html>"), "", {})}</h1>
         </body>
       </html>
     `;
@@ -760,7 +848,7 @@ async function analyzeSingleUrl(url) {
   const desktopScore = seoScore;
 
   // Hardened Entity Scanner
-  const entityData = extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, bodyText);
+  const entityData = extractEntitiesEnhanced($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas);
   const { keywords, entities, prices, locations, services, brands, people, organizations } = entityData;
 
   const keywordInsights = safeArraySlice(keywords, 0, 5).map(k => ({
@@ -769,7 +857,7 @@ async function analyzeSingleUrl(url) {
     opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
   }));
 
-  const brandName = brands[0] || getBrandName(url);
+  const brandName = brands[0] || getBrandNameEnhanced(url, $, title, schemas);
   const mainTopic = h1 || safeArraySlice(title.split(" "), 0, 3).join(" ") || "this service";
   const subtopics = h2s;
   const expectedSubtopics = [`What is ${mainTopic}`, `${mainTopic} Benefits`, `How to ${mainTopic}`, `${mainTopic} Examples`, `${mainTopic} vs Alternatives`];
@@ -778,7 +866,7 @@ async function analyzeSingleUrl(url) {
 
   const topicalAuthorityScore = Math.round((topicCoverage * 0.4) + (subtopics.length >= 5 ? 30 : subtopics.length * 6) + (hasFAQ ? 15 : 0) + (wordCount > 1200 ? 15 : wordCount > 800 ? 10 : 5));
 
-  // FAQ Generator (SaaS requirement: Logical questions, never use raw H1)
+  // FAQ Generator
   const autoFAQ = [];
   if (brandName && mainTopic) {
     autoFAQ.push({ 
@@ -882,6 +970,12 @@ async function analyzeSingleUrl(url) {
   const trustSignals = scanTrustSignals($, url);
   const aiSnippets = generateAISnippets(h1, metaDescription, bodyText, keywords);
   const visibilityTrend = trackAIVisibilityTrend(url, overallAIVisibilityScore);
+
+  // DEBUG AUDIT LOGS
+  console.log("Entities:", entityData);
+  console.log("Internal Links:", internalLinkData);
+  console.log("Trust Signals:", trustSignals);
+  console.log("Local SEO:", localSEO);
 
   const payload = {
     fetchError,
@@ -1073,7 +1167,7 @@ app.get("/compare", async (req, res) => {
 
     const sites = [
       { 
-        brand: getBrandName(site1.url), 
+        brand: getBrandNameEnhanced(site1.url, cheerio.load("<html></html>"), site1.title, {}), 
         url: site1.url, 
         aiVisibilityScore: site1.overallAIVisibilityScore, 
         seoScore: site1.score, 
@@ -1082,7 +1176,7 @@ app.get("/compare", async (req, res) => {
         citationProbability: site1.citationProbability
       },
       { 
-        brand: getBrandName(site2.url), 
+        brand: getBrandNameEnhanced(site2.url, cheerio.load("<html></html>"), site2.title, {}), 
         url: site2.url, 
         aiVisibilityScore: site2.overallAIVisibilityScore, 
         seoScore: site2.score, 
@@ -1094,9 +1188,9 @@ app.get("/compare", async (req, res) => {
 
     let winnerReason = "Overall visibility performance metrics are tightly matched.";
     if (site1.overallAIVisibilityScore > site2.overallAIVisibilityScore) {
-      winnerReason = `${getBrandName(site1.url)} dominates AI search indexing benchmarks due to enhanced schema integration and E-E-A-T credentials.`;
+      winnerReason = `${getBrandNameEnhanced(site1.url, cheerio.load("<html></html>"), site1.title, {})} dominates AI search indexing benchmarks due to enhanced schema integration and E-E-A-T credentials.`;
     } else if (site2.overallAIVisibilityScore > site1.overallAIVisibilityScore) {
-      winnerReason = `${getBrandName(site2.url)} commands AI listings with premium structural outline depths and topical authority indicators.`;
+      winnerReason = `${getBrandNameEnhanced(site2.url, cheerio.load("<html></html>"), site2.title, {})} commands AI listings with premium structural outline depths and topical authority indicators.`;
     }
 
     res.json({ 

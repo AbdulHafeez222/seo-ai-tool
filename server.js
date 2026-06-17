@@ -876,7 +876,7 @@ export async function analyzeSingleUrl(url) {
     isCrawlBlocked = true;
   }
 
-  // ========== SMART FALLBACK VALUE ESTIMATOR (FIX REQUIREMENT 1 & 5) ==========
+  // ========== SMART FALLBACK VALUE ESTIMATOR ==========
   let parsedDomain = "";
   try {
     parsedDomain = new URL(url).hostname.replace("www.", "");
@@ -889,7 +889,7 @@ export async function analyzeSingleUrl(url) {
 
   let $;
   if (isCrawlBlocked || !html || html.length < 100) {
-    // Generate virtual HTML context to feed modules smoothly (FIX REQUIREMENT 2)
+    // Generate virtual HTML context to feed modules smoothly (FIX REQUIREMENT 2 & 5)
     html = `
       <html>
         <head>

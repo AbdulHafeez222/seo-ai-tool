@@ -936,6 +936,7 @@ export async function analyzeSingleUrl(url) {
       fallbackMode: true,
       dataSource: "BLOCKED",
       blocked: true,
+      isBlocked: true, // Frontend-friendly block indicator
       title: "Blocked / Protected",
       h1: "Protected Section",
       metaDescription: "Metadata block detected. Anti-scraping firewall prevents deep indexing audits.",

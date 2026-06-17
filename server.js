@@ -916,32 +916,7 @@ export async function analyzeSingleUrl(url) {
   let rawBodyText = "No content scanned.";
   let $;
 
-  if (isCrawlBlocked || !html || html.length < 100) {
-    // Generate virtual HTML context to feed modules smoothly (FIX REQUIREMENT 2 & 5)
-    html = `
-      <html>
-        <head>
-          <title>${formattedNicheTitle} - Best High Authority Solutions</title>
-          <meta name="description" content="Discover professional ${estimatedNiche} consulting, strategic planning, and modern optimizations customized for enterprise systems." />
-        </head>
-        <body>
-          <h1>Proven Solutions in ${formattedNicheTitle}</h1>
-          <h2>Why Choose Our ${formattedNicheTitle} Platform?</h2>
-          <p>We deliver high-end architectural systems and robust integrations. Our team brings deep technical capabilities to every optimization layout.</p>
-          <h2>Frequently Asked Questions on ${formattedNicheTitle}</h2>
-          <p>We design local compliance models, handle direct WhatsApp communications, and deliver custom integrations starting at competitive rates.</p>
-        </body>
-      </html>
-    `;
-    $ = cheerio.load(html);
-  } else {
-    $ = cheerio.load(html);
-  }
-
-  // Assign rawBodyText after DOM loader is established
-  rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
-
-  // ========== EARLY CRAWL BLOCKED REPORT REJECTION ENGINE (STRICT CRITICAL BYPASS) ==========
+  // ========== EARLY CRAWL BLOCKED REPORT REJECTION ENGINE (STRICT CRITICAL BYPASS WITH ZERO EXECUTION DOWNSTREAM) ==========
   if (isCrawlBlocked) {
     console.log("[SCAN STATUS] - BLOCKED OR INVALID:", {
       url,
@@ -949,20 +924,23 @@ export async function analyzeSingleUrl(url) {
       dataSource: "BLOCKED",
       blocked: true
     });
+    console.log("[PIPELINE STOPPED]", url, "BLOCKED");
 
-    // Run clean structural fallback outputs without running heavy parsing heuristics
+    // Immediately early-return empty scores, bypassing all modules
     return {
       url,
       crawlSuccess: false,
       fallbackMode: true,
       dataSource: "BLOCKED",
+      blocked: true,
       title: "Blocked / Protected",
       h1: "Protected Section",
       metaDescription: "Metadata block detected. Anti-scraping firewall prevents deep indexing audits.",
       wordCount: 0,
-      score: 55, // Strict fallback benchmark bounds
+      score: 55, // Baseline benchmark bounds
       status: "BLOCKED",
-      warning: "Website is protected by an anti-bot system (Cloudflare/reCAPTCHA). Running baseline fallback evaluations.",
+      stopProcessing: true,
+      warning: "Website is protected by an anti-bot system (Cloudflare/reCAPTCHA). Core crawlers were blocked.",
       
       overallAIVisibilityScore: 35,
       aiVisibilityLevel: "Poor",
@@ -1035,10 +1013,10 @@ export async function analyzeSingleUrl(url) {
       importantIssues: ["Programmatic content audits blocked"],
       minorIssues: [],
       aiRecommendations: [
-        { priority: "CRITICAL", action: "Whitelist audit crawling user-agents", impact: "+45% Audit Accuracy", effort: "10 mins", code: "" }
+        { priority: "CRITICAL", action: "Configure Cloudflare or WAF parameters", impact: "+45% Audit Accuracy", effort: "10 mins", code: "" }
       ],
       recommendationScore: 10,
-      visibilityForecast: { current: 35, afterFAQ: 50, afterHowTo: 45, afterAuthor: 42, afterSchema: 40, afterAll: 60 },
+      visibilityForecast: { current: 35, afterFAQ: 35, afterHowTo: 35, afterAuthor: 35, afterSchema: 35, afterAll: 35 },
       
       topicalAuthority: { score: 15, topicsCovered: 0, missingSubtopics: [], depth: "Shallow" },
       semanticSEO: { entities: [], nlpScore: 20, semanticGaps: [], hasSemanticHTML: false },
@@ -1063,6 +1041,31 @@ export async function analyzeSingleUrl(url) {
       lcpScore: 3000
     };
   }
+
+  if (isCrawlBlocked || !html || html.length < 100) {
+    // Generate virtual HTML context to feed modules smoothly (FIX REQUIREMENT 2 & 5)
+    html = `
+      <html>
+        <head>
+          <title>${formattedNicheTitle} - Best High Authority Solutions</title>
+          <meta name="description" content="Discover professional ${estimatedNiche} consulting, strategic planning, and modern optimizations customized for enterprise systems." />
+        </head>
+        <body>
+          <h1>Proven Solutions in ${formattedNicheTitle}</h1>
+          <h2>Why Choose Our ${formattedNicheTitle} Platform?</h2>
+          <p>We deliver high-end architectural systems and robust integrations. Our team brings deep technical capabilities to every optimization layout.</p>
+          <h2>Frequently Asked Questions on ${formattedNicheTitle}</h2>
+          <p>We design local compliance models, handle direct WhatsApp communications, and deliver custom integrations starting at competitive rates.</p>
+        </body>
+      </html>
+    `;
+    $ = cheerio.load(html);
+  } else {
+    $ = cheerio.load(html);
+  }
+
+  // Assign rawBodyText after DOM loader is established
+  rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
 
   $('script, style, nav, footer, header, noscript, svg').remove();
 
@@ -1520,6 +1523,16 @@ export async function analyzeSingleUrl(url) {
 
 // ========== COMPETITOR CONTENT GAP ENGINE ==========
 export function competitorContentGap(userData, compData) {
+  if (userData.stopProcessing || compData.stopProcessing) {
+    return {
+      headingGaps: [],
+      keywordGaps: [],
+      schemaGaps: [],
+      contentLengthDiff: 0,
+      competitorHasMore: false
+    };
+  }
+
   const userHeadings = [...safeArray(userData.h2s), ...safeArray(userData.h3s)];
   const compHeadings = [...safeArray(compData.h2s), ...safeArray(compData.h3s)];
   const userKeywords = new Set(safeArray(userData.keywords));
@@ -1585,6 +1598,19 @@ app.get("/compare", async (req, res) => {
         success: false,
         crawlSuccess: false,
         reason: "Comparison unavailable: One or both analysis engines threw a fatal error."
+      });
+    }
+
+    // Stop execution early if one or more sites are blocked
+    if (site1.stopProcessing || site2.stopProcessing) {
+      return res.json({
+        sites: [
+          { brand: site1.stopProcessing ? "Blocked Site" : getBrandNameEnhanced(site1.url, cheerio.load("<html></html>"), site1.title, {}), url: site1.url, aiVisibilityScore: site1.overallAIVisibilityScore, seoScore: site1.score, aeoScore: site1.aeoScore, trustScore: site1.aiTrustScore, citationProbability: site1.citationProbability },
+          { brand: site2.stopProcessing ? "Blocked Site" : getBrandNameEnhanced(site2.url, cheerio.load("<html></html>"), site2.title, {}), url: site2.url, aiVisibilityScore: site2.overallAIVisibilityScore, seoScore: site2.score, aeoScore: site2.aeoScore, trustScore: site2.aiTrustScore, citationProbability: site2.citationProbability }
+        ],
+        winner: site1.overallAIVisibilityScore >= site2.overallAIVisibilityScore ? { url: site1.url } : { url: site2.url },
+        advantages: { seo: { diff: 0, leader: "Blocked" }, aeo: { diff: 0, leader: "Blocked" }, trust: { diff: 0, leader: "Blocked" } },
+        winnerReason: "Comparison not applicable: Deep crawl blocked."
       });
     }
 
@@ -1661,6 +1687,23 @@ app.get("/roadmap", async (req, res) => {
     if (!url) return res.status(400).json({ error: "URL required" });
     
     const data = await analyzeSingleUrl(url);
+
+    // Skip roadmap calculation if blocked
+    if (data.stopProcessing) {
+      return res.json({
+        currentScore: 35,
+        potentialScore: 35,
+        roadmap: [{
+          step: 1,
+          task: "WAF Anti-Scraping Firewall Detected",
+          priority: "CRITICAL",
+          why: "Programmatic audits blocked. Whitelist crawler agents to proceed.",
+          code: "Action blocked due to security protection."
+        }],
+        estimatedTime: "0 hours"
+      });
+    }
+
     const autopilotTasks = data.aiAutopilot || [];
     
     if (autopilotTasks.length === 0) {
@@ -1713,6 +1756,10 @@ app.get("/gap-analysis", async (req, res) => {
       analyzeSingleUrl(competitor)
     ]);
 
+    if (userData.stopProcessing || compData.stopProcessing) {
+      return res.json({ competitor: { has: [] }, you: { missing: [] } });
+    }
+
     const checks = [
       { key: 'hasFAQ', label: 'FAQ Schema' }, { key: 'hasHowTo', label: 'HowTo Schema' },
       { key: 'hasAuthor', label: 'Author Bio' }, { key: 'hasDirectAnswer', label: 'Direct Answer' },
@@ -1740,6 +1787,15 @@ app.get("/keyword-theft", async (req, res) => {
       analyzeSingleUrl(url),
       analyzeSingleUrl(competitor)
     ]);
+
+    if (userData.stopProcessing || compData.stopProcessing) {
+      return res.json({
+        topCompetitorKeywords: [],
+        missingKeywords: [],
+        sharedKeywords: [],
+        opportunity: "Action blocked due to security protection."
+      });
+    }
 
     const yourKeywords = new Set(userData.keywords || []);
     const compKeywords = new Set(compData.keywords || []);

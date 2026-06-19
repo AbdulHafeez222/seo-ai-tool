@@ -743,6 +743,9 @@ export function analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasCon
   };
 }
 
+// Map alias for startups checker consistency
+export const calculateEEATAdvanced = analyzeEEATAdvanced;
+
 // ========== LOCAL SEO SCANNER ==========
 export function analyzeLocalSEO($, bodyText) {
   const text = safeString(bodyText);
@@ -846,6 +849,7 @@ export function scanTrustSignals($, url) {
 export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
   const key = Buffer.from(url).toString('base64');
   if (!trendDB[key]) {
+    // Inject mock historical points for visual representation on first run
     trendDB[key] = [
       { date: "Day -4", score: Math.max(10, currentScore - 12), seo: Math.max(10, seoScore - 10), aeo: Math.max(10, aeoScore - 8) },
       { date: "Day -3", score: Math.max(10, currentScore - 8), seo: Math.max(10, seoScore - 6), aeo: Math.max(10, aeoScore - 5) },
@@ -854,6 +858,7 @@ export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
     ];
   }
 
+  // Push current scan parameters
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   trendDB[key].push({
     date: dateStr,
@@ -1309,7 +1314,7 @@ export async function analyzeSingleUrl(url) {
 
     // ========== CRITICAL ENTITY ALLOCATION ENGINE ==========
     const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas);
-    const { brands, locations, services, people, organizations, products, totalEntities } = entityData;
+    const { brands = [], locations = [], services = [], people = [], organizations = [], products = [], totalEntities = 0 } = entityData;
     const entities = entityData.entities || [
       ...brands,
       ...services,
@@ -1602,11 +1607,11 @@ app.get("/scan", async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error("SCAN ENDPOINT ERROR:", err.message);
-    res.status(200).json({
-      success: false,
-      crawlSuccess: false,
-      httpStatus: err.status || 500,
-      reason: err.message || "An unexpected error occurred during scan process."
+    return res.json({
+      error: "safe fallback",
+      score: 0,
+      keywords: [],
+      entities: []
     });
   }
 });
@@ -1789,4 +1794,3 @@ process.on('unhandledRejection', (reason, promise) => {
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform v5.2 running on port ${PORT}`);
 });
-2. Guard-Stabilized Fron

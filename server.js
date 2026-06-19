@@ -9,6 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const scanHistory = [];
 const trendDB = {}; // In-memory database for tracking historical scores
+const activeScans = new Map(); // Global scan locks per normalized URL
 
 app.use(cors());
 app.use(express.json());
@@ -74,6 +75,14 @@ export function safeRun(fn, fallback = null) {
     console.error("[SAFE RUN BLOCK BYPASS]", e.message);
     return fallback;
   }
+}
+
+// Normalize URL to prevent duplicates (http vs https, trailing slashes, www, uppercase/whitespace)
+export function normalizeUrl(url) {
+  let u = safeString(url).trim().toLowerCase();
+  u = u.replace(/^(https?:\/\/)?(www\.)?/, "");
+  u = u.replace(/\/$/, "");
+  return u.replace(/\s+/g, '');
 }
 
 // Anti-bot detection checker (Optimized to prevent false-positive CDN references)
@@ -1601,7 +1610,25 @@ app.get("/", (req, res) => res.json({ status: "running", tool: "AI Visibility Pl
 app.get("/scan", async (req, res) => {
   const url = req.query.url;
   if (!url) return res.status(400).json({ error: "URL required" });
-  
+
+  const normalized = normalizeUrl(url);
+
+  // Check if already scanning with a 60-second timeout guard
+  if (activeScans.has(normalized)) {
+    const startTime = activeScans.get(normalized);
+    if (Date.now() - startTime < 60000) {
+      return res.json({
+        status: "already_scanning",
+        message: "Scan already in progress"
+      });
+    } else {
+      activeScans.delete(normalized);
+    }
+  }
+
+  // Register lock
+  activeScans.set(normalized, Date.now());
+
   try {
     const data = await analyzeSingleUrl(url);
     res.json(data);
@@ -1613,6 +1640,9 @@ app.get("/scan", async (req, res) => {
       keywords: [],
       entities: []
     });
+  } finally {
+    // ALWAYS clean lock map
+    activeScans.delete(normalized);
   }
 });
 

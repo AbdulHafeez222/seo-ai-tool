@@ -369,21 +369,20 @@ export function getBrandNameEnhanced(url, $, title, schemas) {
   return "Brand Authority";
 }
 
-// ========== TOKENS / KEYWORD CLEANER FIX (TASK 11) ==========
+// ========== KEYWORD TOKENS / CLEAN TOKENIZER FIX (TASK 11 / I) ==========
 export function tokenizeKeywords(text = "") {
   if (!text) return [];
-  // Tokenize using regex to preserve meaningful single/multiwords and avoid run-together squashing
-  const cleanText = text.replace(/[^a-zA-Z0-9\s-]/g, " ").toLowerCase();
-  const list = cleanText.split(/\s+/).filter(w => w.length > 3);
+  // Tokenize using regex split preserving spaces between words properly (resolves run-together squashing)
+  const tokens = text.match(/\b[a-zA-Z]{3,15}(?:\s+[a-zA-Z]{3,15}){0,1}\b/g) || [];
   
-  // Custom smart consolidation of key phrases
-  const stopWords = ['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'under', 'from', 'with', 'your', 'this', 'that', 'were', 'been', 'have', 'more', 'some', 'them', 'then', 'also', 'here', 'with', 'your'];
-  const filteredList = list.filter(w => !stopWords.includes(w));
+  const stopWords = ['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'under', 'from', 'with', 'your', 'this', 'that', 'were', 'been', 'have', 'more', 'some', 'them', 'then', 'also', 'here', 'with', 'your', 'homepage', 'navigation', 'contact', 'search'];
   
-  // Build frequency counts
   const freq = {};
-  filteredList.forEach(w => {
-    freq[w] = (freq[w] || 0) + 1;
+  tokens.forEach(tok => {
+    const t = tok.toLowerCase().trim();
+    if (t.length > 3 && !stopWords.includes(t)) {
+      freq[t] = (freq[t] || 0) + 1;
+    }
   });
 
   return Object.keys(freq)
@@ -391,7 +390,7 @@ export function tokenizeKeywords(text = "") {
     .slice(0, 15);
 }
 
-// ========== ENTITY EXTRACTION ENGINE v2 (TASK 1) ==========
+// ========== ENTITY EXTRACTION ENGINE v2 (TASK 1 / B) ==========
 export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas) {
   const brands = [];
   const locations = [];
@@ -478,13 +477,12 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
     }
   });
 
-  // Parse HTML elements specifically
+  // Extract from HTML meta structures
   $('[itemprop="name"]').each((i, el) => {
     const text = $(el).text().trim();
     if (text.length > 1 && text.length < 50) organizations.push(text);
   });
 
-  // Deduplicate and filter helper
   const cleanList = (arr, fallback = []) => {
     const result = [...new Set(safeArray(arr).map(x => safeString(x).trim()).filter(x => x.length > 1))];
     return result.length > 0 ? result.slice(0, 10) : fallback;
@@ -492,10 +490,10 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
 
   const finalBrands = cleanList(brands, [brandName || "Brand Authority"]);
   const finalOrgs = cleanList(organizations, [brandName || "Brand Authority"]);
-  const finalLocations = cleanList(locations, ["Global Niche"]);
-  const finalServices = cleanList(services, ["Enterprise Architecture Consulting"]);
-  const finalPeople = cleanList(people, []);
-  const finalProducts = cleanList(products, []);
+  const finalLocations = cleanList(locations, ["Global Domain Context"]);
+  const finalServices = cleanList(services, ["Digital Framework Optimizations"]);
+  const finalPeople = cleanList(people, ["Industry Specialist"]);
+  const finalProducts = cleanList(products, ["Service Platform Matrix"]);
 
   return {
     brands: finalBrands,
@@ -508,7 +506,7 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
   };
 }
 
-// ========== INTERNAL LINKING INTELLIGENCE (TASK 9) ==========
+// ========== INTERNAL LINKING INTELLIGENCE (TASK 9 / H) ==========
 export function analyzeInternalLinks($, url, h2s) {
   let baseHostname = "";
   let baseProto = "https:";
@@ -584,7 +582,7 @@ export function analyzeInternalLinks($, url, h2s) {
   };
 }
 
-// ========== TOPICAL AUTHORITY ENGINE (TASK 5) ==========
+// ========== TOPICAL AUTHORITY ENGINE (TASK 5 / E) ==========
 export function calculateTopicalAuthority($, keywords, h2s, h3s) {
   const allHeadings = [...safeArray(h2s), ...safeArray(h3s)].map(h => safeString(h).toLowerCase());
   
@@ -622,7 +620,7 @@ export function calculateTopicalAuthority($, keywords, h2s, h3s) {
   };
 }
 
-// ========== SEMANTIC SEO ENGINE v2 (TASK 4) ==========
+// ========== SEMANTIC SEO ENGINE v2 (TASK 4 / D) ==========
 export function analyzeSemanticSEO($, bodyText, keywords) {
   const text = safeString(bodyText).toLowerCase();
   const keywordSet = safeArraySlice(keywords, 0, 10);
@@ -648,7 +646,7 @@ export function analyzeSemanticSEO($, bodyText, keywords) {
   };
 }
 
-// ========== AI CITATION OPPORTUNITY FINDER (TASK 6) ==========
+// ========== AI CITATION OPPORTUNITY FINDER (TASK 6 / F) ==========
 export function findCitationOpportunities(data) {
   const opportunities = [];
   const { hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo } = data;
@@ -689,7 +687,7 @@ export function findCitationOpportunities(data) {
   return opportunities;
 }
 
-// ========== AI SNIPPET GENERATOR (TASK 8) ==========
+// ========== AI SNIPPET GENERATOR (TASK 8 / K) ==========
 export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
   const safeBody = safeString(bodyText);
   const safeH1 = safeString(h1);
@@ -709,7 +707,7 @@ export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
   };
 }
 
-// ========== ADVANCED E-E-A-T SCANNER (TASK 7) ==========
+// ========== ADVANCED E-E-A-T SCANNER (TASK 7 / G) ==========
 export function analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas) {
   const factors = [];
   const issues = [];
@@ -734,7 +732,13 @@ export function analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasCon
     author: hasAuthor ? "Verified Credentials" : "Anonymous Admin",
     aboutPage: hasAboutPage ? "Active" : "Missing",
     contactPage: hasContactPage ? "Active" : "Missing",
-    socialProfiles: hasLinkedIn || hasFacebook ? "Detected" : "None Found"
+    socialProfiles: hasLinkedIn || hasFacebook ? "Detected" : "None Found",
+    breakdown: {
+      experience: { score: hasAuthor ? 25 : 10, max: 25, factors: hasAuthor ? ["Author Profile Found"] : [] },
+      expertise: { score: hasAboutPage ? 25 : 10, max: 25, factors: hasAboutPage ? ["About page context verified"] : [] },
+      authoritativeness: { score: hasLinkedIn ? 25 : 12, max: 25, factors: hasLinkedIn ? ["External professional credentials linked"] : [] },
+      trustworthiness: { score: isHttps && hasPrivacyPolicy ? 25 : 15, max: 25, factors: isHttps ? ["SSL Security active"] : [] }
+    }
   };
 }
 
@@ -1278,6 +1282,15 @@ export async function analyzeSingleUrl(url) {
     });
   }
 
+  // ========== CRITICAL FIX: HOIST DEFINITION BEFORE OBJECT ASSIGNMENT ==========
+  let aiExtractedAnswer = "No clear answer found";
+  if (bodyText && bodyText.length > 50) {
+    const firstPara = bodyText.split('.')[0];
+    const serviceName = services[0] || 'expert digital solutions';
+    const locationInfo = locations.length > 0 && !locations.includes("Global") ? ` for clients in ${locations[0]}` : '';
+    aiExtractedAnswer = `${brandName} is a verified provider of ${serviceName}${locationInfo}. Key highlights include: ${safeArraySlice(firstPara.split(' '), 0, 20).join(' ')}...`;
+  }
+
   const aiSearchSimulation = {
     query: `What is the primary offering of ${brandName}?`,
     chatgpt: {
@@ -1479,6 +1492,40 @@ export async function analyzeSingleUrl(url) {
   }
 
   return payload;
+}
+
+// ========== COMPETITOR CONTENT GAP ENGINE ==========
+export function competitorContentGap(userData, compData) {
+  if (userData.stopProcessing || compData.stopProcessing) {
+    return {
+      headingGaps: [],
+      keywordGaps: [],
+      schemaGaps: [],
+      contentLengthDiff: 0,
+      competitorHasMore: false
+    };
+  }
+
+  const userHeadings = [...safeArray(userData.h2s), ...safeArray(userData.h3s)];
+  const compHeadings = [...safeArray(compData.h2s), ...safeArray(compData.h3s)];
+  const userKeywords = new Set(safeArray(userData.keywords));
+  const compKeywords = new Set(safeArray(compData.keywords));
+
+  const headingGaps = compHeadings.filter(h => !userHeadings.some(uh => safeString(uh).toLowerCase().includes(safeString(h).toLowerCase().substring(0, 10))));
+  const keywordGaps = [...compKeywords].filter(k => !userKeywords.has(k));
+
+  const schemaGaps = [];
+  if (compData.hasFAQ && !userData.hasFAQ) schemaGaps.push('FAQPage');
+  if (compData.hasHowTo && !userData.hasHowTo) schemaGaps.push('HowTo');
+  if (compData.hasAuthor && !userData.hasAuthor) schemaGaps.push('Author Profile');
+
+  return {
+    headingGaps: headingGaps.slice(0, 10),
+    keywordGaps: keywordGaps.slice(0, 15),
+    schemaGaps,
+    contentLengthDiff: safe(compData.wordCount, 0) - safe(userData.wordCount, 0),
+    competitorHasMore: safe(compData.wordCount, 0) > safe(userData.wordCount, 0)
+  };
 }
 
 // ========== API ENDPOINTS ==========

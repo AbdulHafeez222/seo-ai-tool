@@ -305,7 +305,7 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
   <br>
   <input id="keyword" placeholder="Keyword for Content Brief" style="width: 80%; margin-top: 10px;">
   <br>
-  <button onclick="scan()">🔍 Scan Website</button>
+  <button id="scanBtn" onclick="scan()">🔍 Scan Website</button>
   <button onclick="downloadPDF()">📄 Download PDF</button>
   <button onclick="loadHistory()">📊 History</button>
   <br>
@@ -561,6 +561,7 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
 const API_BASE = "https://seo-ai-tool-s47q.onrender.com";
 let seoChart = null, aeoChart = null, comparisonChart = null;
 let lastScanData = null;
+let scanInProgress = false;
 
 // ==== SAFE DOM HELPERS ====
 function setHTML(id, html) {
@@ -780,7 +781,7 @@ function analyzeInternalLinks(html, wordCount) {
   };
 } 
 
-function generateRoadmap(data) {
+function generateRoadmapData(data) {
   const tasks = [];
   
   if (!data.hasFAQSchema) {
@@ -806,7 +807,7 @@ function generateRoadmap(data) {
   return tasks;
 }
 
-function renderRoadmap(tasks) {
+function renderRoadmapSteps(tasks) {
   const html = tasks.map((t, i) => `
     <div class="card">
       <h4>${escapeHtml(t.title)}</h4>
@@ -1018,6 +1019,8 @@ function copyToClipboard(text, btn) {
 
 // ========== MAIN SCAN ==========
 async function scan() {
+  if (scanInProgress) return;
+
   const urlEl = document.getElementById("url");
   if (!urlEl) return alert("URL input not found");
   
@@ -1025,11 +1028,16 @@ async function scan() {
   if (!url) return alert("Enter URL");
   if (!url.startsWith("http")) url = "https://" + url;
 
+  scanInProgress = true;
+  const scanBtn = document.getElementById("scanBtn");
+  if (scanBtn) scanBtn.disabled = true;
+
   showLoading();
   hideAllCards();
   setHTML("result", "");
 
   try {
+    console.log("SCAN REQUEST SENT");
     const res = await fetch(`${API_BASE}/scan?url=${encodeURIComponent(url)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const rawData = await res.json();
@@ -1049,6 +1057,9 @@ async function scan() {
   } catch (err) {
     hideLoading();
     setHTML("result", `<div class="card">❌ Error: ${err.message}</div>`);
+  } finally {
+    scanInProgress = false;
+    if (scanBtn) scanBtn.disabled = false;
   }
 }
 
@@ -1482,6 +1493,7 @@ async function compareCompetitor() {
   
   showLoading();
   try { 
+    console.log("COMPARE REQUEST SENT");
     const res = await fetch(`${API_BASE}/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -1538,6 +1550,7 @@ async function generateRoadmap() {
   if (!lastScanData) return alert("Pehle Scan Website karo!");
   showLoading();
   try {
+    console.log("ROADMAP GENERATED");
     const urlEl = document.getElementById("url");
     if (!urlEl) return alert("URL input not found");
     const url = urlEl.value.trim();

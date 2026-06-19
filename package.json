@@ -1,20 +1,19 @@
 {
-  "name": "seo-ai-tool",
-  "version": "1.0.0",
-  "type": "module",
+  "name": "ai-visibility-intelligence-platform",
+  "version": "5.2.0",
+  "description": "Enterprise SaaS-grade AI and SEO Audit Visibility platform",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "axios": "^1.6.8",
-    "cheerio": "^1.2.0",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^4.22.2",
-    "mongoose": "^9.6.3"
+    "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18.0.0"
   }
 }

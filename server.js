@@ -495,6 +495,15 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
   const finalPeople = cleanList(people, ["Industry Specialist"]);
   const finalProducts = cleanList(products, ["Service Platform Matrix"]);
 
+  const structuredEntitiesList = [
+    ...finalBrands,
+    ...finalServices,
+    ...finalLocations,
+    ...finalPeople,
+    ...finalOrgs,
+    ...finalProducts
+  ];
+
   return {
     brands: finalBrands,
     locations: finalLocations,
@@ -502,7 +511,8 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
     people: finalPeople,
     organizations: finalOrgs,
     products: finalProducts,
-    totalEntities: finalBrands.length + finalLocations.length + finalServices.length + finalPeople.length + finalOrgs.length + finalProducts.length
+    entities: structuredEntitiesList,
+    totalEntities: structuredEntitiesList.length
   };
 }
 
@@ -1248,9 +1258,17 @@ export async function analyzeSingleUrl(url) {
   const mobileScore = mobileViewport ? seoScore : Math.max(0, seoScore - 20);
   const desktopScore = seoScore;
 
-  // Hardened Entity Scanner v2
+  // ========== CRITICAL FIX: STRUCTURE AND INITIALIZE ENTITIES SAFELY ==========
   const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas);
   const { brands, locations, services, people, organizations, products, totalEntities } = entityData;
+  const entities = entityData.entities || [
+    ...brands,
+    ...services,
+    ...locations,
+    ...people,
+    ...organizations,
+    ...products
+  ];
 
   const keywordInsights = safeArraySlice(keywords, 0, 5).map(k => ({
     keyword: k,
@@ -1282,7 +1300,6 @@ export async function analyzeSingleUrl(url) {
     });
   }
 
-  // ========== CRITICAL FIX: HOIST DEFINITION BEFORE OBJECT ASSIGNMENT ==========
   let aiExtractedAnswer = "No clear answer found";
   if (bodyText && bodyText.length > 50) {
     const firstPara = bodyText.split('.')[0];
@@ -1438,8 +1455,8 @@ export async function analyzeSingleUrl(url) {
     hasDirectAnswer,
     schemas: uniqueSchemas,
     recommendedSchemas,
-    keywords,
-    entities,
+    keywords: keywords || [],
+    entities: entities || [],
     readabilityScore,
     aiTrustScore,
     answerQualityScore: answerQuality,
@@ -1481,7 +1498,15 @@ export async function analyzeSingleUrl(url) {
     trustSignals,
     localSEO,
     visibilityTrend,
-    aiEntities: { brands, locations, services, people, organizations, products, totalEntities },
+    aiEntities: { 
+      brands: brands || [], 
+      locations: locations || [], 
+      services: services || [], 
+      people: people || [], 
+      organizations: organizations || [], 
+      products: products || [], 
+      totalEntities: totalEntities || 0 
+    },
     internalLinkIntelligence: internalLinkData,
     brokenLinkCount: 0,
     lcpScore: 1200

@@ -1,28 +1,29 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <title>SEO + AEO Tool - AI Visibility Platform v5.2</title>
+  <title>SEO + AEO Tool - AI Visibility Platform v5</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
  
 <style>
+
 /* ===== THEME VARIABLES ===== */
 :root {
   --bg-body: #f2f4f8;
   --bg-box: #ffffff;
-  --bg-card: #ffffff;
+  --bg-card: #f9f9f9;
   --bg-ai-box: #eef4ff;
   --text-primary: #1f2937;
   --text-secondary: #4b5563;
   --text-heading: #1e293b;
-  --text-muted: #666666;
+  --text-muted: #666;
   --border-color: #e2e8f0;
   --selection-bg: #2563eb;
   --selection-text: #ffffff;
   --score-text-on-dark: #ffffff;
 }
 
-/* DARK THEME */
+/* DARK THEME - sirf .dark use karo, .dark-mode nahi */
 body.dark {
   --bg-body: #0f172a;
   --bg-box: #1e293b;
@@ -36,14 +37,14 @@ body.dark {
   --selection-bg: #3b82f6;
 }
 
+/* ===== BASE ===== */
 body { 
-  font-family: Arial, sans-serif; 
+  font-family: Arial; 
   background: var(--bg-body); 
   color: var(--text-primary);
   padding: 20px; 
   text-align: center;
   transition: background 0.2s, color 0.2s;
-  margin: 0;
 }
 
 .box { 
@@ -59,7 +60,7 @@ input {
   width: 80%; 
   padding: 12px; 
   margin: 10px; 
-  border: 1px solid var(--border-color); 
+  border: 1px solid #ddd; 
   border-radius: 8px;
   background: var(--bg-box);
   color: var(--text-primary);
@@ -74,7 +75,6 @@ button {
   border-radius: 8px; 
   margin: 5px; 
   font-weight: 600; 
-  transition: background 0.1s;
 }
 button:hover { background: #1d4ed8; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -106,11 +106,13 @@ h3 {
   padding-bottom: 8px; 
 }
 
-p { color: var(--text-secondary); margin: 5px 0; }
+p { color: var(--text-secondary); }
 small { color: var(--text-muted) !important; }
 
+/* ===== CHARTS & SCORES ===== */
 .chartContainer { display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; margin: 20px 0; }
 .chartBox { position: relative; width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; }
+canvas { width: 100% !important; height: 100% !important; position: relative; z-index: 1; }
 
 .centerScore { 
   position: absolute; top: 50%; left: 50%; 
@@ -122,6 +124,70 @@ small { color: var(--text-muted) !important; }
 .centerScore span { 
   display: block; font-size: 12px; 
   font-weight: 500; color: var(--text-muted); margin-top: 2px; 
+}
+
+.score-circle {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100px !important;
+  height: 100px !important;
+  border-radius: 50% !important;
+  margin: 15px auto !important;
+}
+
+.score-circle span {
+  position: relative !important;
+  color: var(--score-text-on-dark) !important;
+  font-weight: 700 !important;
+  font-size: 20px !important;
+  z-index: 5 !important;
+  line-height: 1 !important;
+  text-shadow: 0px 0px 3px rgba(0,0,0,0.8) !important;
+}
+
+.score-circle-large {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 150px !important;
+  height: 150px !important;
+  border-radius: 50% !important;
+  margin: 20px auto !important;
+}
+
+.score-text { 
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  text-align: center !important; 
+  z-index: 10 !important; 
+}
+
+.score-number { 
+  display: block !important; 
+  font-size: 32px !important; 
+  font-weight: 700 !important; 
+  line-height: 1 !important;
+  color: var(--score-text-on-dark) !important;
+}
+
+.score-label { 
+  display: block !important; 
+  color: var(--score-text-on-dark) !important; 
+  font-size: 14px !important; 
+  margin-top: 4px !important; 
+  opacity: 0.8 !important; 
+}
+
+/* Extra span hide karo */
+.score-circle-large > span:not(.score-text span),
+#seoScoreCircle > span,
+#seoScoreCircle > div:not(.score-text) {
+  display: none !important;
 }
 
 /* ===== BADGES ===== */
@@ -136,6 +202,39 @@ body.dark .badge-red { background: #7f1d1d; color: #fecaca; }
 body.dark .badge-orange { background: #7c2d12; color: #fed7aa; }
 body.dark .badge-purple { background: #581c87; color: #e9d5ff; }
 
+/* ===== FAQ / DARK BOXES ===== */
+.faq-box, .ai-faq-box, .question-box {
+  background: #2a2a2a !important;
+  color: #ffffff !important;
+  padding: 16px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  border: 1px solid #444;
+}
+
+.faq-box strong, .ai-faq-box strong {
+  color: #00ff88 !important;
+  font-weight: 700;
+}
+
+.faq-box p, .ai-faq-box p {
+  color: #e0e0 !important;
+  margin: 8px 0 0;
+}
+
+pre {
+  color: #e0e0e0 !important;
+  background: #2a2a2a !important;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #444;
+}
+
+/* Impact/Fix colors */
+span[style*="color:#00ff88"], div[style*="Impact"] { color: #00ff88 !important; }
+span[style*="color:#ffaa00"], div[style*="Fix"] { color: #ffaa00 !important; }
+span[style*="color:#ff4444"] { color: #ff4444 !important; }
+
 /* ===== TABLES & LISTS ===== */
 ul { padding-left: 20px; }
 li { margin: 5px 0; color: var(--text-secondary); }
@@ -144,7 +243,7 @@ td, th { padding: 8px; border-bottom: 1px solid var(--border-color); text-align:
 details summary { cursor: pointer; font-weight: 600; padding: 8px 0; color: var(--text-heading); }
 
 /* ===== METRICS GRID ===== */
-.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
 .metric-box { 
   text-align: center; padding: 12px; 
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
@@ -157,33 +256,55 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
 /* ===== LOADING ===== */
 .loading { display: none; margin-top: 10px; font-size: 18px; }
 .spinner { 
-  border: 3px solid rgba(0, 0, 0, 0.1); border-top: 3px solid #2563eb; 
+  border: 3px solid #f3f3; border-top: 3px solid #2563eb; 
   border-radius: 50%; width: 20px; height: 20px; 
   animation: spin 1s linear infinite; display: inline-block; margin-left: 10px; 
 }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-/* ===== SELECTION FIX ===== */
+/* ===== SELECTION FIX - SAB SE ZAROORI ===== */
 *::selection {
   background: var(--selection-bg) !important;
   color: var(--selection-text) !important;
+  -webkit-text-fill-color: var(--selection-text) !important;
+  -webkit-text-stroke: 0 transparent !important;
+  text-shadow: none !important;
 }
+
+*::-moz-selection {
+  background: var(--selection-bg) !important;
+  color: var(--selection-text) !important;
+  text-shadow: none !important;
+}
+
+/* Score circles me selection band */
+.score-circle *, .score-circle-large *, .score-text *, 
+.score-number, .score-label, .centerScore {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  user-select: none !important;
+}
+
+.score-circle *::selection,
+.score-circle-large *::selection,
+.score-text *::selection {
+  background: transparent !important;
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
 </style>
 </head>
-<body class="dark">
-<div class="box" id="pdfReportContainer">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h2 style="margin: 0;">🚀 AI Visibility Intelligence Platform v5.2</h2>
-    <button onclick="toggleDarkMode()">🌙 Theme Toggle</button>
-  </div>
-  
+<body>
+<div class="box">
+  <h2>🚀 AI Visibility Intelligence Platform v5</h2>
+  <button onclick="toggleDarkMode()">🌙 Dark Mode</button>
   <input id="url" placeholder="Enter website URL" value="hafeezdigitalstudio.com">
   <br>
-  <input id="competitorUrl" placeholder="Competitor URL (for comparison)">
+  <input id="competitorUrl" placeholder="Competitor URL (for comparison)" style="width: 80%; margin-top: 10px;">
   <br>
-  <input id="keyword" placeholder="Keyword for Content Brief">
+  <input id="keyword" placeholder="Keyword for Content Brief" style="width: 80%; margin-top: 10px;">
   <br>
-  
   <button onclick="scan()">🔍 Scan Website</button>
   <button onclick="downloadPDF()">📄 Download PDF</button>
   <button onclick="loadHistory()">📊 History</button>
@@ -193,8 +314,7 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
   <button onclick="gapAnalysis()">🔍 Gap Analysis</button>
   <button onclick="keywordTheft()">💎 Keyword Theft</button>
   <button onclick="contentBrief()">📝 Content Brief</button>
-  <button onclick="runAutopilot()" style="background:#10b981;font-weight:bold;">🚀 AI AUTOPILOT v5.2</button>
-  
+  <button onclick="runAutopilot()" style="background:#10b981;font-weight:bold;">🚀 AI AUTOPILOT v5</button>
   <div class="loading" id="loading">⏳ Analyzing<span class="spinner"></span></div>
 
   <div class="chartContainer">
@@ -218,61 +338,6 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
     <div id="seoAuditResults"></div>
   </div>
 
-  <!-- TASK 3: Trend Widget Card -->
-  <div id="visibilityTrendCard" class="card" style="display:none">
-    <h3>📈 AI Visibility & Score Trend History</h3>
-    <canvas id="trendChart" style="max-height:220px;"></canvas>
-    <div id="visibilityTrendContent" style="margin-top:10px;"></div>
-  </div>
-
-  <!-- TASK 2: Competitor Advantage Card -->
-  <div id="competitorAdvantageCard" class="card" style="display:none">
-    <h3>⚔️ Competitor Advantage analysis</h3>
-    <div id="competitorAdvantageContent"></div>
-  </div>
-
-  <!-- TASK 1: Entity Analysis Card -->
-  <div id="entityCard" class="card" style="display:none;">
-    <h3>🏷️ Entity Extraction & Identity Analysis v2</h3>
-    <div id="entityResults"></div>
-  </div>
-
-  <!-- TASK 4: Semantic SEO Card -->
-  <div id="semanticSEOCard" class="card" style="display:none">
-    <h3>🧠 Semantic SEO Analysis & Gaps</h3>
-    <div id="semanticSEOContent"></div>
-  </div>
-
-  <!-- TASK 5: Topical Authority Card -->
-  <div id="topicalAuthorityCard" class="card" style="display:none">
-    <h3>📚 Topical Authority Matrix</h3>
-    <div id="topicalAuthorityContent"></div>
-  </div>
-
-  <!-- TASK 6: Citation Opportunities Card -->
-  <div id="citationOppCard" class="card" style="display:none">
-    <h3>🤖 AI Citation Opportunity Finder</h3>
-    <div id="citationOppContent"></div>
-  </div>
-
-  <!-- TASK 8: AI Snippet Engine -->
-  <div id="aiSnippetsCard" class="card" style="display:none">
-    <h3>✨ AI Snippet Generator</h3>
-    <div id="aiSnippetsContent"></div>
-  </div>
-
-  <!-- TASK 9: Internal Linking Intelligence Card -->
-  <div id="internalLinkCard" class="card" style="display:none;">
-    <h3>🔗 Internal Linking Flow Analyzer</h3>
-    <div id="internalLinkResults"></div>
-  </div>
-
-  <!-- TASK 7: Advanced EEAT Scanner -->
-  <div id="eeatCard" class="card" style="display:none;">
-    <h3>🛡️ E-E-A-T Advanced Scanner</h3>
-    <div id="eeatResults"></div>
-  </div>
-
   <div id="titleAnalyzerCard" class="card" style="display:none;">
     <h3>📝 Title Analyzer</h3>
     <div id="titleAnalyzerResults"></div>
@@ -288,14 +353,58 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
     <div id="headingResults"></div>
   </div>
 
+  <div id="internalLinkCard" class="card" style="display:none;">
+    <h3>🔗 Internal Linking Analyzer</h3>
+    <div id="internalLinkResults"></div>
+  </div>
+
   <div id="imageSeoCard" class="card" style="display:none;">
     <h3>🖼️ Image SEO Analyzer</h3>
     <div id="imageSeoResults"></div>
   </div>
 
+  <div id="entityCard" class="card" style="display:none;">
+    <h3>🏷️ Entity Extraction</h3>
+    <div id="entityResults"></div>
+  </div>
+
+  <div id="eeatCard" class="card" style="display:none;">
+    <h3>🛡️ E-E-A-T Analysis</h3>
+    <div id="eeatResults"></div>
+  </div>
+
   <div id="schemaCard" class="card" style="display:none;">
     <h3>📋 Schema Detection & Generator</h3>
     <div id="schemaResults"></div>
+  </div>
+
+<div id="aeoReadinessCard" class="card" style="display:none;">
+  <h3>🎯 Real AEO Readiness Score</h3>
+  <div class="score-display" style="text-align: center; margin: 15px 0;">
+    <div class="score-circle-large" id="aeoScoreCircle"></div>
+    <!-- Missing HTML Elements Added safely to support scripts -->
+    <div style="display:none;" id="aeoReadinessScore">0</div>
+  </div>
+  <div id="aeoSignalsList" style="margin-top: 15px;"></div>
+</div>
+
+  <div id="realCitationCard" class="card" style="display:none;">
+    <h3>📊 AI Citation Probability</h3>
+    <div class="grid-3">
+      <div class="metric-box">
+        <div class="metric-value" id="realChatGPT">0%</div>
+        <div class="metric-label">ChatGPT</div>
+      </div>
+      <div class="metric-box">
+        <div class="metric-value" id="realGemini">0%</div>
+        <div class="metric-label">Gemini</div>
+      </div>
+      <div class="metric-box">
+        <div class="metric-value" id="realPerplexity">0%</div>
+        <div class="metric-label">Perplexity</div>
+      </div>
+    </div>
+    <div id="citationReasonsList" style="margin-top: 15px; font-size: 13px; padding: 10px; background: #f0f0f0; border-radius: 5px;"></div>
   </div>
 
   <div id="competitorCard" class="card" style="display:none;">
@@ -344,33 +453,135 @@ body.dark .metric-box { background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 
   </div>
 
   <div id="autopilotCard" class="card" style="display:none;">
-    <h3>🚀 AI SEO AUTOPILOT</h3>
+    <h3>🚀 AI SEO AUTOPILOT v5</h3>
     <div id="autopilotResults"></div>
+  </div>
+
+  <div id="aiVisibilityCard" class="card" style="display:none;">
+    <h3>📈 AI Visibility Score Breakdown</h3>
+    <div id="aiVisibilityResults"></div>
   </div>
 
   <div id="result"></div>
 </div>
+  
+
+<!-- NEW FEATURE START: Topical Authority -->
+<div id="topicalAuthorityCard" class="card" style="display:none">
+  <h3>📚 Topical Authority Score</h3>
+  <div id="topicalAuthorityContent"></div>
+</div>
+<!-- NEW FEATURE END -->
+
+<!-- NEW FEATURE START: Semantic SEO -->
+<div id="semanticSEOCard" class="card" style="display:none">
+  <h3>🧠 Semantic SEO Analysis</h3>
+  <div id="semanticSEOContent"></div>
+</div>
+<!-- NEW FEATURE END -->
+
+<!-- NEW FEATURE START: Citation Opportunities -->
+<div id="citationOppCard" class="card" style="display:none">
+  <h3>🤖 AI Citation Opportunities</h3>
+  <div id="citationOppContent"></div>
+</div>
+<!-- NEW FEATURE END -->
+
+<!-- NEW FEATURE START: FAQ Expansion -->
+<div id="faqExpansionCard" class="card" style="display:none">
+  <h3>❓ AI-Friendly FAQ Expansion</h3>
+  <div id="faqExpansionContent"></div>
+</div>
+<!-- NEW FEATURE END -->
+
+<!-- NEW FEATURE START: AI Snippets -->
+<div id="aiSnippetsCard" class="card" style="display:none">
+  <h3>✨ AI Snippet Generator</h3>
+  <div id="aiSnippetsContent"></div>
+</div>
+
+
+<!-- NEW FEATURE START: Trust Signals -->
+<div id="trustSignalsCard" class="card" style="display:none">
+  <h3>🛡️ Trust Signal Scanner</h3>
+  <div id="trustSignalsContent"></div>
+</div>
+<!-- NEW FEATURE END -->
+
+<!-- NEW FEATURE START: Schema Opportunities -->
+<div id="schemaOppCard" class="card" style="display:none">
+  <h3>📋 Schema Opportunity Finder</h3>
+  <div id="schemaOppContent"></div>
+</div>
+
+<!-- NEW FEATURE START: Local SEO -->
+<div id="localSeoCard" class="card" style="display:none">
+  <h3>📍 Local SEO Analyzer</h3>
+  <div id="localSEOContent"></div>
+</div>
+<!-- v5.1 FEATURES START -->
+<div id="brokenLinksCard" class="card" style="display:none">
+  <h3>🔗 Broken Link Checker</h3>
+  <div id="brokenLinksContent"></div>
+</div>
+
+<div id="coreWebVitalsCard" class="card" style="display:none">
+  <h3>⚡ Core Web Vitals</h3>
+  <div id="coreWebVitalsContent"></div>
+</div>
+
+<div id="linkOpportunityCard" class="card" style="display:none">
+  <h3>🔍 Internal Link Opportunities</h3>
+  <div id="linkOpportunityContent"></div>
+</div>
+
+<div id="contentDecayCard" class="card" style="display:none">
+  <h3>📉 Content Decay Detector</h3>
+  <div id="contentDecayContent"></div>
+</div>
+
+<div id="featuredSnippetCard" class="card" style="display:none">
+  <h3>🎯 Featured Snippet Generator</h3>
+  <div id="featuredSnippetContent"></div>
+</div>
+
+<div id="peopleAlsoAskCard" class="card" style="display:none">
+  <h3>❓ People Also Ask Generator</h3>
+  <div id="peopleAlsoAskContent"></div>
+</div>
+
+<div id="visibilityTrendCard" class="card" style="display:none">
+  <h3>📈 AI Visibility Trend</h3>
+  <canvas id="trendChart" style="max-height:200px;"></canvas>
+  <div id="visibilityTrendContent"></div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const API_BASE = window.location.origin;
-let seoChart = null, aeoChart = null, comparisonChart = null, trendChartInstance = null;
+const API_BASE = "https://seo-ai-tool-s47q.onrender.com";
+let seoChart = null, aeoChart = null, comparisonChart = null;
 let lastScanData = null;
 
-// Safe element wrappers
+// ==== SAFE DOM HELPERS ====
 function setHTML(id, html) {
   const el = document.getElementById(id);
-  if (el) el.innerHTML = html;
+  if (el) {
+    el.innerHTML = html;
+  }
 }
 
 function setStyle(id, prop, value) {
   const el = document.getElementById(id);
-  if (el) el.style.setProperty(prop, value);
+  if (el) {
+    el.style.setProperty(prop, value);
+  }
 }
 
 function setText(id, text) {
   const el = document.getElementById(id);
-  if (el) el.textContent = text;
+  if (el) {
+    el.textContent = text;
+  }
 }
 
 function showCard(cardId, contentId, html) {
@@ -387,258 +598,678 @@ function escapeHtml(text = "") {
     .replace(/>/g, "&gt;");
 }
 
-function showLoading() { setStyle("loading", 'display', 'block'); }
-function hideLoading() { setStyle("loading", 'display', 'none'); }
+function unescapeHtml(text) {
+  if (!text) return '';
+  const txt = document.createElement('textarea');
+  txt.innerHTML = String(text);
+  return txt.value;
+}
 
+// NEW FEATURE START: Copy Functions
+function copyFAQs() {
+  if (!lastScanData?.faqExpansion) return;
+  const text = lastScanData.faqExpansion.map((f, i) => `Q${i+1}: ${f.q}\nA: ${f.a}`).join('\n\n');
+  navigator.clipboard.writeText(text);
+  alert('FAQs copied!');
+}
+
+function extractEntities(text) {
+  const stopWords = [
+    'chat','reply','minutes','today','click','here','direct','worldwide',
+    'clients','services','business','money','read','more','contact','us',
+    'home','about','privacy','terms','copyright'
+  ];
+  
+  const words = text.match(/\b[A-Z][a-z]{2,}\b/g) || [];
+  const entities = [...new Set(words)]
+   .filter(w => !stopWords.includes(w.toLowerCase()))
+   .filter(w => w.length > 2);
+  
+  return entities.slice(0, 15);
+}
+
+function generateFAQ(text, mainKeyword) {
+  const genericWords = ['clients','services','business','today','money','website','company'];
+  
+  let keywords = text.toLowerCase().match(/\b[a-z]{5,}\b/g) || [];
+  keywords = [...new Set(keywords)]
+   .filter(k => k.length >= 5)
+   .filter(k => !genericWords.includes(k))
+   .filter(k => k !== mainKeyword.toLowerCase())
+   .slice(0, 5);
+  
+  if (keywords.length === 0) return [];
+  
+  return keywords.map(k => ({
+    q: `How does ${k} help with ${mainKeyword}?`,
+    a: `${capitalize(k)} is important for ${mainKeyword} because it directly impacts results and user experience.`
+  }));
+}
+
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function copySnippet(type) {
+  if (!lastScanData?.aiSnippets) return;
+  const text = type === 'direct' ? lastScanData.aiSnippets.directAnswer : lastScanData.aiSnippets.featuredSnippet;
+  navigator.clipboard.writeText(text);
+  alert('Snippet copied!');
+}
+  
+const topicalClusters = {
+  seo: [
+    "backlinks", "keyword research", "technical seo", "local seo", 
+    "content marketing", "on page seo", "off page seo", "link building", 
+    "serp", "meta tags", "schema markup"
+  ],
+  marketing: [
+    "social media", "email marketing", "ppc", "conversion", "funnel", 
+    "branding", "leads", "ads", "campaign"
+  ],
+  business: [
+    "strategy", "growth", "revenue", "customers", "sales", 
+    "b2b", "b2c", "saas", "startup"
+  ]
+};
+
+function calculateTopicAuthority(text, niche = 'seo') {
+  const cluster = topicalClusters[niche] || topicalClusters.seo;
+  const lowerText = text.toLowerCase();
+  
+  let covered = 0;
+  let coveredTopics = [];
+  cluster.forEach(topic => {
+    if (lowerText.includes(topic)) {
+      covered++;
+      coveredTopics.push(topic);
+    }
+  });
+  
+  const score = Math.round((covered / cluster.length) * 100);
+  const depth = score > 70 ? 'Deep' : score > 40 ? 'Medium' : 'Shallow';
+  
+  return {
+    score,
+    depth,
+    topicsCovered: covered,
+    totalTopics: cluster.length,
+    coveredList: coveredTopics
+  };
+}
+
+function calculateNLPScore(text, entities, keywords) {
+  const wordCount = text.split(/\s+/).length;
+  
+  const entityCoverage = Math.min(entities.length / 10, 1) * 100;
+  const keywordCoverage = Math.min(keywords.length / 20, 1) * 100;
+  const contentDepth = Math.min(wordCount / 1500, 1) * 100;
+  
+  const nlpScore = Math.round(
+    (entityCoverage * 0.4) +
+    (keywordCoverage * 0.3) +
+    (contentDepth * 0.3)
+  );
+  
+  return {
+    nlpScore,
+    entityCount: entities.length,
+    semanticKeywords: keywords.length,
+    topicCoverage: Math.round(contentDepth)
+  };
+}
+
+function scanTrustSignals(html) {
+  const hasPhone = /(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.test(html);
+  const hasEmail = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(html);
+  const hasContactPage = /href=["'].*contact.*["']/i.test(html);
+  const hasAddress = /address|street|suite|road/i.test(html);
+  
+  const hasContact = hasPhone || hasEmail || hasContactPage || hasAddress;
+  
+  return {
+    hasContact,
+    hasPhone,
+    hasEmail,
+    hasContactPage,
+    hasAddress,
+    hasAuthor: /author|written by/i.test(html),
+    hasSSL: window.location.protocol === 'https:'
+  };
+}
+
+function simulateCitation(data) {
+  const reasons = [];
+  let willCite = true;
+  
+  if (!data.hasFAQSchema) {
+    willCite = false;
+    reasons.push('No FAQ Schema');
+  }
+  if (data.eeAtScore < 60) {
+    willCite = false;
+    reasons.push('Low E-E-A-T');
+  }
+  if (!data.hasAuthor) {
+    willCite = false;
+    reasons.push('No Author');
+  }
+  if (data.wordCount < 300) {
+    willCite = false;
+    reasons.push('Thin Content');
+  }
+  
+  return {
+    willCite: willCite ? 'Yes' : 'No',
+    confidence: willCite ? 85 : 20,
+    reasons: reasons.length ? reasons : ['All checks passed']
+  };
+}
+
+function analyzeInternalLinks(html, wordCount) {
+  const internalLinks = (html.match(/<a[^>]+href=["'](?!http|mailto|tel)/gi) || []).length;
+  const authorityFlow = Math.min(
+    Math.round((internalLinks / Math.max(wordCount / 500, 1)) * 100),
+    100
+  );
+  
+  return {
+    internalLinks,
+    authorityFlow,
+    status: authorityFlow > 60 ? 'Good' : authorityFlow > 30 ? 'Average' : 'Weak'
+  };
+} 
+
+function generateRoadmap(data) {
+  const tasks = [];
+  
+  if (!data.hasFAQSchema) {
+    tasks.push({
+      title: 'Add FAQ Schema',
+      code: `<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [{
+    "@type": "Question",
+    "name": "Question here?",
+    "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Answer here"
+    }
+  }]
+}
+<\/script>`
+    });
+  }
+  
+  return tasks;
+}
+
+function renderRoadmap(tasks) {
+  const html = tasks.map((t, i) => `
+    <div class="card">
+      <h4>${escapeHtml(t.title)}</h4>
+      <button onclick="toggleCode('code${i}')">Show Code</button>
+      <pre id="code${i}" style="display:none;background:#1e293b;color:#00ff88;padding:10px;border-radius:4px;overflow:auto;"><code>${escapeHtml(t.code)}</code></pre>
+    </div>
+  `).join('');
+  
+  setHTML('roadmapResults', html);
+}
+
+function toggleCode(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function calculateAdvantage(yourData, competitorData) {
+  const seoAdv = yourData.seoScore - competitorData.seoScore;
+  const aeoAdv = yourData.aeoScore - competitorData.aeoScore;
+  const trustAdv = yourData.trustScore - competitorData.trustScore;
+  
+  const netAdvantage = seoAdv + aeoAdv + trustAdv;
+  
+  return {
+    seo: seoAdv > 0 ? `+${seoAdv}` : seoAdv,
+    aeo: aeoAdv > 0 ? `+${aeoAdv}` : aeoAdv,
+    trust: trustAdv > 0 ? `+${trustAdv}` : trustAdv,
+    netAdvantage: netAdvantage > 0 ? `+${netAdvantage}` : netAdvantage,
+    verdict: netAdvantage > 10 ? 'You are winning' : netAdvantage < -10 ? 'Competitor is winning' : 'Close fight'
+  };
+}
+
+function renderAdvantage(adv) {
+  setHTML('advantageResults', `
+    <h3>Competitor Advantage</h3>
+    <p><strong>SEO:</strong> ${adv.seo}</p>
+    <p><strong>AEO:</strong> ${adv.aeo}</p>
+    <p><strong>Trust:</strong> ${adv.trust}</p>
+    <hr>
+    <p><strong>Net Advantage:</strong> ${adv.netAdvantage}</p>
+    <p><strong>Verdict:</strong> ${adv.verdict}</p>
+  `);
+}
+
+function renderV51Features(data) {
+  const v51 = data.v51Features;
+  if (!v51) return;
+
+  // Broken Links
+  if (v51.brokenLinks) {
+    const score = v51.brokenLinks.healthScore || 0;
+    const color = score > 80 ? '#00ff88' : '#ffaa00';
+    
+    showCard('brokenLinksCard', 'brokenLinksContent', `
+      <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
+        <div class="score-text">
+          <span class="score-number" style="color:${color}">${score}</span>
+          <span class="score-label">Health</span>
+        </div>
+      </div>
+      <div style="margin-top:15px; text-align:left; font-size:14px; color:#333">
+        <p><strong>Total Checked:</strong> ${v51.brokenLinks.totalChecked || 0}</p>
+        <p><strong>Broken:</strong> <span style="color:#ff0000">${v51.brokenLinks.brokenCount || 0}</span></p>
+        ${(v51.brokenLinks.brokenLinks || []).slice(0, 5).map(l => `<div style="font-size:12px;color:#ff6666">✗ ${l.url}</div>`).join('')}
+      </div>
+    `);
+  }
+
+  // Core Web Vitals
+  if (v51.coreWebVitals) {
+    const cwv = v51.coreWebVitals;
+    showCard('coreWebVitalsCard', 'coreWebVitalsContent', `
+      <div class="grid-3">
+        <div class="metric-box"><div class="metric-value">${cwv.lcp || 0}ms</div><div class="metric-label">LCP <span class="badge badge-${cwv.lcpGrade === 'Good' ? 'green' : 'orange'}">${cwv.lcpGrade || 'N/A'}</span></div></div>
+        <div class="metric-box"><div class="metric-value">${cwv.cls || 0}</div><div class="metric-label">CLS <span class="badge badge-${cwv.clsGrade === 'Good' ? 'green' : 'orange'}">${cwv.clsGrade || 'N/A'}</span></div></div>
+        <div class="metric-box"><div class="metric-value">${cwv.performanceScore || 0}</div><div class="metric-label">Performance</div></div>
+      </div>
+      <p style="margin-top:10px"><strong>Fix:</strong> ${cwv.recommendations || 'No recommendations'}</p>
+    `);
+  }
+
+  // Link Opportunity
+  if (v51.linkOpportunity) {
+    showCard('linkOpportunityCard', 'linkOpportunityContent', `
+      <p><strong>Domain:</strong> ${v51.linkOpportunity.domain || 'N/A'}</p>
+      <p><strong>DR Estimate:</strong> ${v51.linkOpportunity.drEstimate || 'N/A'}</p>
+      <p><strong>Authority Score:</strong> ${v51.linkOpportunity.authorityScore || 0}</p>
+      <p><strong>Opportunity Score:</strong> ${v51.linkOpportunity.opportunityScore || 0}/100</p>
+      <p><strong>Effort:</strong> ${v51.linkOpportunity.effort || 'Low'}</p>
+    `);
+  }
+
+  // Content Decay
+  if (v51.contentDecay) {
+    const freshness = v51.contentDecay.freshnessScore || 0;
+    const color = freshness > 80 ? '#00ff88' : freshness > 60 ? '#ffaa00' : '#ff4444';
+    showCard('contentDecayCard', 'contentDecayContent', `
+      <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${freshness}%, #2d3748 ${freshness}% 100%);">
+        <div class="score-text">
+          <span class="score-number" style="color:${color}">${freshness}</span>
+          <span class="score-label">Freshness</span>
+        </div>
+      </div>
+      <p style="margin-top:10px"><strong>Days Since Update:</strong> ${v51.contentDecay.daysSinceUpdate || 0}</p>
+      <p><strong>Decay Stage:</strong> ${v51.contentDecay.decayStage || 'N/A'}</p>
+      <p><strong>Recommendation:</strong> ${v51.contentDecay.recommendation || 'No decay detected'}</p>
+    `);
+  }
+
+  // Featured Snippet
+  if (v51.featuredSnippet) {
+    const score = v51.featuredSnippet.optimizationScore || 0;
+    showCard('featuredSnippetCard', 'featuredSnippetContent', `
+      <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #e0e0e0 ${score}% 100%);">
+        <span>${score}</span>
+      </div>
+      <p><strong>Current Winner:</strong> ${v51.featuredSnippet.currentWinner || 'None'}</p>
+      <p><strong>Your Chances:</strong> ${v51.featuredSnippet.yourChances || 0}%</p>
+      <p><strong>Fix:</strong> ${v51.featuredSnippet.howToWin || 'No updates required'}</p>
+    `);
+  }
+
+  // People Also Ask
+  if (v51.peopleAlsoAsk) {
+    showCard('peopleAlsoAskCard', 'peopleAlsoAskContent', `
+      <p><strong>Coverage:</strong> ${v51.peopleAlsoAsk.coverage || 0}%</p>
+      <p><strong>Questions Answered:</strong> ${v51.peopleAlsoAsk.answeredCount || 0}/${v51.peopleAlsoAsk.totalQuestions || 0}</p>
+      <div style="margin-top:10px">
+        ${(v51.peopleAlsoAsk.missingQuestions || []).map(q => `<div style="padding:5px; background:#222; margin:5px 0">❓ ${q}</div>`).join('')}
+      </div>
+    `);
+  }
+
+  // Visibility Trend
+  if (v51.visibilityTrend) {
+    showCard('visibilityTrendCard', 'visibilityTrendContent', `
+      <p><strong>Trend:</strong> <span style="color:${v51.visibilityTrend.trend === 'Rising' ? '#00ff88' : '#ffaa00'}">${v51.visibilityTrend.trend || 'Stable'}</span></p>
+      <p><strong>Change:</strong> ${v51.visibilityTrend.change || '0'}</p>
+      <p><strong>Confidence:</strong> ${v51.visibilityTrend.confidence || 0}%</p>
+      <p><strong>Next Action:</strong> ${v51.visibilityTrend.nextAction || 'Keep tracking'}</p>
+    `);
+  }
+}
+
+const fixData = (data) => ({
+  ...data,
+  overallAIVisibilityScore: data.overallAIVisibilityScore ?? data.overall ?? data.aiVisibilityScore ?? 0,
+  answerQuality: data.answerQuality ?? data.answerQualityScore ?? 50,
+  mobileScore: data.mobileScore ?? (data.mobileFriendly ? data.score : Math.max(0, (data.score || 0) - 20)) ?? 0,
+  desktopScore: data.desktopScore ?? data.score ?? 0,
+  serpPreview: {
+    title: data.serpPreview?.title || data.title || "No title",
+    displayUrl: data.serpPreview?.displayUrl || (data.url ? data.url.replace(/^https?:\/\//, '').replace(/\/$/, '') : ""),
+    description: data.serpPreview?.description || data.metaDescription || "No description"
+  },
+  score: data.score ?? 0,
+  aeoScore: data.aeoScore ?? 0,
+  aiTrustScore: data.aiTrustScore ?? 0,
+  readabilityScore: data.readabilityScore ?? 50,
+  criticalIssues: data.criticalIssues || [],
+  importantIssues: data.importantIssues || [],
+  minorIssues: data.minorIssues || [],
+  keywords: data.keywords || [],
+  aiAutopilot: data.aiAutopilot || []
+});
+
+// ========== UTILITY FUNCTIONS ==========
+function showLoading() { 
+  setStyle("loading", 'display', 'block'); 
+}
+function hideLoading() { 
+  setStyle("loading", 'display', 'none'); 
+}
 function hideAllCards() {
   ["aiSimulationCard","seoAuditCard","titleAnalyzerCard","metaAnalyzerCard","headingCard",
-   "internalLinkCard","imageSeoCard","entityCard","eeatCard","schemaCard",
-   "competitorCard","gapCard","roadmapCard","keywordTheftCard","visibilityTrendCard",
-   "briefCard","autopilotCard","topicalAuthorityCard","semanticSEOCard",
-   "citationOppCard","aiSnippetsCard","competitorAdvantageCard"].forEach(id => {
+   "internalLinkCard","imageSeoCard","entityCard","eeatCard","schemaCard","aeoReadinessCard",
+   "realCitationCard","competitorCard","gapCard","roadmapCard","keywordTheftCard",
+   "briefCard","autopilotCard","aiVisibilityCard","topicalAuthorityCard","semanticSEOCard",
+   "citationOppCard","faqExpansionCard","aiSnippetsCard","trustSignalsCard","schemaOppCard",
+   "localSeoCard","brokenLinksCard","coreWebVitalsCard","linkOpportunityCard",
+   "contentDecayCard","featuredSnippetCard","peopleAlsoAskCard","visibilityTrendCard"].forEach(id => {
     setStyle(id, 'display', 'none');
   });
 }
 
-function toggleDarkMode() {
-  document.body.classList.toggle("dark");
+function saveToHistory(data) {
+  try {
+    let history = JSON.parse(localStorage.getItem('scanHistory') || '[]');
+    history.unshift({
+      url: data.url, score: data.overallAIVisibilityScore || 0,
+      seoScore: data.score || 0, aeoScore: data.aeoScore || 0,
+      timestamp: new Date().toISOString()
+    });
+    history = history.slice(0, 20);
+    localStorage.setItem('scanHistory', JSON.stringify(history));
+  } catch (e) { console.error('History save error:', e); }
 }
 
+function copyToClipboard(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const original = btn.innerText;
+    btn.innerText = 'Copied!';
+    setTimeout(() => btn.innerText = original, 2000);
+  }).catch(err => {
+    console.error("Clipboard copy failed: ", err);
+  });
+}
+
+// ========== MAIN SCAN ==========
 async function scan() {
   const urlEl = document.getElementById("url");
-  if (!urlEl) return;
-  let url = urlEl.value.trim();
-  if (!url) return alert("Please supply target URL");
+  if (!urlEl) return alert("URL input not found");
   
+  let url = urlEl.value.trim();
+  if (!url) return alert("Enter URL");
+  if (!url.startsWith("http")) url = "https://" + url;
+
   showLoading();
   hideAllCards();
   setHTML("result", "");
 
   try {
-    const res = await fetch(`/scan?url=${encodeURIComponent(url)}`);
-    const data = await res.json();
+    const res = await fetch(`${API_BASE}/scan?url=${encodeURIComponent(url)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rawData = await res.json();
+    const data = fixData(rawData);
+    lastScanData = data;
+    saveToHistory(data);
     hideLoading();
     
-    if (data.isBlocked) {
-      setHTML("result", `<div class="card">❌ Anti-bot firewall detected on endpoint. Programmatic scanning restricted.</div>`);
+    if (data.error) {
+      setHTML("result", `<div class="card">❌ ${data.error}</div>`);
       return;
     }
     
-    lastScanData = data;
     renderAllResults(data);
+    renderV51Features(data);
+    
   } catch (err) {
     hideLoading();
-    setHTML("result", `<div class="card">❌ Scan Error: ${err.message}</div>`);
+    setHTML("result", `<div class="card">❌ Error: ${err.message}</div>`);
   }
 }
 
 function renderAllResults(data) {
   renderCharts(data);
+  renderBasicResults(data);
+  renderSchemaGenerator(data);
+  renderSEOAudit(data);
+  renderTitleAnalyzer(data);
+  renderMetaAnalyzer(data);
+  renderHeadingStructure(data);
+  renderInternalLinking(data);
+  renderImageSEO(data);
+  renderEntities(data);
+  renderEEAT(data);
+  renderAISimulation(data);
+  renderAEOReadiness(data);
+  renderCitationProbability(data);
+  renderAIVisibility(data);
+
+  // NEW FEATURES - FIXED WITH SAFE DOM HELPER
+  if (data.topicalAuthority) {
+    const score = Math.round(data.topicalAuthority.score || 0);
+    showCard('topicalAuthorityCard', 'topicalAuthorityContent', `
+      <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #e0e0e0 ${score}% 100%);">
+        <span>${score}</span>
+      </div>
+      <p><strong>Depth:</strong> ${data.topicalAuthority.depth || 'N/A'}</p>
+      <p><strong>Topics Covered:</strong> ${data.topicalAuthority.topicsCovered || 0}/9</p>
+    `);
+  }
+
+  if (data.semanticSEO) {
+    showCard('semanticSEOCard', 'semanticSEOContent', `
+      <p><strong>NLP Score:</strong> ${data.semanticSEO.nlpScore || 0}/100</p>
+      <p><strong>Entities Found:</strong> ${(data.semanticSEO.entities || []).join(', ') || 'None'}</p>
+      <p><strong>Semantic Gaps:</strong> ${(data.semanticSEO.semanticGaps || []).join(', ') || 'None'}</p>
+      <p><strong>Semantic HTML:</strong> ${data.semanticSEO.hasSemanticHTML ? '✓ Yes' : '✗ No'}</p>
+    `);
+  }
+
+  if (data.citationOpportunities) {
+    showCard('citationOppCard', 'citationOppContent', (data.citationOpportunities || []).map(opp => `
+      <div class="opp-item" style="margin:10px 0; padding:10px; background:#222; border-left:3px solid #00ff88">
+        <strong>${opp.engine || 'Engine'}:</strong> ${opp.reason || 'No details'}<br>
+        <span style="color:#00ff88">Impact: ${opp.impact || 'Medium'}</span> | 
+        <span style="color:#ffaa00">Fix: ${opp.fix || 'Needed'}</span>
+      </div>
+    `).join(''));
+  }
+
+  if (data.faqExpansion) {
+    showCard('faqExpansionCard', 'faqExpansionContent', (data.faqExpansion || []).map((faq, i) => `
+      <div style="margin:10px 0; padding:10px; background:#222">
+        <strong>Q${i+1}: ${faq.q || ''}</strong><br>
+        <span style="color:#aaa">A: ${faq.a || ''}</span>
+      </div>
+    `).join('') + `<br><button onclick="copyFAQs()">📋 Copy All FAQs</button>`);
+  }
+
+  if (data.aiSnippets) {
+    showCard('aiSnippetsCard', 'aiSnippetsContent', `
+      <div style="margin:10px 0">
+        <strong>Direct Answer (${data.aiSnippets.wordCount || 0} words):</strong>
+        <div style="background:#222; padding:10px; margin:5px 0">${data.aiSnippets.directAnswer || ''}</div>
+        <button onclick="copySnippet('direct')">Copy Direct Answer</button>
+      </div>
+      <div style="margin:10px 0">
+        <strong>Featured Snippet Block:</strong>
+        <pre style="background:#222; padding:10px; white-space:pre-wrap">${data.aiSnippets.featuredSnippet || ''}</pre>
+        <button onclick="copySnippet('featured')">Copy Featured Snippet</button>
+      </div>
+    `);
+  }
+
+  if (data.trustSignals) {
+    const signals = data.trustSignals;
+    const score = Math.round(signals.trustScore || 0);
+    const color = score > 70 ? '#00ff88' : score > 40 ? '#ffaa00' : '#ff4444';
+    
+    showCard('trustSignalsCard', 'trustSignalsContent', `
+      <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
+        <div class="score-text">
+          <span class="score-number" style="color:${color}">${score}</span>
+        </div>
+      </div>
+      <div style="margin-top:15px; font-size:14px; color:#333; text-align:left">
+        <p><strong>Signals Found:</strong></p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px">
+          <div>${signals.hasAuthor ? '✓' : '✗'} Author</div>
+          <div>${signals.hasContact ? '✓' : '✗'} Contact</div>
+          <div>${signals.hasAbout ? '✓' : '✗'} About</div>
+          <div>${signals.hasPrivacyPolicy ? '✓' : '✗'} Privacy Policy</div>
+          <div>${signals.hasSocialProfiles ? '✓' : '✗'} Social Profiles</div>
+          <div>${signals.hasReviews ? '✓' : '✗'} Reviews</div>
+          <div>${signals.hasTestimonials ? '✓' : '✗'} Testimonials</div>
+        </div>
+      </div>
+    `);
+  }
   
+  if (data.schemaOpportunities) {
+    showCard('schemaOppCard', 'schemaOppContent', (data.schemaOpportunities || []).map(opp => `
+      <div style="margin:10px 0; padding:10px; background:#222; border-left:3px solid ${opp.priority==='CRITICAL'?'#ff0000':opp.priority==='HIGH'?'#ffaa00':'#00ff88'}">
+        <strong>${opp.type || 'Schema'}</strong> <span style="color:#ffaa00">[${opp.priority || 'NORMAL'}]</span><br>
+        ${opp.reason || ''}<br>
+        <span style="color:#00ff88">Impact: ${opp.impact || 'High'}</span>
+      </div>
+    `).join(''));
+  }
+
+  if (data.localSEO) {
+    const score = Math.round(data.localSEO.localScore || 0);
+    showCard('localSeoCard', 'localSeoContent', `
+      <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #2d3748 ${score}% 100%);">
+        <span>${score}</span>
+      </div>
+      <div style="margin-top:15px">
+        <p><strong>Detected:</strong> ${(data.localSEO.detected || []).join(', ') || 'None'}</p>
+        <p><strong>Missing:</strong> ${(data.localSEO.missing || []).join(', ') || 'None'}</p>
+      </div>
+    `);
+  }
+
+  if (data.aeoReadiness) {
+    const score = Math.round(data.aeoReadiness.score || 0);
+    const grade = score >= 80 ? 'A+' : score >= 60 ? 'B' : score >= 40 ? 'C' : 'D';
+    const color = score >= 80 ? '#00ff88' : score >= 60 ? '#ffa500' : '#ff4444';
+    
+    setStyle('aeoReadinessCard', 'display', 'block');
+    
+    setHTML('aeoScoreCircle', `
+      <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
+        <div class="score-text">
+          <span class="score-number" style="color:${color}">${score}</span>
+          <span class="score-label">AEO ${grade}</span>
+        </div>
+      </div>
+    `);
+    
+    setText('aeoReadinessScore', score);
+    
+    if (data.aeoReadiness.signals) {
+      setHTML('aeoSignalsList', `
+        <div style="font-size:14px; color:#666; text-align:left">
+          ${(data.aeoReadiness.signals || []).map(s => 
+            `${s.found ? '✓' : '✗'} ${s.name || ''}`
+          ).join('<br>')}
+        </div>
+      `);
+    }
+  }
+}
+
+function renderBasicResults(data) {
   setHTML("result", `
     <div class="card">
-      <h3>📊 Site Status Audit: <span class="badge badge-green">${data.aiVisibilityLevel || 'Analyzed'}</span></h3>
-      <p><b>Target URL:</b> ${escapeHtml(data.url)}</p>
-      <p><b>Title Tag:</b> ${escapeHtml(data.title)}</p>
-      <p><b>Meta Description:</b> ${escapeHtml(data.metaDescription)}</p>
-      <p><b>Page Words count:</b> ${data.wordCount || 0}</p>
+      <h3>📊 SEO Status: ${escapeHtml(data.status || 'Scanned')} <span class="badge badge-${(data.score || 0) >= 80 ? 'green' : (data.score || 0) >= 60 ? 'orange' : 'red'}">${data.score || 0}/100</span></h3>
+      <p><b>URL:</b> ${escapeHtml(data.url || '')}</p>
+      <p><b>Title:</b> ${escapeHtml(unescapeHtml(data.title)) || 'Not Found'}</p>
+      <p><b>H1:</b> ${escapeHtml(unescapeHtml(data.h1)) || 'Not Found'}</p>
+      <p><b>Word Count:</b> ${data.wordCount || 0}</p>
     </div>
   `);
-
-  // Render detailed SEO audit Issues
-  if (data.criticalIssues) {
-    showCard("seoAuditCard", "seoAuditResults", `
-      <div class="grid-3">
-        <div class="metric-box" style="background:#dc2626;"><h4>${data.criticalIssues.length}</h4><span>Critical Problems</span></div>
-        <div class="metric-box" style="background:#f59e0b;"><h4>${data.importantIssues?.length || 0}</h4><span>Important Issues</span></div>
-        <div class="metric-box" style="background:#3b82f6;"><h4>${data.minorIssues?.length || 0}</h4><span>Minor Warnings</span></div>
-      </div>
-      <ul>${data.criticalIssues.map(i => `<li style="color:#f87171;">❌ ${escapeHtml(i)}</li>`).join('')}</ul>
-    `);
-  }
-
-  // Render Title and Metadata details
-  showCard("titleAnalyzerCard", "titleAnalyzerResults", `
-    <p><b>Title:</b> ${escapeHtml(data.title)}</p>
-    <p><b>Status:</b> ${data.title?.length > 60 ? 'Too Long' : 'Optimal Length'}</p>
-  `);
-  showCard("metaAnalyzerCard", "metaAnalyzerResults", `
-    <p><b>Description:</b> ${escapeHtml(data.metaDescription)}</p>
-  `);
-
-  // TASK 1: Entity Extraction Engine v2
-  if (data.aiEntities) {
-    const ent = data.aiEntities;
-    showCard("entityCard", "entityResults", `
-      <div class="grid-3">
-        <div class="metric-box"><h4>Brands</h4><p>${ent.brands?.join(', ') || 'N/A'}</p></div>
-        <div class="metric-box"><h4>Locations</h4><p>${ent.locations?.join(', ') || 'N/A'}</p></div>
-        <div class="metric-box"><h4>Services</h4><p>${ent.services?.join(', ') || 'N/A'}</p></div>
-        <div class="metric-box"><h4>Organizations</h4><p>${ent.organizations?.join(', ') || 'N/A'}</p></div>
-        <div class="metric-box"><h4>People</h4><p>${ent.people?.join(', ') || 'N/A'}</p></div>
-        <div class="metric-box"><h4>Products</h4><p>${ent.products?.join(', ') || 'N/A'}</p></div>
-      </div>
-    `);
-  }
-
-  // TASK 4: Semantic SEO Card
-  if (data.semanticSEO) {
-    const sem = data.semanticSEO;
-    showCard("semanticSEOCard", "semanticSEOContent", `
-      <div style="font-size:24px; font-weight:bold; color:#3b82f6; margin-bottom:10px;">NLP Score: ${sem.nlpScore}/100</div>
-      <p><b>Topic Coverage:</b> ${sem.topicCoverage}% | <b>Content Depth:</b> ${sem.contentDepth}</p>
-      <p><b>Semantic Gaps Identified:</b> ${sem.semanticGaps?.join(', ') || 'None'}</p>
-      <p><b>Recommendations:</b></p>
-      <ul>${sem.recommendations?.map(r => `<li>💡 ${escapeHtml(r)}</li>`).join('')}</ul>
-    `);
-  }
-
-  // TASK 5: Topical Authority Card
-  if (data.topicalAuthority) {
-    const top = data.topicalAuthority;
-    showCard("topicalAuthorityCard", "topicalAuthorityContent", `
-      <div style="font-size:24px; font-weight:bold; color:#10b981; margin-bottom:10px;">Authority: ${top.authorityScore}/100</div>
-      <p><b>Niche Coverage:</b> ${top.coveragePercent}%</p>
-      <p><b>Missing Query Clusters:</b> ${top.missingTopics?.join(', ') || 'None'}</p>
-    `);
-  }
-
-  // TASK 6: AI Citation Opportunities Card
-  if (data.citationOpportunities) {
-    showCard("citationOppCard", "citationOppContent", `
-      <div class="grid-3">
-        ${data.citationOpportunities.map(o => `
-          <div class="metric-box" style="background:#1e293b; border:1px solid #3b82f6; text-align:left;">
-            <b style="color:#3b82f6;">${escapeHtml(o.engine)} Focus</b>
-            <p style="margin:5px 0; color:#cbd5e1;">Issue: ${escapeHtml(o.issue)}</p>
-            <p style="color:#10b981; font-weight:bold;">Impact: ${escapeHtml(o.impact)}</p>
-            <p style="color:#f59e0b; font-size:11px;">Fix: ${escapeHtml(o.fix)}</p>
-          </div>
-        `).join('')}
-      </div>
-    `);
-  }
-
-  // TASK 8: AI Snippet Engine
-  if (data.aiSnippets) {
-    const snip = data.aiSnippets;
-    showCard("aiSnippetsCard", "aiSnippetsContent", `
-      <p><b>Direct Answer Option:</b> ${escapeHtml(snip.directAnswer)}</p>
-      <p><b>Featured Snippet Hook:</b></p>
-      <pre>${escapeHtml(snip.featuredSnippet)}</pre>
-      <p><b>AI Overview Answer Snippet:</b> ${escapeHtml(snip.aiOverviewAnswer)}</p>
-    `);
-  }
-
-  // TASK 9: Internal Linking Card
-  if (data.internalLinkIntelligence) {
-    const link = data.internalLinkIntelligence;
-    showCard("internalLinkCard", "internalLinkResults", `
-      <p><b>Internal Authority Flow Score:</b> ${link.authorityFlow}/100</p>
-      <p><b>Unique Linked Nodes:</b> ${link.uniquePages || 0}</p>
-      <p><b>Action Suggestions:</b></p>
-      <ul>${link.suggestions?.map(s => `<li>🔗 ${escapeHtml(s)}</li>`).join('')}</ul>
-    `);
-  }
-
-  // TASK 7: Advanced EEAT Scanner
-  if (data.breakdown?.eeatBreakdown) {
-    const eeat = data.breakdown.eeatBreakdown;
-    showCard("eeatCard", "eeatResults", `
-      <div style="font-size:24px; font-weight:bold; color:#a855f7; margin-bottom:10px;">E-E-A-T Score: ${eeat.score}/100</div>
-      <p><b>Status Classification:</b> ${eeat.status}</p>
-      <p><b>Author Credentials Status:</b> ${eeat.author}</p>
-      <p><b>Verified Trust Elements:</b> ${eeat.factors?.join(', ') || 'None'}</p>
-    `);
-  }
-
-  renderAISimulation(data);
-  renderSchemaGenerator(data);
-
-  // TASK 3: Trend Rendering
-  if (data.visibilityTrend) {
-    renderTrendChart(data.visibilityTrend);
-  }
 }
 
 function renderCharts(data) {
   const seoScore = data.score || 0;
   const aeoScore = data.aeoScore || 0;
-
+  let seoColor = seoScore >= 80 ? "#16a34a" : seoScore >= 50 ? "#f97316" : "#dc2626";
+  
   const seoCanvas = document.getElementById("seoChart");
   if (seoCanvas) {
     if (seoChart) seoChart.destroy();
     seoChart = new Chart(seoCanvas, {
       type: "doughnut",
-      data: { datasets: [{ data: [seoScore, 100 - seoScore], backgroundColor: ["#10b981", "#e5e7eb"], borderWidth: 0 }] },
-      options: { cutout: '75%', plugins: { legend: { display: false } } }
+      data: { datasets: [{ data: [seoScore, 100 - seoScore], backgroundColor: [seoColor, "#e5e7eb"], borderWidth: 0 }] },
+      options: {
+        cutout: '70%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false }
+        }
+      },
+      plugins: [{
+        id: 'centerText',
+        beforeDraw: function(chart) {
+          let ctx = chart.ctx;
+          ctx.restore();
+          ctx.font = "bold 20px Arial";
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = "#ffffff";
+          let score = Math.round(chart.data.datasets[0].data[0]);
+          let text = score + "%";
+          let textX = Math.round((chart.width - ctx.measureText(text).width) / 2);
+          let textY = chart.height / 2;
+          ctx.fillText(text, textX, textY);
+          ctx.save();
+        }
+      }]
     });
   }
-  setHTML("seoScore", `${seoScore}<span>SEO Score</span>`);
+  
+  let seoGrade = seoScore >= 90 ? "A+" : seoScore >= 80 ? "A" : seoScore >= 60 ? "B" : seoScore >= 40 ? "C" : "D";
+  setHTML("seoScore", `${seoScore}<span>SEO ${seoGrade}</span>`);
+  setStyle("seoScore", 'color', seoColor);
 
+  let aeoColor = aeoScore >= 80 ? "#16a34a" : aeoScore >= 50 ? "#f97316" : "#dc2626";
   const aeoCanvas = document.getElementById("aeoChart");
   if (aeoCanvas) {
     if (aeoChart) aeoChart.destroy();
     aeoChart = new Chart(aeoCanvas, {
       type: "doughnut",
-      data: { datasets: [{ data: [aeoScore, 100 - aeoScore], backgroundColor: ["#6366f1", "#e5e7eb"], borderWidth: 0 }] },
-      options: { cutout: '75%', plugins: { legend: { display: false } } }
+      data: { datasets: [{ data: [aeoScore, 100 - aeoScore], backgroundColor: [aeoColor, "#e5e7eb"], borderWidth: 0 }] },
+      options: { cutout: "75%", plugins: { legend: { display: false }, tooltip: { enabled: false } } }
     });
   }
-  setHTML("aeoScore", `${aeoScore}<span>AEO Score</span>`);
-}
-
-// TASK 3: Chart.js Trend implementation
-function renderTrendChart(trend) {
-  showCard("visibilityTrendCard");
-  const ctx = document.getElementById("trendChart");
-  if (!ctx) return;
-
-  if (trendChartInstance) trendChartInstance.destroy();
-
-  trendChartInstance = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: trend.labels || [],
-      datasets: [
-        {
-          label: 'AI score',
-          data: trend.scores || [],
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          tension: 0.2,
-          fill: true
-        },
-        {
-          label: 'SEO Score',
-          data: trend.seoScores || [],
-          borderColor: '#10b981',
-          tension: 0.2,
-          fill: false
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: { beginAtZero: true, max: 100 }
-      }
-    }
-  });
-
-  setHTML("visibilityTrendContent", `<p><b>Historical Score Growth:</b> +${trend.growthPercentage || 0}% performance change since first record.</p>`);
-}
-
-function renderAISimulation(data) {
-  showCard("aiSimulationCard");
-  const sim = data.aiSearchSimulation;
-  if (!sim) return;
-  setHTML("aiSimulationText", `
-    <div class="ai-box"><b>ChatGPT response model:</b> ${escapeHtml(sim.chatgpt?.answer || 'N/A')}</div>
-    <div class="ai-box"><b>Gemini response model:</b> ${escapeHtml(sim.gemini?.answer || 'N/A')}</div>
-    <div class="ai-box"><b>Perplexity response model:</b> ${escapeHtml(sim.perplexity?.answer || 'N/A')}</div>
-  `);
+  
+  let aeoGrade = aeoScore >= 90 ? "A+" : aeoScore >= 80 ? "A" : aeoScore >= 60 ? "B" : aeoScore >= 40 ? "C" : "D";
+  setHTML("aeoScore", `${aeoScore}<span>AEO ${aeoGrade}</span>`);
+  setStyle("aeoScore", 'color', aeoColor);
 }
 
 function renderSchemaGenerator(data) {
@@ -648,157 +1279,489 @@ function renderSchemaGenerator(data) {
       ${Object.entries(data.schemaGenerator).map(([key, val]) => `
         <div class="ai-box" style="background: #1e293b; color: #e2e8f0; margin: 10px 0;">
           <b style="color: #60a5fa;">${val.title || key}</b>
-          <textarea readonly style="width:96%; height:120px; font-family:monospace; font-size:11px; margin:8px 0; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #334155;">${val.code || ''}</textarea>
+          <textarea readonly style="width:100%; height:120px; font-family:monospace; font-size:11px; margin:8px 0; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #334155;">${val.code || ''}</textarea>
+          <button onclick="copyToClipboard(\`${(val.code || '').replace(/`/g, '\\`')}\`, this)" style="background:#10b981;font-size:12px; padding:6px 12px;">📋 Copy Code</button>
         </div>
       `).join('')}
     `);
   }
 }
 
-async function compareCompetitor() {
-  if (!lastScanData) return alert("Please execute main target scan first!");
-  const compEl = document.getElementById("competitorUrl");
-  if (!compEl || !compEl.value.trim()) return alert("Enter competitor URL");
+function renderSEOAudit(data) {
+  const critical = data.criticalIssues || [];
+  const important = data.importantIssues || [];
+  const minor = data.minorIssues || [];
+  
+  showCard("seoAuditCard", "seoAuditResults", `
+    <div class="grid-3">
+      <div class="metric-box" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);">
+        <div class="metric-value">${critical.length}</div><div class="metric-label">Critical Issues</div>
+      </div>
+      <div class="metric-box" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+        <div class="metric-value">${important.length}</div><div class="metric-label">Important Issues</div>
+      </div>
+      <div class="metric-box" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+        <div class="metric-value">${minor.length}</div><div class="metric-label">Minor Issues</div>
+      </div>
+    </div>
+    ${critical.length > 0 ? `<h4 style="color:#dc2626;">❌ Critical:</h4><ul>${critical.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>` : ''}
+    ${important.length > 0 ? `<h4 style="color:#f59e0b;">⚠️ Important:</h4><ul>${important.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>` : ''}
+    ${minor.length > 0 ? `<h4 style="color:#3b82f6;">ℹ️ Minor:</h4><ul>${minor.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>` : ''}
+  `);
+}
 
-  showLoading();
-  try {
-    const urlVal = document.getElementById("url").value.trim();
-    const compVal = compEl.value.trim();
+function renderTitleAnalyzer(data) {
+  const title = data.title || "";
+  const length = title.length;
+  const status = length === 0 ? "Missing" : length < 30 ? "Too Short" : length > 60 ? "Too Long" : "Perfect";
+  const color = length === 0 ? "red" : length < 30 || length > 60 ? "orange" : "green";
+  
+  showCard("titleAnalyzerCard", "titleAnalyzerResults", `
+    <p><strong>Title:</strong> ${escapeHtml(title) || "Not Found"}</p>
+    <p><strong>Length:</strong> ${length} characters <span class="badge badge-${color}">${status}</span></p>
+    <p><strong>Recommendation:</strong> ${length === 0 ? "Add title tag" : length < 30 ? "Expand to 50-60 chars" : length > 60 ? "Shorten to 50-60 chars" : "Perfect!"}</p>
+  `);
+}
 
-    const res = await fetch(`/compare?url=${encodeURIComponent(urlVal)}&competitor=${encodeURIComponent(compVal)}`);
-    const data = await res.json();
-    hideLoading();
+function renderMetaAnalyzer(data) {
+  const meta = data.metaDescription || "";
+  const length = meta.length;
+  const status = length === 0 ? "Missing" : length < 120 ? "Too Short" : length > 160 ? "Too Long" : "Perfect";
+  const color = length === 0 ? "red" : length < 120 || length > 160 ? "orange" : "green";
+  
+  showCard("metaAnalyzerCard", "metaAnalyzerResults", `
+    <p><strong>Description:</strong> ${escapeHtml(meta) || "Not Found"}</p>
+    <p><strong>Length:</strong> ${length} characters <span class="badge badge-${color}">${status}</span></p>
+    <p><strong>Recommendation:</strong> ${length === 0 ? "Add meta description" : length < 120 ? "Expand to 150-160 chars" : length > 160 ? "Shorten to 150-160 chars" : "Perfect!"}</p>
+  `);
+}
 
-    showCard("competitorCard");
-    const ctx = document.getElementById("comparisonChart");
-    if (ctx && data.sites) {
-      if (comparisonChart) comparisonChart.destroy();
-      comparisonChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: data.sites.map(s => s.brand),
-          datasets: [{
-            label: 'Scores Overview',
-            data: data.sites.map(s => s.aiVisibilityScore),
-            backgroundColor: ['#6366f1', '#f43f5e']
-          }]
-        },
-        options: { responsive: true }
+function renderHeadingStructure(data) {
+  const h1Count = data.h1Count || 0, h2Count = data.h2Count || 0, h3Count = data.h3Count || 0;
+  
+  showCard("headingCard", "headingResults", `
+    <table>
+      <tr><th>Heading</th><th>Count</th><th>Status</th></tr>
+      <tr><td>H1</td><td>${h1Count}</td><td>${h1Count === 1 ? '<span class="badge badge-green">✓ Perfect</span>' : h1Count === 0 ? '<span class="badge badge-red">✗ Missing</span>' : '<span class="badge badge-orange">⚠ Multiple</span>'}</td></tr>
+      <tr><td>H2</td><td>${h2Count}</td><td>${h2Count >= 3 ? '<span class="badge badge-green">✓ Good</span>' : '<span class="badge badge-orange">⚠ Add More</span>'}</td></tr>
+      <tr><td>H3</td><td>${h3Count}</td><td>${h3Count >= 5 ? '<span class="badge badge-green">✓ Good</span>' : '<span class="badge badge-orange">⚠ Add More</span>'}</td></tr>
+    </table>
+  `);
+}
+
+function renderInternalLinking(data) {
+  const linkData = data.breakdown?.internalLinkingAudit || {};
+  
+  showCard("internalLinkCard", "internalLinkResults", `
+    <div class="grid-3">
+      <div class="metric-box"><div class="metric-value">${linkData.totalInternalLinks || 0}</div><div class="metric-label">Internal Links</div></div>
+      <div class="metric-box"><div class="metric-value">${linkData.uniquePages || 0}</div><div class="metric-label">Unique Pages</div></div>
+      <div class="metric-box"><div class="metric-value">${linkData.avgLinkDepth || 0}</div><div class="metric-label">Avg Depth</div></div>
+    </div>
+    <p><strong>Authority Flow:</strong> ${linkData.authorityFlow || 0}% <span class="badge badge-${linkData.authorityFlow >= 80 ? 'green' : 'orange'}">${linkData.authorityFlow >= 80 ? 'Good' : 'Weak'}</span></p>
+    ${linkData.weakLinking ? `<p style="color:#dc2626;"><strong>⚠️ Weak Linking:</strong> Add more internal links</p>` : ''}
+  `);
+}
+
+function renderImageSEO(data) {
+  const total = data.totalImages || 0, withoutAlt = data.imagesWithoutAlt || 0, withAlt = total - withoutAlt;
+  const score = total > 0 ? Math.round((withAlt / total) * 100) : 100;
+  
+  showCard("imageSeoCard", "imageSeoResults", `
+    <div class="grid-3">
+      <div class="metric-box"><div class="metric-value">${total}</div><div class="metric-label">Total Images</div></div>
+      <div class="metric-box" style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);"><div class="metric-value">${withAlt}</div><div class="metric-label">With ALT</div></div>
+      <div class="metric-box" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);"><div class="metric-value">${withoutAlt}</div><div class="metric-label">Missing ALT</div></div>
+    </div>
+    <p><strong>Image SEO Score:</strong> ${score}% <span class="badge badge-${score >= 80 ? 'green' : 'orange'}">${score >= 80 ? 'Good' : 'Needs Work'}</span></p>
+  `);
+}
+
+function renderEntities(data) {
+  const entities = data.entities || {};
+  showCard("entityCard", "entityResults", `
+    <div class="grid-3">
+      <div><h4>🏢 Brands:</h4>${(entities.brands || []).map(b => `<span class="badge badge-purple" style="margin:2px;">${escapeHtml(b)}</span>`).join('') || 'None'}</div>
+      <div><h4>📍 Locations:</h4>${(entities.locations || []).map(l => `<span class="badge badge-green" style="margin:2px;">${escapeHtml(l)}</span>`).join('') || 'None'}</div>
+      <div><h4>💼 Services:</h4>${(entities.services || []).map(s => `<span class="badge badge-orange" style="margin:2px;">${escapeHtml(s)}</span>`).join('') || 'None'}</div>
+    </div>
+  `);
+}
+
+function renderEEAT(data) {
+  setStyle("eeatCard", "display", "block");
+  const eeat = data.breakdown?.eeatBreakdown || {};
+  const score = data.breakdown?.eeatScore || 0;
+  
+  setHTML("eeatResults", `
+    <div style="text-align:center; margin:15px 0;">
+      <div style="font-size:48px; font-weight:bold; color:#667eea;">${score}/100</div>
+      <div>E-E-A-T Score</div>
+    </div>
+    <div class="grid-3">
+      <div><h4>Experience (${eeat.experience?.score || 0}/25)</h4>${(eeat.experience?.factors || []).map(f => `<div style="font-size:12px;">${escapeHtml(f)}</div>`).join('')}</div>
+      <div><h4>Expertise (${eeat.expertise?.score || 0}/25)</h4>${(eeat.expertise?.factors || []).map(f => `<div style="font-size:12px;">${escapeHtml(f)}</div>`).join('')}</div>
+      <div><h4>Authority (${eeat.authoritativeness?.score || 0}/25)</h4>${(eeat.authoritativeness?.factors || []).map(f => `<div style="font-size:12px;">${escapeHtml(f)}</div>`).join('')}</div>
+    </div>
+  `);
+}
+
+function renderAISimulation(data) {
+  setStyle("aiSimulationCard", "display", "block");
+  const sim = data.aiSearchSimulation;
+  if (!sim) return;
+  setHTML("aiSimulationText", `
+    <div class="ai-box"><b>ChatGPT:</b> ${escapeHtml(sim.chatgpt?.answer || 'N/A')}<br><small>Will Cite: ${sim.chatgpt?.willCite ? 'Yes' : 'No'}</small></div>
+    <div class="ai-box"><b>Gemini:</b> ${escapeHtml(sim.gemini?.answer || 'N/A')}<br><small>Will Cite: ${sim.gemini?.willCite ? 'Yes' : 'No'}</small></div>
+    <div class="ai-box"><b>Perplexity:</b> ${escapeHtml(sim.perplexity?.answer || 'N/A')}<br><small>Will Cite: ${sim.perplexity?.willCite ? 'Yes' : 'No'}</small></div>
+  `);
+}
+
+function renderAEOReadiness(data) {
+  if (data.aeoReadiness) {
+    setStyle("aeoReadinessCard", "display", "block");
+    setText('aeoReadinessScore', data.aeoReadiness.score || 0);
+    
+    const signalsList = document.getElementById('aeoSignalsList');
+    if (signalsList) {
+      signalsList.innerHTML = '';
+      (data.aeoSignals || []).forEach(signal => {
+        const div = document.createElement('div');
+        div.style.cssText = 'padding: 8px; margin: 5px 0; background: #f0; border-radius: 5px; font-size: 14px;';
+        div.textContent = signal;
+        signalsList.appendChild(div);
       });
     }
+  }
+}
 
-    // TASK 2: Competitor Advantage card display
-    if (data.competitorAdvantage) {
-      const adv = data.competitorAdvantage;
-      showCard("competitorAdvantageCard", "competitorAdvantageContent", `
-        <p>🏆 <b>Final Performance Winner:</b> ${escapeHtml(adv.finalWinner)}</p>
-        <p><b>SEO Margin Advantage:</b> ${adv.seoAdvantage.leader} is leading by ${adv.seoAdvantage.diff} points.</p>
-        <p><b>AEO Margin Advantage:</b> ${adv.aeoAdvantage.leader} is leading by ${adv.aeoAdvantage.diff} points.</p>
-        <p><b>E-E-A-T Trust Advantage:</b> ${adv.eeatAdvantage.leader} is leading by ${adv.eeatAdvantage.diff} points.</p>
-      `);
+function renderCitationProbability(data) {
+  if (data.realCitationChatGPT !== undefined) {
+    setStyle("realCitationCard", "display", "block");
+    setText('realChatGPT', (data.realCitationChatGPT || 0) + '%');
+    setText('realGemini', (data.realCitationGemini || 0) + '%');
+    setText('realPerplexity', (data.realCitationPerplexity || 0) + '%');
+    
+    const reasonsList = document.getElementById('citationReasonsList');
+    if (reasonsList) {
+      reasonsList.innerHTML = '<strong>Why AI will cite you:</strong><br>';
+      (data.citationReasons || []).forEach(reason => {
+        reasonsList.innerHTML += `• ${escapeHtml(reason)}<br>`;
+      });
     }
+  }
+}
 
+function renderAIVisibility(data) {
+  setStyle("aiVisibilityCard", "display", "block");
+  setHTML("aiVisibilityResults", `
+    <div style="text-align:center; margin:15px 0;">
+      <div style="font-size:48px; font-weight:bold; color:#667eea;">${data.overallAIVisibilityScore || 0}</div>
+      <div>Overall AI Visibility Score</div>
+    </div>
+    <table>
+      <tr><td>SEO Score</td><td>${data.score || 0}/100</td></tr>
+      <tr><td>AEO Score</td><td>${data.aeoScore || 0}/100</td></tr>
+      <tr><td>E-E-A-T Score</td><td>${data.breakdown?.eeatScore || 0}/100</td></tr>
+      <tr><td>Citation Probability</td><td>${data.citationProbability || 0}%</td></tr>
+      <tr><td>Readability</td><td>${data.readabilityScore || 0}/100</td></tr>
+    </table>
+  `);
+}
+
+async function compareCompetitor() {
+  if (!lastScanData) return alert("Pehle Scan Website karo!");
+  
+  const urlEl = document.getElementById("url");
+  const compEl = document.getElementById("competitorUrl");
+  if (!urlEl || !compEl) return alert("Input fields not found");
+  
+  const url = urlEl.value.trim();
+  const comp = compEl.value.trim();
+  if (!comp) return alert("Competitor URL dalo");
+  
+  showLoading();
+  try { 
+    const res = await fetch(`${API_BASE}/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    hideLoading();
+    if (data.error) return alert(data.error);
+    
+    setStyle("competitorCard", 'display', 'block');
+    
+    const compCanvas = document.getElementById("comparisonChart");
+    if (compCanvas) {
+      if (comparisonChart) comparisonChart.destroy();
+      comparisonChart = new Chart(compCanvas, {
+        type: "bar",
+        data: { labels: (data.sites || []).map(s => s.brand || 'Unknown'), datasets: [{ label: "AI Visibility Score", data: (data.sites || []).map(s => s.aiVisibilityScore || 0), backgroundColor: ["#2563eb", "#dc2626"] }] },
+        options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+      });
+    }
+    
+    setHTML("comparisonDetails", `
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th>Site</th>
+            <th>AI Score</th>
+            <th>SEO</th>
+            <th>AEO</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(data.sites || []).map(s => `
+            <tr>
+              <td>${escapeHtml(s.brand || 'Unknown')}</td>
+              <td>${s.aiVisibilityScore || 0}</td>
+              <td>${s.seoScore || 0}</td>
+              <td>${s.aeoScore || 0}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <p style="margin-top:15px;">
+        <strong>Winner:</strong>
+        ${escapeHtml(data.winner?.brand || 'N/A')}
+        (${data.winner?.aiVisibilityScore || 0}/100)
+      </p>
+    `);
   } catch (err) {
     hideLoading();
-    alert("Comparison error: " + err.message);
+    alert("API Error: " + err.message);
   }
 }
 
 async function generateRoadmap() {
-  if (!lastScanData) return alert("Please scan website first!");
+  if (!lastScanData) return alert("Pehle Scan Website karo!");
   showLoading();
   try {
-    const res = await fetch(`/roadmap?url=${encodeURIComponent(lastScanData.url)}`);
+    const urlEl = document.getElementById("url");
+    if (!urlEl) return alert("URL input not found");
+    const url = urlEl.value.trim();
+    
+    const res = await fetch(`${API_BASE}/roadmap?url=${encodeURIComponent(url)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     hideLoading();
-
-    showCard("roadmapCard");
+    if (data.error) return alert(data.error);
+    
+    setStyle("roadmapCard", 'display', 'block');
     setText("currentScore", data.currentScore || 0);
     setText("potentialScore", data.potentialScore || 0);
-
-    setHTML("roadmapSteps", data.roadmap?.map(r => `
-      <div class="ai-box" style="text-align:left;">
-        <b>Step ${r.step}: ${escapeHtml(r.task)}</b>
-        <p>${escapeHtml(r.why)}</p>
-        <pre>${escapeHtml(r.code)}</pre>
-      </div>
-    `).join(''));
-  } catch (e) {
+    setHTML("roadmapSteps", (data.roadmap || []).map(r => `
+      <div class="ai-box" style="border-left: 4px solid ${r.priority === 'CRITICAL'? '#dc2626' : '#f59e0b'};">
+        <b>Step ${r.step}: ${escapeHtml(r.task || '')}</b><span class="badge badge-${r.priority === 'CRITICAL'? 'red' : 'orange'}">${escapeHtml(r.priority || 'MEDIUM')}</span>
+        <p style="margin: 8px 0 0; font-size: 13px;">${escapeHtml(r.why || '')}</p>
+        <details style="margin-top: 8px;"><summary style="cursor: pointer; font-size: 12px; color: #2563eb;">Show Code</summary>
+           <pre style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 5px; margin-top: 5px; font-size: 11px; overflow-x: auto;"><code>${escapeHtml(r.code || '// No code available')}</code></pre></details>
+      </div>`).join('') + `<p style="text-align: center; margin-top: 15px; font-weight: 600;">⏱️ Total Time: ${escapeHtml(data.estimatedTime || 'N/A')}</p>`);
+  } catch (err) {
     hideLoading();
-    alert(e.message);
+    alert("API Error: " + err.message);
   }
 }
 
 async function gapAnalysis() {
-  if (!lastScanData) return alert("Scan first!");
-  const comp = document.getElementById("competitorUrl").value.trim();
+  if (!lastScanData) return alert("Pehle Scan Website karo!");
+  
+  const urlEl = document.getElementById("url");
+  const compEl = document.getElementById("competitorUrl");
+  if (!urlEl || !compEl) return alert("Input fields not found");
+  
+  const url = urlEl.value.trim();
+  const comp = compEl.value.trim();
+  if (!comp) return alert("Competitor URL dalo");
+  
   showLoading();
   try {
-    const res = await fetch(`/gap-analysis?url=${encodeURIComponent(lastScanData.url)}&competitor=${encodeURIComponent(comp)}`);
+    const res = await fetch(`${API_BASE}/gap-analysis?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     hideLoading();
-    showCard("gapCard");
-    setHTML("competitorHas", data.competitor?.has?.map(h => `✓ ${escapeHtml(h)}`).join('<br>') || 'None');
-    setHTML("youMissing", data.you?.missing?.map(m => `✗ ${escapeHtml(m)}`).join('<br>') || 'None');
-  } catch (e) { hideLoading(); }
+    if (data.error) return alert(data.error);
+    
+    setStyle("gapCard", 'display', 'block');
+    setHTML("competitorHas", (data.competitor?.has || []).map(h => `✓ ${escapeHtml(h)}`).join('<br>') || 'No data');
+    setHTML("youMissing", (data.you?.missing || []).map(m => `✗ ${escapeHtml(m)}`).join('<br>') || 'None!');
+    setHTML("gapImpact", `<div class="badge badge-red">${(data.you?.missing || []).length} Gaps Found</div>`);
+  } catch (err) {
+    hideLoading();
+    alert("API Error: " + err.message);
+  }
 }
 
 async function keywordTheft() {
-  if (!lastScanData) return alert("Scan first!");
-  const comp = document.getElementById("competitorUrl").value.trim();
+  if (!lastScanData) return alert("Pehle Scan Website karo!");
+  
+  const urlEl = document.getElementById("url");
+  const compEl = document.getElementById("competitorUrl");
+  if (!urlEl || !compEl) return alert("Input fields not found");
+  
+  const url = urlEl.value.trim();
+  const comp = compEl.value.trim();
+  if (!comp) return alert("Competitor URL dalo");
+  
   showLoading();
   try {
-    const res = await fetch(`/keyword-theft?url=${encodeURIComponent(lastScanData.url)}&competitor=${encodeURIComponent(comp)}`);
+    const res = await fetch(`${API_BASE}/keyword-theft?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     hideLoading();
-    showCard("keywordTheftCard");
+    if (data.error) return alert(data.error);
+    
+    setStyle("keywordTheftCard", 'display', 'block');
     setHTML("keywordTheftResults", `
-      <p><b>Top competitor keywords:</b> ${data.topCompetitorKeywords?.join(', ')}</p>
-      <p><b>Missing opportunity:</b> ${data.opportunity}</p>
-    `);
-  } catch (e) { hideLoading(); }
+      <div class="grid-3">
+        <div><h4>🔥 Top Keywords:</h4>${(data.topCompetitorKeywords || []).map(k => `<span class="badge badge-red" style="margin: 2px;">${escapeHtml(k)}</span>`).join('') || 'None'}</div>
+        <div><h4>💎 Missing:</h4>${(data.missingKeywords || []).map(k => `<span class="badge badge-orange" style="margin: 2px;">${escapeHtml(k)}</span>`).join('') || 'None!'}</div>
+        <div><h4>✅ Shared:</h4>${(data.sharedKeywords || []).map(k => `<span class="badge badge-green" style="margin: 2px;">${escapeHtml(k)}</span>`).join('') || 'None'}</div>
+      </div><p style="margin-top: 15px; text-align: center; font-weight: 600;">${escapeHtml(data.opportunity || 'No opportunity data')}</p>`);
+  } catch (err) {
+    hideLoading();
+    alert("API Error: " + err.message);
+  }
 }
 
 async function contentBrief() {
-  const kw = document.getElementById("keyword").value.trim();
-  if (!kw) return alert("Enter keyword");
+  const keywordEl = document.getElementById("keyword");
+  if (!keywordEl) return alert("Keyword input not found");
+  const keyword = keywordEl.value.trim();
+  if (!keyword) return alert("Keyword dalo");
+  
   showLoading();
   try {
-    const res = await fetch(`/content-brief?keyword=${encodeURIComponent(kw)}`);
+    const res = await fetch(`${API_BASE}/content-brief?keyword=${encodeURIComponent(keyword)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     hideLoading();
-    showCard("briefCard", "briefResults", `
-      <h4>H1 Plan: ${escapeHtml(data.h1)}</h4>
-      <p><b>Suggested Subtopics:</b> ${data.h2s?.join(', ')}</p>
-    `);
-  } catch (e) { hideLoading(); }
+    if (data.error) return alert(data.error);
+    
+    setStyle("briefCard", 'display', 'block');
+    setHTML("briefResults", `
+      <h4>H1: ${escapeHtml(data.h1 || keyword)}</h4>
+      <h4>H2s:</h4>
+      <ul>${(data.h2s || []).map(h => `<li>${escapeHtml(h)}</li>`).join('') || '<li>No H2s found</li>'}</ul>
+      <h4>FAQs:</h4>
+      ${(data.faqs || []).map(f => `<p><b>Q: ${escapeHtml(f.q || '')}</b><br>A: ${escapeHtml(f.a || '')}</p>`).join('') || '<p>No FAQs</p>'}`);
+  } catch (err) {
+    hideLoading();
+    alert("API Error: " + err.message);
+  }
 }
 
 async function runAutopilot() {
-  if (!lastScanData) return alert("Scan first!");
-  showCard("autopilotCard");
-  setHTML("autopilotResults", `
-    <p><b>Configuring auto patches...</b></p>
-    <ul>${lastScanData.aiAutopilot?.map(t => `<li>🚀 Enacting patch: ${escapeHtml(t.task)} (Impact: ${t.impact})</li>`).join('')}</ul>
-  `);
+  if (!lastScanData) return alert("Pehle Scan Website karo!");
+  showLoading();
+  setStyle("autopilotCard", 'display', 'none');
+  const data = lastScanData;
+  hideLoading();
+  setStyle("autopilotCard", 'display', 'block');
+  
+  if (data.aiAutopilot && data.aiAutopilot.length > 0) {
+    const tasksHTML = (data.aiAutopilot || []).map(task => {
+      const color = task.priority === 'CRITICAL' ? '#dc2626' : task.priority === 'HIGH' ? '#f59e0b' : '#2563eb';
+      return `
+        <div style="display:flex; justify-content:space-between; padding:12px; border-left:4px solid ${color}; background:#f8f9fa; margin:8px 0; border-radius:6px;">
+          <div>
+            <strong style="color: #1e293b;">${escapeHtml(task.task || 'No task')}</strong>
+            <div style="font-size:12px; color:#666; margin-top:4px;">Effort: ${escapeHtml(task.effort || 'Low')}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="color:${color}; font-weight:bold; font-size:16px;">${escapeHtml(task.impact || '+10')}</div>
+            <div style="font-size:11px; background:${color}; color:#fff; padding:2px 8px; border-radius:3px; display:inline-block; margin-top:4px;">${escapeHtml(task.priority || 'MEDIUM')}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    setHTML('autopilotResults', `
+      <div style="text-align:center;margin:20px 0;">
+        <div style="font-size:48px;font-weight:bold;color:#10b981;">${data.score || 0}/100</div>
+        <div style="font-size:18px;">${escapeHtml(data.aiVisibilityLevel || 'Good')}</div>
+      </div>
+      <h3>🚀 AI Autopilot - Quick Wins</h3>
+      ${tasksHTML}
+    `);
+  } else {
+    setHTML('autopilotResults', `<div class="card">No autopilot tasks found. Score already high!</div>`);
+  }
 }
 
-function downloadPDF() {
-  const element = document.getElementById('pdfReportContainer');
-  if (!element) return;
+async function downloadPDF() {
+  const el = document.getElementById("result");
+  if (!el || !el.innerHTML.trim()) return alert("Scan first!");
+
+  const hiddenCards = document.querySelectorAll('.card');
+  const originalStyles = [];
+
+  hiddenCards.forEach((card, i) => {
+    originalStyles[i] = card.style.display;
+    card.style.display = 'block';
+    card.style.height = 'auto';
+    card.style.overflow = 'visible';
+  });
+
+  window.scrollTo(0, 0);
+  await new Promise(resolve => setTimeout(resolve, 800));
+
   const opt = {
     margin: 10,
-    filename: 'SaaS_WhiteLabel_AI_Report.pdf',
+    filename: 'ai-visibility-report.pdf',
     image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#0f172a' },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    html2canvas: {
+      scale: 2,
+      useCORS: true,
+      scrollY: 0,
+      windowWidth: document.body.scrollWidth,
+      windowHeight: document.body.scrollHeight
+    },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'] }
   };
-  html2pdf().from(element).set(opt).save();
+
+  html2pdf().from(document.body).set(opt).save().then(() => {
+    hiddenCards.forEach((card, i) => {
+      card.style.display = originalStyles[i];
+    });
+  }).catch(err => {
+    console.error("PDF download failure:", err);
+    hiddenCards.forEach((card, i) => {
+      card.style.display = originalStyles[i];
+    });
+  });
+}
+
+function toggleDarkMode() {
+  document.body.classList.toggle("dark");
 }
 
 async function loadHistory() {
-  setHTML("result", "<p>Fetching local scan history logs...</p>");
+  try {
+    const history = JSON.parse(localStorage.getItem('scanHistory') || '[]');
+    if (history.length === 0) {
+      setHTML("result", `<div class="card">No scan history yet. Scan a website first!</div>`);
+      return;
+    }
+    setHTML("result", `
+      <h3>📊 Scan History</h3>
+      ${history.map(item => `
+        <div class="card">
+          <p><b>URL:</b> ${escapeHtml(item.url || '')}</p>
+          <p><b>AI Visibility:</b> ${item.score || 0}/100</p>
+          <p><b>SEO Score:</b> ${item.seoScore || 0} | <b>AEO Score:</b> ${item.aeoScore || 0}</p>
+          <p><b>Scanned:</b> ${new Date(item.timestamp).toLocaleString()}</p>
+        </div>
+      `).join("")}
+    `);
+  } catch (err) {
+    setHTML("result", `<div class="card">❌ Failed to load history</div>`);
+  }
 }
-</script>
+
+window.onload = () => {}
+  </script>
 </body>
 </html>

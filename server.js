@@ -76,27 +76,46 @@ export function safeRun(fn, fallback = null) {
   }
 }
 
-// Anti-bot detection checker
-export function isBlockedHTML(html = "") {
+// Anti-bot detection checker (Optimized to prevent false-positive CDN references)
+export function isBlockedHTML(html = "", status = 200) {
   if (!html || typeof html !== "string") return true;
-  const blockedPatterns = [
+
+  const blockedStatuses = [401, 403, 429, 503];
+  if (blockedStatuses.includes(status)) {
+    return true;
+  }
+
+  const lowercaseHtml = html.toLowerCase();
+  
+  // Strict challenge/verification signatures (Will never match general cloudflare CDN scripts)
+  const strictBlockedPatterns = [
     "cf-browser-verification",
-    "cloudflare",
-    "challenge-form",
-    "turnstile",
     "__cf_chl_opt",
-    "hcaptcha",
-    "recaptcha",
-    "security check",
-    "access denied",
     "error code 1020",
-    "anti-bot",
-    "ddos protection",
-    "ray id",
     "verify you are human"
   ];
-  const lowercaseHtml = html.toLowerCase();
-  return blockedPatterns.some(p => lowercaseHtml.includes(p));
+
+  if (strictBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
+    return true;
+  }
+
+  // Generics are evaluated ONLY on extremely short documents (typical of protection challenge templates)
+  if (html.length < 5000) {
+    const shortBlockedPatterns = [
+      "security check",
+      "access denied",
+      "ddos protection",
+      "anti-bot",
+      "ray id",
+      "challenge-form",
+      "turnstile"
+    ];
+    if (shortBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // ========== RESILIENT USER-AGENT ROTATION ENGINE ==========
@@ -229,12 +248,12 @@ async function safeFetch(url, options = {}) {
 }
 
 // ========== ROBUST PAGE VALIDATOR (NO FALSE POSITIVES) ==========
-export function validateHtmlContent(html) {
+export function validateHtmlContent(html, status = 200) {
   if (!html || typeof html !== 'string') {
     return { crawlBlocked: true, reason: "Empty HTML response received", crawlQuality: { score: 0, status: "Blocked" } };
   }
 
-  if (isBlockedHTML(html)) {
+  if (isBlockedHTML(html, status)) {
     return { 
       crawlBlocked: true, 
       reason: `Anti-bot protection page detected`, 
@@ -879,12 +898,11 @@ export async function analyzeSingleUrl(url) {
     htmlData = await safeFetch(url);
     if (htmlData.isError) {
       fetchError = true;
-      isCrawlBlocked = true;
+      // Fetch error only means strict fallback on code status or routing
       warning = "Website crawl restricted by server headers. Fallback mode activated.";
     }
   } catch (crawlErr) {
     fetchError = true;
-    isCrawlBlocked = true;
     warning = "Crawler timeout or host unreachable. Estimating metrics.";
   }
 
@@ -892,13 +910,23 @@ export async function analyzeSingleUrl(url) {
   let html = htmlData.data || "";
 
   // Check if crawled HTML was blocked by Cloudflare/Anti-bot
+  let blockReason = "Fully Accessible";
   if (!fetchError && html.length > 0) {
-    validation = validateHtmlContent(html);
-    if (validation.crawlBlocked || isBlockedHTML(html)) {
+    validation = validateHtmlContent(html, htmlData.status);
+    if (validation.crawlBlocked || isBlockedHTML(html, htmlData.status)) {
       isCrawlBlocked = true;
+      blockReason = validation.reason || "Anti-bot protection page detected";
     }
   } else {
     isCrawlBlocked = true;
+    blockReason = htmlData.errorMsg || "Empty HTML response received";
+  }
+
+  // Debug Logging Telemetry Requirements
+  console.log("FETCH STATUS", htmlData.status);
+  console.log("HTML LENGTH", html?.length);
+  if (isCrawlBlocked) {
+    console.log("BLOCK REASON", blockReason);
   }
 
   // ========== SMART FALLBACK VALUE ESTIMATOR ==========
@@ -1398,7 +1426,7 @@ export async function analyzeSingleUrl(url) {
     current: overallAIVisibilityScore, history: [], trend: "0", direction: "stable", average: overallAIVisibilityScore
   });
 
-  // DETAILED DIAGNOSTICS LOGGING (FIX REQUIREMENT 9)
+  // DETAILED DIAGNOSTICS LOGGING
   console.log("[SCAN STATUS]", {
     url,
     crawlSuccess: true,

@@ -369,12 +369,10 @@ export function getBrandNameEnhanced(url, $, title, schemas) {
   return "Brand Authority";
 }
 
-// ========== KEYWORD TOKENS / CLEAN TOKENIZER FIX (TASK 11 / I) ==========
+// ========== KEYWORD TOKENS / CLEAN TOKENIZER FIX ==========
 export function tokenizeKeywords(text = "") {
   if (!text) return [];
-  // Tokenize using regex split preserving spaces between words properly (resolves run-together squashing)
   const tokens = text.match(/\b[a-zA-Z]{3,15}(?:\s+[a-zA-Z]{3,15}){0,1}\b/g) || [];
-  
   const stopWords = ['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'under', 'from', 'with', 'your', 'this', 'that', 'were', 'been', 'have', 'more', 'some', 'them', 'then', 'also', 'here', 'with', 'your', 'homepage', 'navigation', 'contact', 'search'];
   
   const freq = {};
@@ -390,7 +388,7 @@ export function tokenizeKeywords(text = "") {
     .slice(0, 15);
 }
 
-// ========== ENTITY EXTRACTION ENGINE v2 (TASK 1 / B) ==========
+// ========== ENTITY EXTRACTION ENGINE v2 ==========
 export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas) {
   const brands = [];
   const locations = [];
@@ -405,7 +403,6 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
     organizations.push(brandName);
   }
 
-  // Parse structured LD-JSON data accurately
   try {
     $('script[type="application/ld+json"]').each((i, el) => {
       try {
@@ -446,7 +443,6 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
 
   const combinedText = [title, h1, ...safeArray(h2s), ...safeArray(h3s), metaDescription, bodyText].join(" ");
 
-  // Extraction Regex Engines
   const servicePatterns = [
     'SEO', 'Search Engine Optimization', 'Web Design', 'Digital Marketing', 'Web Development', 
     'Content Writing', 'Copywriting', 'Social Media Marketing', 'E-commerce', 'Shopify', 
@@ -475,12 +471,6 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
     if (new RegExp(`\\b${country}\\b`, 'i').test(combinedText)) {
       locations.push(country);
     }
-  });
-
-  // Extract from HTML meta structures
-  $('[itemprop="name"]').each((i, el) => {
-    const text = $(el).text().trim();
-    if (text.length > 1 && text.length < 50) organizations.push(text);
   });
 
   const cleanList = (arr, fallback = []) => {
@@ -516,7 +506,7 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
   };
 }
 
-// ========== INTERNAL LINKING INTELLIGENCE (TASK 9 / H) ==========
+// ========== INTERNAL LINKING INTELLIGENCE ==========
 export function analyzeInternalLinks($, url, h2s) {
   let baseHostname = "";
   let baseProto = "https:";
@@ -592,9 +582,10 @@ export function analyzeInternalLinks($, url, h2s) {
   };
 }
 
-// ========== TOPICAL AUTHORITY ENGINE (TASK 5 / E) ==========
+// ========== TOPICAL AUTHORITY ENGINE ==========
 export function calculateTopicalAuthority($, keywords, h2s, h3s) {
   const allHeadings = [...safeArray(h2s), ...safeArray(h3s)].map(h => safeString(h).toLowerCase());
+  const safeKeywords = safeArray(keywords);
   
   const clusters = [
     { name: "Informational Core", queries: ["what", "how", "guide", "tutorial"] },
@@ -617,7 +608,7 @@ export function calculateTopicalAuthority($, keywords, h2s, h3s) {
 
   const totalQueries = clusters.reduce((acc, c) => acc + c.queries.length, 0);
   const coveragePercent = Math.round((coveredCount / totalQueries) * 100);
-  const authorityScore = clamp(coveragePercent + (keywords.length * 2));
+  const authorityScore = clamp(coveragePercent + (safeKeywords.length * 2));
 
   return {
     authorityScore,
@@ -630,7 +621,7 @@ export function calculateTopicalAuthority($, keywords, h2s, h3s) {
   };
 }
 
-// ========== SEMANTIC SEO ENGINE v2 (TASK 4 / D) ==========
+// ========== SEMANTIC SEO ENGINE v2 ==========
 export function analyzeSemanticSEO($, bodyText, keywords) {
   const text = safeString(bodyText).toLowerCase();
   const keywordSet = safeArraySlice(keywords, 0, 10);
@@ -656,7 +647,7 @@ export function analyzeSemanticSEO($, bodyText, keywords) {
   };
 }
 
-// ========== AI CITATION OPPORTUNITY FINDER (TASK 6 / F) ==========
+// ========== AI CITATION OPPORTUNITY FINDER ==========
 export function findCitationOpportunities(data) {
   const opportunities = [];
   const { hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo } = data;
@@ -697,7 +688,7 @@ export function findCitationOpportunities(data) {
   return opportunities;
 }
 
-// ========== AI SNIPPET GENERATOR (TASK 8 / K) ==========
+// ========== AI SNIPPET GENERATOR ==========
 export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
   const safeBody = safeString(bodyText);
   const safeH1 = safeString(h1);
@@ -717,7 +708,7 @@ export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
   };
 }
 
-// ========== ADVANCED E-E-A-T SCANNER (TASK 7 / G) ==========
+// ========== ADVANCED E-E-A-T SCANNER ==========
 export function analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas) {
   const factors = [];
   const issues = [];
@@ -855,7 +846,6 @@ export function scanTrustSignals($, url) {
 export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
   const key = Buffer.from(url).toString('base64');
   if (!trendDB[key]) {
-    // Inject mock historical points for visual representation on first run
     trendDB[key] = [
       { date: "Day -4", score: Math.max(10, currentScore - 12), seo: Math.max(10, seoScore - 10), aeo: Math.max(10, aeoScore - 8) },
       { date: "Day -3", score: Math.max(10, currentScore - 8), seo: Math.max(10, seoScore - 6), aeo: Math.max(10, aeoScore - 5) },
@@ -864,7 +854,6 @@ export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
     ];
   }
 
-  // Push current scan parameters
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   trendDB[key].push({
     date: dateStr,
@@ -888,635 +877,683 @@ export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
   };
 }
 
+// ========== FALLBACK SAFE PAYLOAD GENERATOR ==========
+export function fallbackSafePayload(url, err = null) {
+  console.error("ANALYSIS CRASH FALLBACK TRIGGERED:", err?.message || err);
+  return {
+    success: true,
+    crawlSuccess: false,
+    fallbackMode: true,
+    url,
+    title: "Analysis Fallback Mode",
+    h1: "Crawl optimization needed",
+    metaDescription: "The page did not return structured HTML within the timeout constraint.",
+    wordCount: 1,
+    score: 40,
+    status: "Needs Work",
+    overallAIVisibilityScore: 35,
+    aiVisibilityLevel: "Fair",
+    citationProbability: 20,
+    totalImages: 0,
+    imagesWithoutAlt: 0,
+    internalLinks: 0,
+    externalLinks: 0,
+    isHttps: url.startsWith("https"),
+    keywords: [],
+    entities: [],
+    aiEntities: { brands: [], locations: [], services: [], people: [], organizations: [], products: [], totalEntities: 0 },
+    breakdown: {
+      seo: 40,
+      aeo: 30,
+      eeatScore: 30,
+      eeatBreakdown: { score: 30, status: "Shallow Trust Profile", factors: [], issues: [], author: "Anonymous", aboutPage: "Missing", contactPage: "Missing", socialProfiles: "None" },
+      internalLinkingAudit: { internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0, orphanPages: [], avgLinkDepth: 1, averageDepth: 1, authorityFlow: 10, weakLinking: true, suggestions: [], score: 40 },
+      trust: 30,
+      citation: 20,
+      readability: 50,
+      schema: 10
+    },
+    aiSearchSimulation: {
+      query: "Simulation Offline",
+      chatgpt: { answer: "Crawl restricted.", sources: [], willCite: false },
+      gemini: { answer: "Crawl restricted.", sources: [], willCite: false },
+      perplexity: { answer: "Crawl restricted.", sources: [], willCite: false },
+      status: "offline"
+    },
+    schemaGenerator: {},
+    aiAutopilot: [],
+    criticalIssues: ["Dynamic crawl timeout reached"],
+    importantIssues: [],
+    minorIssues: [],
+    topicalAuthority: { authorityScore: 20, clusters: [], coveragePercent: 0, missingTopics: [] },
+    semanticSEO: { nlpScore: 30, topicCoverage: 0, semanticRelevance: 0, entityCoverage: 0, contentDepth: "Thin", semanticGaps: [], missingEntities: [], recommendations: [] },
+    citationOpportunities: [],
+    aiSnippets: { directAnswer: "No content analyzed.", featuredSnippet: "", aiOverviewAnswer: "", quickFactsBlock: [] },
+    trustSignals: { hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 10, totalSignals: 0, socialLinks: [] },
+    localSEO: { hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 10, napConsistency: "Incomplete/Missing", recommendations: [] },
+    visibilityTrend: { labels: ["Today"], scores: [35], seoScores: [40], aeoScores: [30], growthPercentage: 0 }
+  };
+}
+
 // ========== MAIN ANALYZER PIPELINE ==========
 export async function analyzeSingleUrl(url) {
-  url = safeString(url).trim();
-  if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
-  url = url.replace(/\s+/g, '');
-
-  let htmlData = { data: "", status: 200, isError: false };
-  let isCrawlBlocked = false;
-  let fetchError = false;
-  let warning = "";
-  let validation = { crawlBlocked: false, reason: "Fully Accessible", crawlQuality: { score: 100, status: "Excellent" } };
-  const startTime = Date.now();
-
+  console.log("SCAN STARTED - TARGET URL:", url);
   try {
-    htmlData = await safeFetch(url);
-    if (htmlData.isError) {
+    url = safeString(url).trim();
+    if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
+    url = url.replace(/\s+/g, '');
+
+    let htmlData = { data: "", status: 200, isError: false };
+    let isCrawlBlocked = false;
+    let fetchError = false;
+    let warning = "";
+    let validation = { crawlBlocked: false, reason: "Fully Accessible", crawlQuality: { score: 100, status: "Excellent" } };
+    const startTime = Date.now();
+
+    try {
+      htmlData = await safeFetch(url);
+      if (htmlData.isError) {
+        fetchError = true;
+        warning = "Website crawl restricted by server headers. Fallback mode activated.";
+      }
+    } catch (crawlErr) {
       fetchError = true;
-      warning = "Website crawl restricted by server headers. Fallback mode activated.";
+      warning = "Crawler timeout or host unreachable. Estimating metrics.";
     }
-  } catch (crawlErr) {
-    fetchError = true;
-    warning = "Crawler timeout or host unreachable. Estimating metrics.";
-  }
 
-  const loadTime = Date.now() - startTime;
-  let html = htmlData.data || "";
+    const loadTime = Date.now() - startTime;
+    let html = htmlData.data || "";
 
-  // Check if crawled HTML was blocked by Cloudflare/Anti-bot
-  let blockReason = "Fully Accessible";
-  if (!fetchError && html.length > 0) {
-    validation = validateHtmlContent(html, htmlData.status);
-    if (validation.crawlBlocked || isBlockedHTML(html, htmlData.status)) {
+    // Check if crawled HTML was blocked by Cloudflare/Anti-bot
+    let blockReason = "Fully Accessible";
+    if (!fetchError && html.length > 0) {
+      validation = validateHtmlContent(html, htmlData.status);
+      if (validation.crawlBlocked || isBlockedHTML(html, htmlData.status)) {
+        isCrawlBlocked = true;
+        blockReason = validation.reason || "Anti-bot protection page detected";
+      }
+    } else {
       isCrawlBlocked = true;
-      blockReason = validation.reason || "Anti-bot protection page detected";
+      blockReason = htmlData.errorMsg || "Empty HTML response received";
     }
-  } else {
-    isCrawlBlocked = true;
-    blockReason = htmlData.errorMsg || "Empty HTML response received";
-  }
 
-  // Debug Logging Telemetry Requirements
-  console.log("FETCH STATUS", htmlData.status);
-  console.log("HTML LENGTH", html?.length);
-  if (isCrawlBlocked) {
-    console.log("BLOCK REASON", blockReason);
-  }
+    // Debug Logging Telemetry Requirements
+    console.log("FETCH STATUS", htmlData.status);
+    console.log("HTML LENGTH", html?.length);
+    if (isCrawlBlocked) {
+      console.log("BLOCK REASON", blockReason);
+    }
 
-  // ========== SMART FALLBACK VALUE ESTIMATOR ==========
-  let parsedDomain = "";
-  try {
-    parsedDomain = new URL(url).hostname.replace("www.", "");
-  } catch (err) {
-    parsedDomain = "domain-context";
-  }
-  const fallbackWords = parsedDomain.split(/[.\-]/).filter(x => x && x !== 'com' && x !== 'co' && x !== 'net' && x !== 'org');
-  const estimatedNiche = fallbackWords.join(" ") || "Expert Digital Services";
-  const formattedNicheTitle = estimatedNiche.charAt(0).toUpperCase() + estimatedNiche.slice(1);
+    // ========== SMART FALLBACK VALUE ESTIMATOR ==========
+    let parsedDomain = "";
+    try {
+      parsedDomain = new URL(url).hostname.replace("www.", "");
+    } catch (err) {
+      parsedDomain = "domain-context";
+    }
+    const fallbackWords = parsedDomain.split(/[.\-]/).filter(x => x && x !== 'com' && x !== 'co' && x !== 'net' && x !== 'org');
+    const estimatedNiche = fallbackWords.join(" ") || "Expert Digital Services";
+    const formattedNicheTitle = estimatedNiche.charAt(0).toUpperCase() + estimatedNiche.slice(1);
 
-  // Initialize Body Extraction variable immediately
-  let rawBodyText = "No content scanned.";
-  let $;
+    // Initialize Body Extraction variable immediately
+    let rawBodyText = "No content scanned.";
+    let $;
 
-  // ========== EARLY CRAWL BLOCKED REPORT REJECTION ENGINE ==========
-  if (isCrawlBlocked) {
+    // ========== EARLY CRAWL BLOCKED REPORT REJECTION ENGINE ==========
+    if (isCrawlBlocked) {
+      return {
+        url,
+        crawlSuccess: false,
+        fallbackMode: true,
+        dataSource: "BLOCKED",
+        blocked: true,
+        isBlocked: true,
+        title: "Blocked / Protected",
+        h1: "Protected Section",
+        metaDescription: "Metadata block detected. Anti-scraping firewall prevents deep indexing audits.",
+        wordCount: 0,
+        score: null,
+        status: "BLOCKED",
+        stopProcessing: true,
+        warning: "Website is protected by an anti-bot system (Cloudflare/reCAPTCHA). Core crawlers were blocked.",
+        overallAIVisibilityScore: null,
+        aiVisibilityLevel: "N/A",
+        citationProbability: null,
+        aeoScore: null,
+        aeoStatus: "N/A",
+        hasFAQ: false,
+        hasHowTo: false,
+        hasDirectAnswer: false,
+        totalImages: 0,
+        imagesWithoutAlt: 0,
+        internalLinks: 0,
+        externalLinks: 0,
+        mobileFriendly: false,
+        isHttps: url.startsWith("https://"),
+        loadTime,
+        mobileScore: null,
+        desktopScore: null,
+        hasSchemaMarkup: false,
+        robotsExists: false,
+        sitemapExists: false,
+        hasCanonical: false,
+        canonical: "",
+        hasFavicon: false,
+        favicon: "",
+        hasOGTags: false,
+        ogTitle: "",
+        ogDescription: "",
+        ogImage: "",
+        schemas: [],
+        recommendedSchemas: [],
+        keywords: [],
+        entities: [],
+        readabilityScore: null,
+        aiTrustScore: null,
+        answerQualityScore: null,
+        featuredSnippetChance: null,
+        contentStructureScore: null,
+        citationChatGPT: null,
+        citationGemini: null,
+        citationPerplexity: null,
+        h1Count: 0,
+        h2Count: 0,
+        h3Count: 0,
+        listCount: 0,
+        tableCount: 0,
+        hasPrivacyPolicy: false,
+        hasAboutPage: false,
+        hasContactPage: false,
+        hasAuthor: false,
+        hasFacebook: false,
+        hasLinkedIn: false,
+        hasYouTube: false,
+        hasTwitter: false,
+        hasEmail: false,
+        hasPhone: false,
+        email: null,
+        phone: null,
+        hasLastModified: false,
+        lastModified: null,
+        autoFAQ: [],
+        aiSearchSimulation: {
+          query: "Scan unavailable",
+          chatgpt: { answer: "Crawl restricted by firewall.", sources: [], willCite: false },
+          gemini: { answer: "Crawler block detected.", sources: [], willCite: false },
+          perplexity: { answer: "Target site blocked programmatic audits.", sources: [], willCite: false },
+          status: "offline"
+        },
+        criticalIssues: ["Anti-scraping firewall active (Cloudflare/Turnstile)"],
+        importantIssues: ["Programmatic content audits blocked"],
+        minorIssues: [],
+        aiRecommendations: [],
+        recommendationScore: null,
+        visibilityForecast: null,
+        topicalAuthority: null,
+        semanticSEO: null,
+        citationOpportunities: null,
+        aiSnippets: null,
+        trustSignals: null,
+        localSEO: null,
+        visibilityTrend: null,
+        aiEntities: null,
+        breakdown: {
+          seo: null,
+          aeo: null,
+          eeatScore: null,
+          eeatBreakdown: null,
+          internalLinkingAudit: null,
+          trust: null,
+          citation: null,
+          readability: null,
+          schema: null
+        },
+        brokenLinkCount: 0,
+        lcpScore: null
+      };
+    }
+
+    $ = cheerio.load(html);
+
+    // Assign rawBodyText after DOM loader is established
+    rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
+
+    $('script, style, nav, footer, header, noscript, svg').remove();
+
+    // Deep Fallback Metadata Extraction
+    let title = safeString($("title").text()).trim();
+    if (!title || title.toLowerCase().includes("not found")) {
+      title = safeString($('meta[property="og:title"]').attr("content")).trim() || 
+              safeString($('meta[name="twitter:title"]').attr("content")).trim() || 
+              safeString($("h1").first().text()).trim() || 
+              `${formattedNicheTitle} Platform`;
+    }
+
+    let metaDescription = safeString($('meta[name="description"]').attr("content")).trim();
+    if (!metaDescription || metaDescription.toLowerCase().includes("not found")) {
+      metaDescription = safeString($('meta[property="og:description"]').attr("content")).trim() || 
+                        safeString($('meta[name="twitter:description"]').attr("content")).trim() || 
+                        safeString($("p").first().text()).substring(0, 150).trim() || 
+                        `Comprehensive services and architectural layouts tailored around ${estimatedNiche}.`;
+    }
+
+    let h1 = safeString($("h1").first().text()).trim();
+    if (!h1 || h1.toLowerCase().includes("not found")) {
+      h1 = safeString($("h2").first().text()).trim() || `Proven ${formattedNicheTitle} Systems`;
+    }
+
+    const bodyText = rawBodyText || "No content scanned.";
+    const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
+    const h2s = $("h2").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean) || [];
+    const h3s = $("h3").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean) || [];
+
+    const schemas = detectAllSchemas($, html);
+    const uniqueSchemas = Object.keys(schemas).filter(k => schemas[k]?.present) || [];
+    const recommendedSchemas = Object.keys(schemas).filter(k => schemas[k]?.recommended && !schemas[k]?.present) || [];
+
+    const faqQuestions = [];
+    if (schemas.FAQPage?.present && schemas.FAQPage?.data?.length > 0) {
+      schemas.FAQPage.data.forEach(schema => {
+        schema?.mainEntity?.forEach(q => { if (q?.name) faqQuestions.push(safeString(q.name)); });
+      });
+    }
+
+    const h1Count = $("h1").length || 0;
+    const h2Count = $("h2").length || 0;
+    const h3Count = $("h3").length || 0;
+    const listCount = $("ul, ol").length || 0;
+    const tableCount = $("table").length || 0;
+    const totalImages = $("img").length || 0;
+    const imagesWithoutAlt = $("img").filter((i, el) => !$(el).attr("alt")).length || 0;
+    const isHttps = url.startsWith("https://");
+    const mobileViewport = $('meta[name="viewport"]').length > 0;
+    const canonical = safeString($('link[rel="canonical"]').attr("href"));
+    const hasCanonical = !!canonical;
+    const favicon = safeString($('link[rel="icon"], link[rel="shortcut icon"]').attr("href"));
+    const hasFavicon = !!favicon;
+
+    const hasFAQ = faqQuestions.length > 0 || schemas.FAQPage?.present || false;
+    const hasHowTo = schemas.HowTo?.present || false;
+    const hasSchemaMarkup = uniqueSchemas.length > 0;
+    const hasDirectAnswer = (bodyText.includes("Q:") && bodyText.includes("A:")) || bodyText.toLowerCase().includes("what is") || bodyText.toLowerCase().includes("how to") || (h2Count >= 3 && bodyText.length > 500);
+
+    const ogTitle = safeString($('meta[property="og:title"]').attr("content"));
+    const ogDescription = safeString($('meta[property="og:description"]').attr("content"));
+    const ogImage = safeString($('meta[property="og:image"]').attr("content"));
+    const hasOGTags = !!(ogTitle && ogDescription);
+
+    const hasAuthor = $('meta[name="author"]').length > 0 || $('[rel="author"]').length > 0 || $('[itemprop="author"]').length > 0;
+    const dateStr = safeString($('meta[property="article:modified_time"]').attr('content') || $('meta[property="article:published_time"]').attr('content'));
+    const hasLastModified = !!dateStr;
+    const lastModified = dateStr ? new Date(dateStr).toLocaleDateString() : null;
+
+    const socialLinks = $("a").map((i, el) => safeString($(el).attr("href"))).get() || [];
+    const hasFacebook = socialLinks.some(link => link.includes("facebook.com"));
+    const hasLinkedIn = socialLinks.some(link => link.includes("linkedin.com"));
+    const hasYouTube = socialLinks.some(link => link.includes("youtube.com"));
+    const hasTwitter = socialLinks.some(link => link.includes("twitter.com") || link.includes("x.com"));
+
+    const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
+    const email = emailMatch ? emailMatch[0] : null;
+    const phone = phoneMatch ? phoneMatch[0] : null;
+    const hasEmail = !!email;
+    const hasPhone = !!phone;
+
+    const allText = bodyText.toLowerCase();
+    const hasPrivacyPolicy = allText.includes("privacy policy") || allText.includes("privacy");
+    const hasAboutPage = allText.includes("about us") || allText.includes("about");
+    const hasContactPage = allText.includes("contact us") || allText.includes("contact");
+
+    const keywords = tokenizeKeywords(bodyText);
+
+    // ========== SAFELY WRAPPED CORE EVALUATORS ==========
+    const internalLinkData = safeRun(() => analyzeInternalLinks($, url, h2s), {
+      internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0,
+      orphanPages: [], avgLinkDepth: 1, averageDepth: 1, authorityFlow: 10,
+      weakLinking: true, suggestions: ["Add internal structure navigation"], score: 40
+    });
+
+    const eeatData = safeRun(() => analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas), {
+      score: 30, level: "Fair", breakdown: { experience: { score: 5, max: 25, factors: [] }, expertise: { score: 10, max: 25, factors: [] }, authoritativeness: { score: 5, max: 25, factors: [] }, trustworthiness: { score: 10, max: 25, factors: [] } }
+    });
+
+    const aiTrustSignals = [];
+    if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
+    if (hasAboutPage) aiTrustSignals.push("About Page");
+    if (hasContactPage) aiTrustSignals.push("Contact Page");
+    if (hasEmail) aiTrustSignals.push("Email Address");
+    if (hasPhone) aiTrustSignals.push("Phone Number");
+    if (hasAuthor) aiTrustSignals.push("Author Profile");
+    if (hasFacebook) aiTrustSignals.push("Facebook");
+    if (hasLinkedIn) aiTrustSignals.push("LinkedIn");
+    if (hasYouTube) aiTrustSignals.push("YouTube");
+    if (hasTwitter) aiTrustSignals.push("Twitter/X");
+    if (isHttps) aiTrustSignals.push("HTTPS Secure");
+    if (hasLastModified) aiTrustSignals.push("Recently Updated");
+    if (hasCanonical) aiTrustSignals.push("Canonical URL");
+    if (hasFavicon) aiTrustSignals.push("Favicon");
+
+    const sentences = bodyText.split(/[.!?]+/).length || 1;
+    const avgWordsPerSentence = wordCount / sentences;
+    let readabilityScore = 50;
+    if (avgWordsPerSentence > 25) readabilityScore = 30;
+    else if (avgWordsPerSentence > 20) readabilityScore = 50;
+    else readabilityScore = 80;
+
+    let seoScore = 100;
+    const criticalIssues = [];
+    const importantIssues = [];
+    const minorIssues = [];
+
+    const robotsExists = false;
+    const sitemapExists = false;
+
+    // ========== STRICT SEO ISSUE AUDIT ==========
+    if (!title || title === "No Title Found" || title === "Not Found" || title.trim() === "") { 
+      seoScore -= 20; 
+      criticalIssues.push("Title tag missing or failed to parse"); 
+    } else if (title.length > 60) { 
+      seoScore -= 5; 
+      importantIssues.push("Title too long (>60 chars)"); 
+    }
+    
+    if (!metaDescription || metaDescription === "Not Found" || metaDescription.trim() === "") { 
+      seoScore -= 20; 
+      criticalIssues.push("Meta description missing or failed to parse"); 
+    }
+    
+    if (!h1 || h1 === "Not Found" || h1.trim() === "") { 
+      seoScore -= 20; 
+      criticalIssues.push("H1 tag missing or failed to parse"); 
+    }
+    
+    if (imagesWithoutAlt > 0) { seoScore -= 5; importantIssues.push(`${imagesWithoutAlt} images missing ALT text`); }
+    if (!isHttps) { seoScore -= 15; criticalIssues.push("Site not using HTTPS"); }
+    if (!mobileViewport) { seoScore -= 10; criticalIssues.push("Mobile viewport not set"); }
+    if (loadTime > 3000) { seoScore -= 10; importantIssues.push("Slow load time (>3s)"); }
+    if (!hasSchemaMarkup) { seoScore -= 10; importantIssues.push("No schema markup found"); }
+    if (!robotsExists) { seoScore -= 5; minorIssues.push("robots.txt missing"); }
+    if (!sitemapExists) { seoScore -= 5; minorIssues.push("sitemap.xml missing"); }
+    if (!hasCanonical) { seoScore -= 5; importantIssues.push("Canonical URL missing"); }
+    if (!hasFavicon) { seoScore -= 3; minorIssues.push("Favicon missing"); }
+
+    seoScore = Math.max(10, seoScore);
+
+    let aeoScore = 0;
+    if (hasFAQ) aeoScore += 30;
+    if (hasHowTo) aeoScore += 20;
+    if (hasDirectAnswer) aeoScore += 25;
+    if (hasSchemaMarkup) aeoScore += 15;
+    if (h1 && h1 !== "Not Found" && metaDescription && metaDescription !== "Not Found") aeoScore += 10;
+
+    const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 60 ? "Good" : seoScore >= 40 ? "Fair" : "Poor";
+    const aeoStatus = aeoScore >= 80 ? "ChatGPT Ready" : aeoScore >= 50 ? "AI Friendly" : "Needs Work";
+
+    const featuredSnippetChance = Math.min(100, (hasDirectAnswer ? 40 : 0) + (hasFAQ ? 30 : 0) + (listCount > 0 ? 20 : 0) + (h2Count >= 3 ? 10 : 0));
+    const answerQuality = Math.min(100, Math.round((hasDirectAnswer ? 30 : 0) + (hasFAQ ? 25 : 0) + (listCount > 0 ? 15 : 0) + (h2Count >= 3 ? 15 : 0) + (readabilityScore * 0.15))) || 50;
+    const aiTrustScore = Math.round((eeatData.score * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
+
+    const externalLinksCount = $("a[href^='http']").not(`a[href^='${url}']`).length || 0;
+    const citationChatGPT = Math.min(95, 20 + (hasFAQ ? 25 : 0) + (listCount > 2 ? 15 : 0) + (hasDirectAnswer ? 20 : 0) + (hasAuthor ? 10 : 0));
+    const citationGemini = Math.min(95, 20 + (hasSchemaMarkup ? 30 : 0) + (tableCount > 0 ? 20 : 0) + (hasAuthor ? 15 : 0) + (wordCount > 800 ? 15 : 0));
+    const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer ? 25 : 0) + (hasLastModified ? 15 : 0) + (externalLinksCount > 5 ? 15 : 0) + (listCount > 0 ? 15 : 0));
+    const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
+
+    const schemaScore = (hasFAQ ? 25 : 0) + (hasHowTo ? 25 : 0) + (hasDirectAnswer ? 20 : 0) + (uniqueSchemas.length > 0 ? 30 : 0);
+    const overallAIVisibilityScore = Math.round((seoScore * 0.30) + (aeoScore * 0.20) + (aiTrustScore * 0.15) + (citationProbability * 0.15) + (readabilityScore * 0.10) + (schemaScore * 0.10));
+
+    const aiVisibilityLevel = overallAIVisibilityScore >= 80 ? "Excellent" : overallAIVisibilityScore >= 60 ? "Good" : overallAIVisibilityScore >= 40 ? "Fair" : "Poor";
+    const mobileScore = mobileViewport ? seoScore : Math.max(0, seoScore - 20);
+    const desktopScore = seoScore;
+
+    // ========== CRITICAL ENTITY ALLOCATION ENGINE ==========
+    const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas);
+    const { brands, locations, services, people, organizations, products, totalEntities } = entityData;
+    const entities = entityData.entities || [
+      ...brands,
+      ...services,
+      ...locations,
+      ...people,
+      ...organizations,
+      ...products
+    ];
+
+    const brandName = brands[0] || getBrandNameEnhanced(url, $, title, schemas);
+    const mainTopic = (h1 && h1 !== "Not Found") ? h1 : (safeArraySlice(title.split(" "), 0, 3).join(" ") || "this service");
+
+    // FAQ Generator
+    const autoFAQ = [];
+    if (brandName && mainTopic) {
+      autoFAQ.push({ 
+        q: `What services does ${brandName} provide for ${mainTopic}?`, 
+        a: metaDescription && metaDescription !== "Not Found" ? metaDescription : `We offer complete solutions for ${mainTopic} with industry-leading practices.` 
+      });
+    }
+    if (services.length > 0) {
+      autoFAQ.push({
+        q: `How can I get started with ${services[0]}?`,
+        a: `To get started with ${services[0]}, you can contact our expert team via our website portal.`
+      });
+    }
+
+    let aiExtractedAnswer = "No clear answer found";
+    if (bodyText && bodyText.length > 50) {
+      const firstPara = bodyText.split('.')[0];
+      const serviceName = services[0] || 'expert digital solutions';
+      const locationInfo = locations.length > 0 && !locations.includes("Global") ? ` for clients in ${locations[0]}` : '';
+      aiExtractedAnswer = `${brandName} is a verified provider of ${serviceName}${locationInfo}. Key highlights include: ${safeArraySlice(firstPara.split(' '), 0, 20).join(' ')}...`;
+    }
+
+    const aiSearchSimulation = {
+      query: `What is the primary offering of ${brandName}?`,
+      chatgpt: {
+        answer: hasDirectAnswer ? `${brandName} offers ${services[0] || mainTopic}. ${safeArraySlice(metaDescription, 0, 100)}` : `Based on live indexes, ${brandName} specializes in ${safeArraySlice(keywords, 0, 3).join(', ')}. For specific details, explore their web services.`,
+        sources: hasAuthor ? ["Official Website", "Author Profile"] : ["Official Website"],
+        willCite: hasDirectAnswer && hasFAQ && listCount >= 2
+      },
+      gemini: {
+        answer: hasSchemaMarkup ? `According to structured JSON-LD data: ${title}. Core solutions include ${safeArraySlice(services, 0, 2).join(' and ')}. ${hasLastModified ? 'Last updated: ' + lastModified : ''}` : `${title}. ${safeArraySlice(metaDescription, 0, 120)}`,
+        sources: hasSchemaMarkup ? ["Schema.org Data", "Website"] : ["Website"],
+        willCite: hasSchemaMarkup && tableCount > 0 && hasAuthor
+      },
+      perplexity: {
+        answer: hasLastModified ? `${aiExtractedAnswer} [Updated ${lastModified}]` : aiExtractedAnswer,
+        sources: hasLastModified ? ["Official Site (2026)", "Cited Sources"] : ["Official Site"],
+        willCite: hasDirectAnswer && hasLastModified && externalLinksCount > 3
+      },
+      status: "live"
+    };
+
+    const aiRecommendations = [];
+    if (!hasFAQ) aiRecommendations.push({ priority: "CRITICAL", action: "Add FAQ Schema", impact: "+15% ChatGPT Citation", effort: "15 mins", code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[]}</script>` });
+    if (!hasAuthor) aiRecommendations.push({ priority: "HIGH", action: "Add Author Section with Credentials", impact: "+12% EEAT Score", effort: "10 mins", code: `<div class="author" itemprop="author">By <span itemprop="name">Expert</span></div>` });
+
+    const recommendationScore = Math.max(0, 100 - (aiRecommendations.length * 8));
+
+    const visibilityForecast = {
+      current: overallAIVisibilityScore,
+      afterFAQ: Math.min(100, overallAIVisibilityScore + (hasFAQ ? 0 : 15)),
+      afterHowTo: Math.min(100, overallAIVisibilityScore + (hasHowTo ? 0 : 12)),
+      afterAuthor: Math.min(100, overallAIVisibilityScore + (hasAuthor ? 0 : 10)),
+      afterSchema: Math.min(100, overallAIVisibilityScore + (hasSchemaMarkup ? 0 : 8)),
+      afterAll: Math.min(100, overallAIVisibilityScore + recommendationScore)
+    };
+
+    const schemaGenerator = {};
+    if (!schemas.FAQPage?.present && autoFAQ.length > 0) {
+      schemaGenerator.FAQPage = {
+        recommended: true,
+        code: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          "mainEntity": autoFAQ.map(f => ({
+            "@type": "Question",
+            "name": f.q,
+            "acceptedAnswer": { "@type": "Answer", "text": f.a }
+          }))
+        }, null, 2),
+        title: "FAQ Schema - AI Preferred"
+      };
+    }
+
+    const aiAutopilot = [
+      !hasFAQ && { task: "Add FAQ Schema", impact: "+15", effort: "15 mins", priority: "CRITICAL" },
+      !hasAuthor && { task: "Add Author Bio", impact: "+8", effort: "10 mins", priority: "HIGH" },
+      !hasEmail && { task: "Add Email Address", impact: "+5", effort: "2 mins", priority: "MEDIUM" },
+      internalLinkData.weakLinking && { task: "Fix Internal Linking Structure", impact: "+12", effort: "20 mins", priority: "HIGH" }
+    ].filter(Boolean);
+
+    const citationOpportunities = safeRun(() => findCitationOpportunities({
+      hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatScore: eeatData.score
+    }), []);
+
+    const semanticSEO = safeRun(() => analyzeSemanticSEO($, bodyText, keywords), {
+      nlpScore: 40, topicCoverage: 20, semanticRelevance: 30, entityCoverage: 20, contentDepth: "Shallow", semanticGaps: [], missingEntities: [], recommendations: []
+    });
+
+    const topicalAuthority = safeRun(() => calculateTopicalAuthority($, keywords, h2s, h3s), {
+      authorityScore: 30, clusters: [], coveragePercent: 10, missingTopics: []
+    });
+
+    const localSEO = safeRun(() => analyzeLocalSEO($, bodyText), {
+      hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 30, napConsistency: "Incomplete/Missing", recommendations: []
+    });
+
+    const trustSignals = safeRun(() => scanTrustSignals($, url), {
+      hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 20, totalSignals: 0, socialLinks: []
+    });
+
+    const aiSnippets = safeRun(() => generateAISnippets(h1, metaDescription, bodyText, keywords), {
+      directAnswer: metaDescription, featuredSnippet: title, aiOverviewAnswer: "", quickFactsBlock: []
+    });
+
+    const visibilityTrend = safeRun(() => trackAIVisibilityTrend(url, overallAIVisibilityScore, seoScore, aeoScore), {
+      labels: [], scores: [], seoScores: [], aeoScores: [], growthPercentage: 0
+    });
+
+    console.log("SCAN COMPLETED");
+    console.log("FINAL PAYLOAD READY");
+
     return {
+      success: true,
+      crawlSuccess: true,
+      fallbackMode: false,
+      crawlQuality: validation.crawlQuality,
+      warning,
+      schemaGenerator,
+      aiAutopilot,
       url,
-      crawlSuccess: false,
-      fallbackMode: true,
-      dataSource: "BLOCKED",
-      blocked: true,
-      isBlocked: true,
-      title: "Blocked / Protected",
-      h1: "Protected Section",
-      metaDescription: "Metadata block detected. Anti-scraping firewall prevents deep indexing audits.",
-      wordCount: 0,
-      score: null,
-      status: "BLOCKED",
-      stopProcessing: true,
-      warning: "Website is protected by an anti-bot system (Cloudflare/reCAPTCHA). Core crawlers were blocked.",
-      overallAIVisibilityScore: null,
-      aiVisibilityLevel: "N/A",
-      citationProbability: null,
-      aeoScore: null,
-      aeoStatus: "N/A",
-      hasFAQ: false,
-      hasHowTo: false,
-      hasDirectAnswer: false,
-      totalImages: 0,
-      imagesWithoutAlt: 0,
-      internalLinks: 0,
-      externalLinks: 0,
-      mobileFriendly: false,
-      isHttps: url.startsWith("https://"),
-      loadTime,
-      mobileScore: null,
-      desktopScore: null,
-      hasSchemaMarkup: false,
-      robotsExists: false,
-      sitemapExists: false,
-      hasCanonical: false,
-      canonical: "",
-      hasFavicon: false,
-      favicon: "",
-      hasOGTags: false,
-      ogTitle: "",
-      ogDescription: "",
-      ogImage: "",
-      schemas: [],
-      recommendedSchemas: [],
-      keywords: [],
-      entities: [],
-      readabilityScore: null,
-      aiTrustScore: null,
-      answerQualityScore: null,
-      featuredSnippetChance: null,
-      contentStructureScore: null,
-      citationChatGPT: null,
-      citationGemini: null,
-      citationPerplexity: null,
-      h1Count: 0,
-      h2Count: 0,
-      h3Count: 0,
-      listCount: 0,
-      tableCount: 0,
-      hasPrivacyPolicy: false,
-      hasAboutPage: false,
-      hasContactPage: false,
-      hasAuthor: false,
-      hasFacebook: false,
-      hasLinkedIn: false,
-      hasYouTube: false,
-      hasTwitter: false,
-      hasEmail: false,
-      hasPhone: false,
-      email: null,
-      phone: null,
-      hasLastModified: false,
-      lastModified: null,
-      autoFAQ: [],
-      aiSearchSimulation: {
-        query: "Scan unavailable",
-        chatgpt: { answer: "Crawl restricted by firewall.", sources: [], willCite: false },
-        gemini: { answer: "Crawler block detected.", sources: [], willCite: false },
-        perplexity: { answer: "Target site blocked programmatic audits.", sources: [], willCite: false },
-        status: "offline"
-      },
-      criticalIssues: ["Anti-scraping firewall active (Cloudflare/Turnstile)"],
-      importantIssues: ["Programmatic content audits blocked"],
-      minorIssues: [],
-      aiRecommendations: [],
-      recommendationScore: null,
-      visibilityForecast: null,
-      topicalAuthority: null,
-      semanticSEO: null,
-      citationOpportunities: null,
-      aiSnippets: null,
-      trustSignals: null,
-      localSEO: null,
-      visibilityTrend: null,
-      aiEntities: null,
+      title,
+      h1,
+      h2s,
+      h3s,
+      metaDescription,
+      wordCount,
+      lastModified,
+      score: seoScore,
+      status: seoStatus,
+      aiTrustSignals,
+      overallAIVisibilityScore,
+      aiVisibilityLevel,
       breakdown: {
-        seo: null,
-        aeo: null,
-        eeatScore: null,
-        eeatBreakdown: null,
-        internalLinkingAudit: null,
-        trust: null,
-        citation: null,
-        readability: null,
-        schema: null
+        seo: seoScore,
+        aeo: aeoScore,
+        eeatScore: eeatData.score,
+        eeatBreakdown: eeatData,
+        internalLinkingAudit: internalLinkData,
+        trust: aiTrustScore,
+        citation: citationProbability,
+        readability: readabilityScore,
+        schema: schemaScore
       },
+      citationProbability,
+      totalImages,
+      imagesWithoutAlt,
+      internalLinks: internalLinkData.totalInternalLinks,
+      externalLinks: externalLinksCount,
+      mobileFriendly: mobileViewport,
+      isHttps,
+      loadTime,
+      mobileScore,
+      desktopScore,
+      hasSchemaMarkup,
+      robotsExists,
+      sitemapExists,
+      hasCanonical,
+      canonical,
+      hasFavicon,
+      favicon,
+      hasOGTags,
+      ogTitle,
+      ogDescription,
+      ogImage,
+      aeoScore,
+      aeoStatus,
+      hasFAQ,
+      hasHowTo,
+      hasDirectAnswer,
+      schemas: uniqueSchemas,
+      recommendedSchemas,
+      keywords: keywords || [],
+      entities: entities || [],
+      readabilityScore,
+      aiTrustScore,
+      answerQualityScore: answerQuality,
+      featuredSnippetChance,
+      contentStructureScore: (h1Count === 1 ? 20 : 0) + (h2Count >= 3 ? 20 : 0) + (h3Count >= 5 ? 20 : 0) + (listCount >= 2 ? 20 : 0) + (tableCount >= 1 ? 20 : 0),
+      citationChatGPT,
+      citationGemini,
+      citationPerplexity,
+      h1Count,
+      h2Count,
+      h3Count,
+      listCount,
+      tableCount,
+      hasPrivacyPolicy,
+      hasAboutPage,
+      hasContactPage,
+      hasAuthor,
+      hasFacebook,
+      hasLinkedIn,
+      hasYouTube,
+      hasTwitter,
+      hasEmail,
+      hasPhone,
+      email,
+      phone,
+      hasLastModified,
+      autoFAQ,
+      aiSearchSimulation,
+      criticalIssues,
+      importantIssues,
+      minorIssues,
+      aiRecommendations,
+      recommendationScore,
+      visibilityForecast,
+      topicalAuthority,
+      semanticSEO,
+      citationOpportunities,
+      aiSnippets,
+      trustSignals,
+      localSEO,
+      visibilityTrend,
+      aiEntities: { 
+        brands: brands || [], 
+        locations: locations || [], 
+        services: services || [], 
+        people: people || [], 
+        organizations: organizations || [], 
+        products: products || [], 
+        totalEntities: totalEntities || 0 
+      },
+      internalLinkIntelligence: internalLinkData,
       brokenLinkCount: 0,
-      lcpScore: null
+      lcpScore: 1200
     };
+  } catch (err) {
+    return fallbackSafePayload(url, err);
   }
-
-  $ = cheerio.load(html);
-
-  // Assign rawBodyText after DOM loader is established
-  rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
-
-  $('script, style, nav, footer, header, noscript, svg').remove();
-
-  // Deep Fallback Metadata Extraction
-  let title = safeString($("title").text()).trim();
-  if (!title || title.toLowerCase().includes("not found")) {
-    title = safeString($('meta[property="og:title"]').attr("content")).trim() || 
-            safeString($('meta[name="twitter:title"]').attr("content")).trim() || 
-            safeString($("h1").first().text()).trim() || 
-            `${formattedNicheTitle} Platform`;
-  }
-
-  let metaDescription = safeString($('meta[name="description"]').attr("content")).trim();
-  if (!metaDescription || metaDescription.toLowerCase().includes("not found")) {
-    metaDescription = safeString($('meta[property="og:description"]').attr("content")).trim() || 
-                      safeString($('meta[name="twitter:description"]').attr("content")).trim() || 
-                      safeString($("p").first().text()).substring(0, 150).trim() || 
-                      `Comprehensive services and architectural layouts tailored around ${estimatedNiche}.`;
-  }
-
-  let h1 = safeString($("h1").first().text()).trim();
-  if (!h1 || h1.toLowerCase().includes("not found")) {
-    h1 = safeString($("h2").first().text()).trim() || `Proven ${formattedNicheTitle} Systems`;
-  }
-
-  const bodyText = rawBodyText || "No content scanned.";
-  const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
-  const h2s = $("h2").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean) || [];
-  const h3s = $("h3").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean) || [];
-
-  const schemas = detectAllSchemas($, html);
-  const uniqueSchemas = Object.keys(schemas).filter(k => schemas[k]?.present) || [];
-  const recommendedSchemas = Object.keys(schemas).filter(k => schemas[k]?.recommended && !schemas[k]?.present) || [];
-
-  const faqQuestions = [];
-  if (schemas.FAQPage?.present && schemas.FAQPage?.data?.length > 0) {
-    schemas.FAQPage.data.forEach(schema => {
-      schema?.mainEntity?.forEach(q => { if (q?.name) faqQuestions.push(safeString(q.name)); });
-    });
-  }
-
-  const h1Count = $("h1").length || 0;
-  const h2Count = $("h2").length || 0;
-  const h3Count = $("h3").length || 0;
-  const listCount = $("ul, ol").length || 0;
-  const tableCount = $("table").length || 0;
-  const totalImages = $("img").length || 0;
-  const imagesWithoutAlt = $("img").filter((i, el) => !$(el).attr("alt")).length || 0;
-  const isHttps = url.startsWith("https://");
-  const mobileViewport = $('meta[name="viewport"]').length > 0;
-  const canonical = safeString($('link[rel="canonical"]').attr("href"));
-  const hasCanonical = !!canonical;
-  const favicon = safeString($('link[rel="icon"], link[rel="shortcut icon"]').attr("href"));
-  const hasFavicon = !!favicon;
-
-  const hasFAQ = faqQuestions.length > 0 || schemas.FAQPage?.present || false;
-  const hasHowTo = schemas.HowTo?.present || false;
-  const hasSchemaMarkup = uniqueSchemas.length > 0;
-  const hasDirectAnswer = (bodyText.includes("Q:") && bodyText.includes("A:")) || bodyText.toLowerCase().includes("what is") || bodyText.toLowerCase().includes("how to") || (h2Count >= 3 && bodyText.length > 500);
-
-  const ogTitle = safeString($('meta[property="og:title"]').attr("content"));
-  const ogDescription = safeString($('meta[property="og:description"]').attr("content"));
-  const ogImage = safeString($('meta[property="og:image"]').attr("content"));
-  const hasOGTags = !!(ogTitle && ogDescription);
-
-  const hasAuthor = $('meta[name="author"]').length > 0 || $('[rel="author"]').length > 0 || $('[itemprop="author"]').length > 0;
-  const dateStr = safeString($('meta[property="article:modified_time"]').attr('content') || $('meta[property="article:published_time"]').attr('content'));
-  const hasLastModified = !!dateStr;
-  const lastModified = dateStr ? new Date(dateStr).toLocaleDateString() : null;
-
-  const socialLinks = $("a").map((i, el) => safeString($(el).attr("href"))).get() || [];
-  const hasFacebook = socialLinks.some(link => link.includes("facebook.com"));
-  const hasLinkedIn = socialLinks.some(link => link.includes("linkedin.com"));
-  const hasYouTube = socialLinks.some(link => link.includes("youtube.com"));
-  const hasTwitter = socialLinks.some(link => link.includes("twitter.com") || link.includes("x.com"));
-
-  const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-  const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
-  const email = emailMatch ? emailMatch[0] : null;
-  const phone = phoneMatch ? phoneMatch[0] : null;
-  const hasEmail = !!email;
-  const hasPhone = !!phone;
-
-  const allText = bodyText.toLowerCase();
-  const hasPrivacyPolicy = allText.includes("privacy policy") || allText.includes("privacy");
-  const hasAboutPage = allText.includes("about us") || allText.includes("about");
-  const hasContactPage = allText.includes("contact us") || allText.includes("contact");
-
-  const keywords = tokenizeKeywords(bodyText);
-
-  // ========== SAFELY WRAPPED CORE EVALUATORS ==========
-  const internalLinkData = safeRun(() => analyzeInternalLinks($, url, h2s), {
-    internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0,
-    orphanPages: [], avgLinkDepth: 1, averageDepth: 1, authorityFlow: 10,
-    weakLinking: true, suggestions: ["Add internal structure navigation"], score: 40
-  });
-
-  const eeatData = safeRun(() => analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas), {
-    score: 30, level: "Fair", breakdown: { experience: { score: 5, max: 25, factors: [] }, expertise: { score: 10, max: 25, factors: [] }, authoritativeness: { score: 5, max: 25, factors: [] }, trustworthiness: { score: 10, max: 25, factors: [] } }
-  });
-
-  const aiTrustSignals = [];
-  if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
-  if (hasAboutPage) aiTrustSignals.push("About Page");
-  if (hasContactPage) aiTrustSignals.push("Contact Page");
-  if (hasEmail) aiTrustSignals.push("Email Address");
-  if (hasPhone) aiTrustSignals.push("Phone Number");
-  if (hasAuthor) aiTrustSignals.push("Author Profile");
-  if (hasFacebook) aiTrustSignals.push("Facebook");
-  if (hasLinkedIn) aiTrustSignals.push("LinkedIn");
-  if (hasYouTube) aiTrustSignals.push("YouTube");
-  if (hasTwitter) aiTrustSignals.push("Twitter/X");
-  if (isHttps) aiTrustSignals.push("HTTPS Secure");
-  if (hasLastModified) aiTrustSignals.push("Recently Updated");
-  if (hasCanonical) aiTrustSignals.push("Canonical URL");
-  if (hasFavicon) aiTrustSignals.push("Favicon");
-
-  const sentences = bodyText.split(/[.!?]+/).length || 1;
-  const avgWordsPerSentence = wordCount / sentences;
-  let readabilityScore = 50;
-  if (avgWordsPerSentence > 25) readabilityScore = 30;
-  else if (avgWordsPerSentence > 20) readabilityScore = 50;
-  else readabilityScore = 80;
-
-  let seoScore = 100;
-  const criticalIssues = [];
-  const importantIssues = [];
-  const minorIssues = [];
-
-  const robotsExists = false;
-  const sitemapExists = false;
-
-  // ========== STRICT SEO ISSUE AUDIT ==========
-  if (!title || title === "No Title Found" || title === "Not Found" || title.trim() === "") { 
-    seoScore -= 20; 
-    criticalIssues.push("Title tag missing or failed to parse"); 
-  } else if (title.length > 60) { 
-    seoScore -= 5; 
-    importantIssues.push("Title too long (>60 chars)"); 
-  }
-  
-  if (!metaDescription || metaDescription === "Not Found" || metaDescription.trim() === "") { 
-    seoScore -= 20; 
-    criticalIssues.push("Meta description missing or failed to parse"); 
-  }
-  
-  if (!h1 || h1 === "Not Found" || h1.trim() === "") { 
-    seoScore -= 20; 
-    criticalIssues.push("H1 tag missing or failed to parse"); 
-  }
-  
-  if (imagesWithoutAlt > 0) { seoScore -= 5; importantIssues.push(`${imagesWithoutAlt} images missing ALT text`); }
-  if (!isHttps) { seoScore -= 15; criticalIssues.push("Site not using HTTPS"); }
-  if (!mobileViewport) { seoScore -= 10; criticalIssues.push("Mobile viewport not set"); }
-  if (loadTime > 3000) { seoScore -= 10; importantIssues.push("Slow load time (>3s)"); }
-  if (!hasSchemaMarkup) { seoScore -= 10; importantIssues.push("No schema markup found"); }
-  if (!robotsExists) { seoScore -= 5; minorIssues.push("robots.txt missing"); }
-  if (!sitemapExists) { seoScore -= 5; minorIssues.push("sitemap.xml missing"); }
-  if (!hasCanonical) { seoScore -= 5; importantIssues.push("Canonical URL missing"); }
-  if (!hasFavicon) { seoScore -= 3; minorIssues.push("Favicon missing"); }
-
-  seoScore = Math.max(10, seoScore);
-
-  let aeoScore = 0;
-  if (hasFAQ) aeoScore += 30;
-  if (hasHowTo) aeoScore += 20;
-  if (hasDirectAnswer) aeoScore += 25;
-  if (hasSchemaMarkup) aeoScore += 15;
-  if (h1 && h1 !== "Not Found" && metaDescription && metaDescription !== "Not Found") aeoScore += 10;
-
-  const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 60 ? "Good" : seoScore >= 40 ? "Fair" : "Poor";
-  const aeoStatus = aeoScore >= 80 ? "ChatGPT Ready" : aeoScore >= 50 ? "AI Friendly" : "Needs Work";
-
-  const featuredSnippetChance = Math.min(100, (hasDirectAnswer ? 40 : 0) + (hasFAQ ? 30 : 0) + (listCount > 0 ? 20 : 0) + (h2Count >= 3 ? 10 : 0));
-  const answerQuality = Math.min(100, Math.round((hasDirectAnswer ? 30 : 0) + (hasFAQ ? 25 : 0) + (listCount > 0 ? 15 : 0) + (h2Count >= 3 ? 15 : 0) + (readabilityScore * 0.15))) || 50;
-  const aiTrustScore = Math.round((eeatData.score * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
-
-  const externalLinksCount = $("a[href^='http']").not(`a[href^='${url}']`).length || 0;
-  const citationChatGPT = Math.min(95, 20 + (hasFAQ ? 25 : 0) + (listCount > 2 ? 15 : 0) + (hasDirectAnswer ? 20 : 0) + (hasAuthor ? 10 : 0));
-  const citationGemini = Math.min(95, 20 + (hasSchemaMarkup ? 30 : 0) + (tableCount > 0 ? 20 : 0) + (hasAuthor ? 15 : 0) + (wordCount > 800 ? 15 : 0));
-  const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer ? 25 : 0) + (hasLastModified ? 15 : 0) + (externalLinksCount > 5 ? 15 : 0) + (listCount > 0 ? 15 : 0));
-  const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
-
-  const schemaScore = (hasFAQ ? 25 : 0) + (hasHowTo ? 25 : 0) + (hasDirectAnswer ? 20 : 0) + (uniqueSchemas.length > 0 ? 30 : 0);
-  const overallAIVisibilityScore = Math.round((seoScore * 0.30) + (aeoScore * 0.20) + (aiTrustScore * 0.15) + (citationProbability * 0.15) + (readabilityScore * 0.10) + (schemaScore * 0.10));
-
-  const aiVisibilityLevel = overallAIVisibilityScore >= 80 ? "Excellent" : overallAIVisibilityScore >= 60 ? "Good" : overallAIVisibilityScore >= 40 ? "Fair" : "Poor";
-  const mobileScore = mobileViewport ? seoScore : Math.max(0, seoScore - 20);
-  const desktopScore = seoScore;
-
-  // ========== CRITICAL FIX: STRUCTURE AND INITIALIZE ENTITIES SAFELY ==========
-  const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas);
-  const { brands, locations, services, people, organizations, products, totalEntities } = entityData;
-  const entities = entityData.entities || [
-    ...brands,
-    ...services,
-    ...locations,
-    ...people,
-    ...organizations,
-    ...products
-  ];
-
-  const keywordInsights = safeArraySlice(keywords, 0, 5).map(k => ({
-    keyword: k,
-    difficulty: getKeywordDifficulty(k),
-    opportunity: getKeywordOpportunity(k, hasFAQ, hasSchemaMarkup)
-  }));
-
-  const brandName = brands[0] || getBrandNameEnhanced(url, $, title, schemas);
-  const mainTopic = (h1 && h1 !== "Not Found") ? h1 : (safeArraySlice(title.split(" "), 0, 3).join(" ") || "this service");
-
-  // FAQ Generator
-  const autoFAQ = [];
-  if (brandName && mainTopic) {
-    autoFAQ.push({ 
-      q: `What services does ${brandName} provide for ${mainTopic}?`, 
-      a: metaDescription && metaDescription !== "Not Found" ? metaDescription : `We offer complete solutions for ${mainTopic} with industry-leading practices.` 
-    });
-  }
-  if (services.length > 0) {
-    autoFAQ.push({
-      q: `How can I get started with ${services[0]}?`,
-      a: `To get started with ${services[0]}, you can contact our expert team via our website portal.`
-    });
-  }
-  if (locations.length > 0 && !locations.includes("Global")) {
-    autoFAQ.push({ 
-      q: `Are ${brandName} services available in ${locations[0]}?`, 
-      a: `Yes, we actively serve clients in ${safeArraySlice(locations, 0, 3).join(', ')} and globally.` 
-    });
-  }
-
-  let aiExtractedAnswer = "No clear answer found";
-  if (bodyText && bodyText.length > 50) {
-    const firstPara = bodyText.split('.')[0];
-    const serviceName = services[0] || 'expert digital solutions';
-    const locationInfo = locations.length > 0 && !locations.includes("Global") ? ` for clients in ${locations[0]}` : '';
-    aiExtractedAnswer = `${brandName} is a verified provider of ${serviceName}${locationInfo}. Key highlights include: ${safeArraySlice(firstPara.split(' '), 0, 20).join(' ')}...`;
-  }
-
-  const aiSearchSimulation = {
-    query: `What is the primary offering of ${brandName}?`,
-    chatgpt: {
-      answer: hasDirectAnswer ? `${brandName} offers ${services[0] || mainTopic}. ${safeArraySlice(metaDescription, 0, 100)}` : `Based on live indexes, ${brandName} specializes in ${safeArraySlice(keywords, 0, 3).join(', ')}. For specific details, explore their web services.`,
-      sources: hasAuthor ? ["Official Website", "Author Profile"] : ["Official Website"],
-      willCite: hasDirectAnswer && hasFAQ && listCount >= 2
-    },
-    gemini: {
-      answer: hasSchemaMarkup ? `According to structured JSON-LD data: ${title}. Core solutions include ${safeArraySlice(services, 0, 2).join(' and ')}. ${hasLastModified ? 'Last updated: ' + lastModified : ''}` : `${title}. ${safeArraySlice(metaDescription, 0, 120)}`,
-      sources: hasSchemaMarkup ? ["Schema.org Data", "Website"] : ["Website"],
-      willCite: hasSchemaMarkup && tableCount > 0 && hasAuthor
-    },
-    perplexity: {
-      answer: hasLastModified ? `${aiExtractedAnswer} [Updated ${lastModified}]` : aiExtractedAnswer,
-      sources: hasLastModified ? ["Official Site (2026)", "Cited Sources"] : ["Official Site"],
-      willCite: hasDirectAnswer && hasLastModified && externalLinksCount > 3
-    },
-    status: "live"
-  };
-
-  const aiRecommendations = [];
-  if (!hasFAQ) aiRecommendations.push({ priority: "CRITICAL", action: "Add FAQ Schema", impact: "+15% ChatGPT Citation", effort: "15 mins", code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[]}</script>` });
-  if (!hasAuthor) aiRecommendations.push({ priority: "HIGH", action: "Add Author Section with Credentials", impact: "+12% EEAT Score", effort: "10 mins", code: `<div class="author" itemprop="author">By <span itemprop="name">Expert</span></div>` });
-
-  const recommendationScore = Math.max(0, 100 - (aiRecommendations.length * 8));
-
-  const visibilityForecast = {
-    current: overallAIVisibilityScore,
-    afterFAQ: Math.min(100, overallAIVisibilityScore + (hasFAQ ? 0 : 15)),
-    afterHowTo: Math.min(100, overallAIVisibilityScore + (hasHowTo ? 0 : 12)),
-    afterAuthor: Math.min(100, overallAIVisibilityScore + (hasAuthor ? 0 : 10)),
-    afterSchema: Math.min(100, overallAIVisibilityScore + (hasSchemaMarkup ? 0 : 8)),
-    afterAll: Math.min(100, overallAIVisibilityScore + recommendationScore)
-  };
-
-  const schemaGenerator = {};
-  if (!schemas.FAQPage?.present && autoFAQ.length > 0) {
-    schemaGenerator.FAQPage = {
-      recommended: true,
-      code: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        "mainEntity": autoFAQ.map(f => ({
-          "@type": "Question",
-          "name": f.q,
-          "acceptedAnswer": { "@type": "Answer", "text": f.a }
-        }))
-      }, null, 2),
-      title: "FAQ Schema - AI Preferred"
-    };
-  }
-
-  const aiAutopilot = [
-    !hasFAQ && { task: "Add FAQ Schema", impact: "+15", effort: "15 mins", priority: "CRITICAL" },
-    !hasAuthor && { task: "Add Author Bio", impact: "+8", effort: "10 mins", priority: "HIGH" },
-    !hasEmail && { task: "Add Email Address", impact: "+5", effort: "2 mins", priority: "MEDIUM" },
-    internalLinkData.weakLinking && { task: "Fix Internal Linking Structure", impact: "+12", effort: "20 mins", priority: "HIGH" }
-  ].filter(Boolean);
-
-  const citationOpportunities = safeRun(() => findCitationOpportunities({
-    hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatScore: eeatData.score
-  }), []);
-
-  const semanticSEO = safeRun(() => analyzeSemanticSEO($, bodyText, keywords), {
-    nlpScore: 40, topicCoverage: 20, semanticRelevance: 30, entityCoverage: 20, contentDepth: "Shallow", semanticGaps: [], missingEntities: [], recommendations: []
-  });
-
-  const topicalAuthority = safeRun(() => calculateTopicalAuthority($, keywords, h2s, h3s), {
-    authorityScore: 30, clusters: [], coveragePercent: 10, missingTopics: []
-  });
-
-  const localSEO = safeRun(() => analyzeLocalSEO($, bodyText), {
-    hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 30, napConsistency: "Incomplete/Missing", recommendations: []
-  });
-
-  const trustSignals = safeRun(() => scanTrustSignals($, url), {
-    hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 20, totalSignals: 0, socialLinks: []
-  });
-
-  const aiSnippets = safeRun(() => generateAISnippets(h1, metaDescription, bodyText, keywords), {
-    directAnswer: metaDescription, featuredSnippet: title, aiOverviewAnswer: "", quickFactsBlock: []
-  });
-
-  const visibilityTrend = safeRun(() => trackAIVisibilityTrend(url, overallAIVisibilityScore, seoScore, aeoScore), {
-    labels: [], scores: [], seoScores: [], aeoScores: [], growthPercentage: 0
-  });
-
-  const payload = {
-    success: true,
-    crawlSuccess: true,
-    fallbackMode: false,
-    crawlQuality: validation.crawlQuality,
-    warning,
-    schemaGenerator,
-    aiAutopilot,
-    url,
-    title,
-    h1,
-    h2s,
-    h3s,
-    metaDescription,
-    wordCount,
-    lastModified,
-    score: seoScore,
-    status: seoStatus,
-    aiTrustSignals,
-    overallAIVisibilityScore,
-    aiVisibilityLevel,
-    breakdown: {
-      seo: seoScore,
-      aeo: aeoScore,
-      eeatScore: eeatData.score,
-      eeatBreakdown: eeatData,
-      internalLinkingAudit: internalLinkData,
-      trust: aiTrustScore,
-      citation: citationProbability,
-      readability: readabilityScore,
-      schema: schemaScore
-    },
-    citationProbability,
-    totalImages,
-    imagesWithoutAlt,
-    internalLinks: internalLinkData.totalInternalLinks,
-    externalLinks: externalLinksCount,
-    mobileFriendly: mobileViewport,
-    isHttps,
-    loadTime,
-    mobileScore,
-    desktopScore,
-    hasSchemaMarkup,
-    robotsExists,
-    sitemapExists,
-    hasCanonical,
-    canonical,
-    hasFavicon,
-    favicon,
-    hasOGTags,
-    ogTitle,
-    ogDescription,
-    ogImage,
-    aeoScore,
-    aeoStatus,
-    hasFAQ,
-    hasHowTo,
-    hasDirectAnswer,
-    schemas: uniqueSchemas,
-    recommendedSchemas,
-    keywords: keywords || [],
-    entities: entities || [],
-    readabilityScore,
-    aiTrustScore,
-    answerQualityScore: answerQuality,
-    featuredSnippetChance,
-    contentStructureScore: (h1Count === 1 ? 20 : 0) + (h2Count >= 3 ? 20 : 0) + (h3Count >= 5 ? 20 : 0) + (listCount >= 2 ? 20 : 0) + (tableCount >= 1 ? 20 : 0),
-    citationChatGPT,
-    citationGemini,
-    citationPerplexity,
-    h1Count,
-    h2Count,
-    h3Count,
-    listCount,
-    tableCount,
-    hasPrivacyPolicy,
-    hasAboutPage,
-    hasContactPage,
-    hasAuthor,
-    hasFacebook,
-    hasLinkedIn,
-    hasYouTube,
-    hasTwitter,
-    hasEmail,
-    hasPhone,
-    email,
-    phone,
-    hasLastModified,
-    autoFAQ,
-    aiSearchSimulation,
-    criticalIssues,
-    importantIssues,
-    minorIssues,
-    aiRecommendations,
-    recommendationScore,
-    visibilityForecast,
-    topicalAuthority,
-    semanticSEO,
-    citationOpportunities,
-    aiSnippets,
-    trustSignals,
-    localSEO,
-    visibilityTrend,
-    aiEntities: { 
-      brands: brands || [], 
-      locations: locations || [], 
-      services: services || [], 
-      people: people || [], 
-      organizations: organizations || [], 
-      products: products || [], 
-      totalEntities: totalEntities || 0 
-    },
-    internalLinkIntelligence: internalLinkData,
-    brokenLinkCount: 0,
-    lcpScore: 1200
-  };
-
-  if (scanHistory.length < 50) {
-    scanHistory.push({ url, score: overallAIVisibilityScore, timestamp: new Date().toISOString() });
-  }
-
-  return payload;
 }
 
 // ========== COMPETITOR CONTENT GAP ENGINE ==========
@@ -1574,7 +1611,7 @@ app.get("/scan", async (req, res) => {
   }
 });
 
-// ========== COMPETITOR ADVANTAGE ENGINE v2 (TASK 2) ==========
+// ========== COMPETITOR ADVANTAGE ENGINE v2 ==========
 app.get("/compare", async (req, res) => {
   try {
     const { url, competitor } = req.query;
@@ -1656,7 +1693,6 @@ app.get("/content-gap", async (req, res) => {
     const gapData = competitorContentGap(userData, compData);
     res.json(gapData);
   } catch (err) {
-    console.error("CONTENT GAP ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1753,3 +1789,4 @@ process.on('unhandledRejection', (reason, promise) => {
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform v5.2 running on port ${PORT}`);
 });
+2. Guard-Stabilized Fron

@@ -128,11 +128,6 @@ export function safeRun(fn, fallback = null) {
   }
 }
 
-// ========== STARTUP INTEGRITY VERIFICATION ==========
-if (typeof tokenizeKeywords !== "function") {
-  throw new Error("FATAL: tokenizeKeywords function is missing or failed to initialize.");
-}
-
 // Normalize URL to prevent duplicate locks (handles protocol discrepancies and slashes)
 export function normalizeUrl(url) {
   let u = safeString(url).trim().toLowerCase();
@@ -928,7 +923,120 @@ export function fallbackSafePayload(url, err = null) {
   };
 }
 
-// ========== MAIN ANALYZER PIPELINE ==========
+// =========================================================================
+// ========== SECTION 2: AI CITATION & AEO SIMULATION ENGINES =============
+// =========================================================================
+
+/**
+ * TRUE AEO Simulation Engine.
+ * Evaluates ChatGPT, Gemini, and Perplexity citation likelihoods.
+ */
+export function aeoSimulationEngine(data) {
+  const {
+    hasDirectAnswer,
+    hasFAQ,
+    hasHowTo,
+    hasSchemaMarkup,
+    wordCount,
+    h1,
+    h2s,
+    h3s,
+    metaDescription,
+    bodyText,
+    hasAuthor,
+    hasLastModified,
+    externalLinksCount,
+    tableCount,
+    listCount
+  } = data;
+
+  // ChatGPT Citation calculation factors
+  const citationChatGPT = Math.min(95, 20 + (hasFAQ ? 25 : 0) + (listCount > 2 ? 15 : 0) + (hasDirectAnswer ? 20 : 0) + (hasAuthor ? 10 : 0));
+  
+  // Gemini structured extraction calculation factors
+  const citationGemini = Math.min(95, 20 + (hasSchemaMarkup ? 30 : 0) + (tableCount > 0 ? 20 : 0) + (hasAuthor ? 15 : 0) + (wordCount > 800 ? 15 : 0));
+  
+  // Perplexity answer generation calculation factors
+  const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer ? 25 : 0) + (hasLastModified ? 15 : 0) + (externalLinksCount > 5 ? 15 : 0) + (listCount > 0 ? 15 : 0));
+  
+  const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
+
+  // Logical checks for missing answer blocks
+  const missingAnswerBlocks = [];
+  if (!hasDirectAnswer) {
+    missingAnswerBlocks.push("Semantic Direct Summary Block under the Main Heading");
+  }
+  if (!hasFAQ) {
+    missingAnswerBlocks.push("Structured Q&A / FAQ Block");
+  }
+  if (listCount === 0) {
+    missingAnswerBlocks.push("Bullet points/ordered list for quick LLM ingestion");
+  }
+
+  // Actionable AEO optimization roadmap suggestions
+  const improvementSuggestions = [];
+  if (!hasFAQ) {
+    improvementSuggestions.push("Add FAQ Schema containing direct query keys targeting top user intent.");
+  }
+  if (!hasDirectAnswer) {
+    improvementSuggestions.push("Place a 50-word direct summary answer box directly underneath your main H1 tag.");
+  }
+  if (!hasAuthor) {
+    improvementSuggestions.push("Establish E-E-A-T: Include author name and schema reference linked to social credentials.");
+  }
+
+  return {
+    citationChatGPT,
+    citationGemini,
+    citationPerplexity,
+    citationProbability,
+    missingAnswerBlocks,
+    improvementSuggestions
+  };
+}
+
+/**
+ * AI reasoning generator engine.
+ * Deep analyzes SEO and AEO and builds professional summary feedback blocks.
+ */
+export function aiReasoningEngine(data, seoScore, aeoScore, citationProbability) {
+  const missingEntities = safeArray(data.missingEntities || data.semanticGaps || []);
+
+  let seoReasoning = "Your page features solid structural fundamentals.";
+  if (seoScore < 50) {
+    seoReasoning = "Critical structural elements are either missing or badly configured (missing meta tags, title length issues, or non-HTTPS URL).";
+  } else if (seoScore < 80) {
+    seoReasoning = "Strong structural base, but could be enhanced by fixing image alt tags, ensuring a canonical link, or speeding up loading performance.";
+  } else {
+    seoReasoning = "Excellent technical setup with correct HTML validation, metadata coverage, and optimal responsive design.";
+  }
+
+  let aeoReasoning = "Ready to be referenced by core generative model architectures.";
+  if (aeoScore < 40) {
+    aeoReasoning = "The document layout lacks LLM-friendly structural hooks like direct questions, list summaries, or JSON-LD FAQ/HowTo schemas.";
+  } else if (aeoScore < 75) {
+    aeoReasoning = "LLMs can parse the structure, but adding a high-contrast 'Answer Box' section and expanding Q&A schema blocks would significantly improve visibility.";
+  }
+
+  let citationLikelihood = "Moderate chance of selection as a reference source.";
+  if (citationProbability >= 80) {
+    citationLikelihood = "Highly Likely. Structured schema, rich topical density, and verifiable trust signals position this content for top-tier indexing.";
+  } else if (citationProbability < 50) {
+    citationLikelihood = "Low citation potential. High-performance models prefer pages containing marked schemas, clear list hierarchies, and explicit author attribution.";
+  }
+
+  return {
+    seo: seoReasoning,
+    aeo: aeoReasoning,
+    citationLikelihood,
+    missingEntities
+  };
+}
+
+// =========================================================================
+// ========== SECTION 3: COMPREHENSIVE SCANNER PIPELINE ===================
+// =========================================================================
+
 export async function analyzeSingleUrl(url) {
   console.log("SCAN STARTED - TARGET URL:", url);
   try {
@@ -955,7 +1063,7 @@ export async function analyzeSingleUrl(url) {
 
     const $ = cheerio.load(html);
 
-    // Assign rawBodyText after DOM loader is established & filter extension toolbar noise
+    // Filter extension toolbar noise and save body text
     let rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
     rawBodyText = cleanText(rawBodyText);
 
@@ -1088,66 +1196,126 @@ export async function analyzeSingleUrl(url) {
     else if (avgWordsPerSentence > 20) readabilityScore = 50;
     else readabilityScore = 80;
 
-    let seoScore = 100;
+    const robotsExists = false;
+    const sitemapExists = false;
+
+    // ========== WEIGHTED SCORING ENGINES =================
+
+    // 1. SEO Weighted Scoring
+    // Factors: technical (30%), content depth (30%), internal linking (15%), image SEO (10%), schema (15%)
+    let techSub = 100;
+    if (!isHttps) techSub -= 30;
+    if (!mobileViewport) techSub -= 30;
+    if (loadTime > 3000) techSub -= 20;
+    if (!hasCanonical) techSub -= 10;
+    if (!hasFavicon) techSub -= 10;
+    const techScore = clamp(techSub);
+
+    let contentSub = 50;
+    if (wordCount > 1500) contentSub += 50;
+    else if (wordCount > 800) contentSub += 30;
+    else if (wordCount > 400) contentSub += 10;
+    if (h1Count === 1) contentSub += 10;
+    if (h2Count >= 3) contentSub += 10;
+    const depthScore = clamp(contentSub);
+
+    const linkingScore = clamp(internalLinkData.score || 50);
+
+    const imgScore = clamp(totalImages > 0 ? Math.round(((totalImages - imagesWithoutAlt) / totalImages) * 100) : 100);
+
+    const schemaFactorScore = clamp(hasSchemaMarkup ? (uniqueSchemas.length * 30) : 10);
+
+    const seoScore = Math.round(
+      (techScore * 0.30) +
+      (depthScore * 0.30) +
+      (linkingScore * 0.15) +
+      (imgScore * 0.10) +
+      (schemaFactorScore * 0.15)
+    );
+
+    // 2. AEO Weighted Scoring
+    // Factors: answer clarity (30%), schema presence (20%), entity coverage (20%), citation readiness (30%)
+    const externalLinksCount = $("a[href^='http']").not(`a[href^='${url}']`).length || 0;
+    
+    // Simulate real citation indicators
+    const simulationResult = safeRun(() => aeoSimulationEngine({
+      hasDirectAnswer,
+      hasFAQ,
+      hasHowTo,
+      hasSchemaMarkup,
+      wordCount,
+      h1,
+      h2s,
+      h3s,
+      metaDescription,
+      bodyText,
+      hasAuthor,
+      hasLastModified,
+      externalLinksCount,
+      tableCount,
+      listCount
+    }), {
+      citationChatGPT: 50,
+      citationGemini: 50,
+      citationPerplexity: 50,
+      citationProbability: 50,
+      missingAnswerBlocks: [],
+      improvementSuggestions: []
+    });
+
+    const citationProbability = simulationResult.citationProbability;
+    const citationChatGPT = simulationResult.citationChatGPT;
+    const citationGemini = simulationResult.citationGemini;
+    const citationPerplexity = simulationResult.citationPerplexity;
+
+    const answerClarity = Math.min(100, Math.round((hasDirectAnswer ? 50 : 0) + (hasFAQ ? 30 : 0) + (readabilityScore * 0.2))) || 50;
+    const schemaPresence = clamp((hasFAQ ? 40 : 0) + (hasHowTo ? 30 : 0) + (hasSchemaMarkup ? 30 : 0));
+    
+    const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas);
+    const entityCoverage = clamp(safeArray(entityData?.entities).length * 10);
+    const citationReadiness = citationProbability;
+
+    const aeoScore = Math.round(
+      (answerClarity * 0.30) +
+      (schemaPresence * 0.20) +
+      (entityCoverage * 0.20) +
+      (citationReadiness * 0.30)
+    );
+
+    // Dynamic list classification
     const criticalIssues = [];
     const importantIssues = [];
     const minorIssues = [];
 
-    const robotsExists = false;
-    const sitemapExists = false;
-
-    // ========== STRICT SEO ISSUE AUDIT ==========
     if (!title || title === "No Title Found" || title === "Not Found" || title.trim() === "") { 
-      seoScore -= 20; 
       criticalIssues.push("Title tag missing or failed to parse"); 
     } else if (title.length > 60) { 
-      seoScore -= 5; 
       importantIssues.push("Title too long (>60 chars)"); 
     }
-    
     if (!metaDescription || metaDescription === "Not Found" || metaDescription.trim() === "") { 
-      seoScore -= 20; 
       criticalIssues.push("Meta description missing or failed to parse"); 
     }
-    
     if (!h1 || h1 === "Not Found" || h1.trim() === "") { 
-      seoScore -= 20; 
       criticalIssues.push("H1 tag missing or failed to parse"); 
     }
-    
-    if (imagesWithoutAlt > 0) { seoScore -= 5; importantIssues.push(`${imagesWithoutAlt} images missing ALT text`); }
-    if (!isHttps) { seoScore -= 15; criticalIssues.push("Site not using HTTPS"); }
-    if (!mobileViewport) { seoScore -= 10; criticalIssues.push("Mobile viewport not set"); }
-    if (loadTime > 3000) { seoScore -= 10; importantIssues.push("Slow load time (>3s)"); }
-    if (!hasSchemaMarkup) { seoScore -= 10; importantIssues.push("No schema markup found"); }
-    if (!robotsExists) { seoScore -= 5; minorIssues.push("robots.txt missing"); }
-    if (!sitemapExists) { seoScore -= 5; minorIssues.push("sitemap.xml missing"); }
-    if (!hasCanonical) { seoScore -= 5; importantIssues.push("Canonical URL missing"); }
-    if (!hasFavicon) { seoScore -= 3; minorIssues.push("Favicon missing"); }
-
-    seoScore = Math.max(10, seoScore);
-
-    let aeoScore = 0;
-    if (hasFAQ) aeoScore += 30;
-    if (hasHowTo) aeoScore += 20;
-    if (hasDirectAnswer) aeoScore += 25;
-    if (hasSchemaMarkup) aeoScore += 15;
-    if (h1 && h1 !== "Not Found" && metaDescription && metaDescription !== "Not Found") aeoScore += 10;
+    if (imagesWithoutAlt > 0) { importantIssues.push(`${imagesWithoutAlt} images missing ALT text`); }
+    if (!isHttps) { criticalIssues.push("Site not using HTTPS"); }
+    if (!mobileViewport) { criticalIssues.push("Mobile viewport not set"); }
+    if (loadTime > 3000) { importantIssues.push("Slow load time (>3s)"); }
+    if (!hasSchemaMarkup) { importantIssues.push("No schema markup found"); }
+    if (!robotsExists) { minorIssues.push("robots.txt missing"); }
+    if (!sitemapExists) { minorIssues.push("sitemap.xml missing"); }
+    if (!hasCanonical) { importantIssues.push("Canonical URL missing"); }
+    if (!hasFavicon) { minorIssues.push("Favicon missing"); }
 
     const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 60 ? "Good" : seoScore >= 40 ? "Fair" : "Poor";
     const aeoStatus = aeoScore >= 80 ? "ChatGPT Ready" : aeoScore >= 50 ? "AI Friendly" : "Needs Work";
 
     const featuredSnippetChance = Math.min(100, (hasDirectAnswer ? 40 : 0) + (hasFAQ ? 30 : 0) + (listCount > 0 ? 20 : 0) + (h2Count >= 3 ? 10 : 0));
-    const answerQuality = Math.min(100, Math.round((hasDirectAnswer ? 30 : 0) + (hasFAQ ? 25 : 0) + (listCount > 0 ? 15 : 0) + (h2Count >= 3 ? 15 : 0) + (readabilityScore * 0.15))) || 50;
+    const answerQuality = answerClarity;
     const aiTrustScore = Math.round((eeatData.score * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
 
-    const externalLinksCount = $("a[href^='http']").not(`a[href^='${url}']`).length || 0;
-    const citationChatGPT = Math.min(95, 20 + (hasFAQ ? 25 : 0) + (listCount > 2 ? 15 : 0) + (hasDirectAnswer ? 20 : 0) + (hasAuthor ? 10 : 0));
-    const citationGemini = Math.min(95, 20 + (hasSchemaMarkup ? 30 : 0) + (tableCount > 0 ? 20 : 0) + (hasAuthor ? 15 : 0) + (wordCount > 800 ? 15 : 0));
-    const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer ? 25 : 0) + (hasLastModified ? 15 : 0) + (externalLinksCount > 5 ? 15 : 0) + (listCount > 0 ? 15 : 0));
-    const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
-
-    const schemaScore = (hasFAQ ? 25 : 0) + (hasHowTo ? 25 : 0) + (hasDirectAnswer ? 20 : 0) + (uniqueSchemas.length > 0 ? 30 : 0);
+    const schemaScore = schemaPresence;
     const overallAIVisibilityScore = Math.round((seoScore * 0.30) + (aeoScore * 0.20) + (aiTrustScore * 0.15) + (citationProbability * 0.15) + (readabilityScore * 0.10) + (schemaScore * 0.10));
 
     const aiVisibilityLevel = overallAIVisibilityScore >= 80 ? "Excellent" : overallAIVisibilityScore >= 60 ? "Good" : overallAIVisibilityScore >= 40 ? "Fair" : "Poor";
@@ -1155,9 +1323,6 @@ export async function analyzeSingleUrl(url) {
     const desktopScore = seoScore;
 
     // ========== CRITICAL ENTITY ALLOCATION ENGINE ==========
-    const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas);
-    
-    // Defensive extraction block to guarantee array instantiation
     const extractedBrands = Array.isArray(entityData?.brands) ? entityData.brands : [];
     const extractedLocations = Array.isArray(entityData?.locations) ? entityData.locations : [];
     const extractedServices = Array.isArray(entityData?.services) ? entityData.services : [];
@@ -1276,6 +1441,14 @@ export async function analyzeSingleUrl(url) {
 
     const visibilityTrend = safeRun(() => trackAIVisibilityTrend(url, overallAIVisibilityScore, seoScore, aeoScore), {
       labels: [], scores: [], seoScores: [], aeoScores: [], growthPercentage: 0
+    });
+
+    // Run the high-performance logical AI Reasoning layer safely
+    const reasoning = safeRun(() => aiReasoningEngine(semanticSEO, seoScore, aeoScore, citationProbability), {
+      seo: "Analyzed structural details complete.",
+      aeo: "System visibility indicators calculated.",
+      citationLikelihood: "Medium source visibility potential.",
+      missingEntities: []
     });
 
     console.log("FINAL PAYLOAD READY");
@@ -1400,7 +1573,16 @@ export async function analyzeSingleUrl(url) {
       internalLinkIntelligence: internalLinkData,
       brokenLinkCount: 0,
       lcpScore: 1200,
-      aiExtractedAnswer
+      aiExtractedAnswer,
+      reasoning,
+      aeoSimulation: {
+        citationChatGPT,
+        citationGemini,
+        citationPerplexity,
+        citationProbability,
+        missingAnswerBlocks: simulationResult.missingAnswerBlocks,
+        improvementSuggestions: simulationResult.improvementSuggestions
+      }
     };
   } catch (err) {
     return fallbackSafePayload(url, err);
@@ -1442,7 +1624,7 @@ export function competitorContentGap(userData, compData) {
 }
 
 // ========== API ENDPOINTS ==========
-app.get("/", (req, res) => res.json({ status: "running", tool: "AI Visibility Platform", version: "5.2-production" }));
+app.get("/", (req, res) => res.json({ status: "running", tool: "AI Visibility Platform", version: "6.0-production-ai-engine" }));
 
 app.get("/scan", async (req, res) => {
   const url = req.query.url;
@@ -1606,6 +1788,16 @@ app.get("/history", (req, res) => {
   res.json(scanHistory);
 });
 
+// ========== GLOBAL ERROR HANDLER FOR API ROUTES ==========
+app.use((err, req, res, next) => {
+  console.error("UNHANDLED SYSTEM ERROR:", err);
+  res.status(500).json({
+    success: false,
+    error: "Internal server error inside the AI Visibility Engine",
+    message: err.message
+  });
+});
+
 // ========== STARTUP SELF-VALIDATION ROUTINE ==========
 function validateRequiredSystemHelpers() {
   const requiredHelpers = [
@@ -1630,7 +1822,9 @@ function validateRequiredSystemHelpers() {
     { name: "scanTrustSignals", fn: typeof scanTrustSignals === "function" ? scanTrustSignals : null },
     { name: "trackAIVisibilityTrend", fn: typeof trackAIVisibilityTrend === "function" ? trackAIVisibilityTrend : null },
     { name: "validateHtmlContent", fn: typeof validateHtmlContent === "function" ? validateHtmlContent : null },
-    { name: "detectAllSchemas", fn: typeof detectAllSchemas === "function" ? detectAllSchemas : null }
+    { name: "detectAllSchemas", fn: typeof detectAllSchemas === "function" ? detectAllSchemas : null },
+    { name: "aeoSimulationEngine", fn: typeof aeoSimulationEngine === "function" ? aeoSimulationEngine : null },
+    { name: "aiReasoningEngine", fn: typeof aiReasoningEngine === "function" ? aiReasoningEngine : null }
   ];
 
   console.log("🔍 Running Startup System Integrity Audit...");
@@ -1656,5 +1850,5 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 AI Visibility Platform v5.2 running on port ${PORT}`);
+  console.log(`🚀 AI Visibility Platform v6.0-production running on port ${PORT}`);
 });

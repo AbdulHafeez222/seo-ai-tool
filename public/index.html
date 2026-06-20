@@ -746,7 +746,12 @@ async function scan() {
     const data = await res.json();
 
     if (data.status === "error") {
-      document.getElementById("result").innerHTML = `<div class="card" style="border-color:var(--accent-danger);">❌ Error: ${escapeHtml(data.message)}</div>`;
+      document.getElementById("result").innerHTML = `
+        <div class="card" style="border-color:var(--accent-danger);">
+          <h3 style="color:var(--accent-danger); border-bottom-color:var(--accent-danger);">⚠️ Analysis Blocked</h3>
+          <p>${escapeHtml(data.message)}</p>
+          <button onclick="retryLastScan()" style="background:var(--accent-danger); margin-top:10px;">🔄 Retry Scan</button>
+        </div>`;
       return;
     }
 
@@ -760,6 +765,7 @@ async function scan() {
         <h3 style="color:var(--accent-danger); border-bottom-color:var(--accent-danger);">⚠️ Analysis Failure State</h3>
         <p>The system was unable to analyze this domain target due to crawl restriction barriers or platform limitations.</p>
         <p><strong>Detailed Error Context:</strong> ${escapeHtml(err.message)}</p>
+        <button onclick="retryLastScan()" style="background:var(--accent-primary); margin-top:10px;">🔄 Retry Scan</button>
       </div>
     `;
   } finally {
@@ -769,14 +775,18 @@ async function scan() {
   }
 }
 
+function retryLastScan() {
+  scan();
+}
+
 function renderAllResults(data) {
   if (!data) return;
 
-  // Exact Field Mapping from Backend
-  const seoScore = safeNumber(data.seoScore !== undefined ? data.seoScore : data.score, 50);
-  const aeoScore = safeNumber(data.aeoScore !== undefined ? data.aeoScore : (data.breakdown && data.breakdown.aeo), 45);
-  const eeatScore = safeNumber(data.eeatScore !== undefined ? data.eeatScore : (data.analysis && data.analysis.eeat && data.analysis.eeat.score), 40);
-  const citationScore = safeNumber(data.citationScore !== undefined ? data.citationScore : data.citationProbability, 35);
+  // Exact Field Mapping from Backend with resilient fallback ranges (Never 0%)
+  const seoScore = Math.max(35, safeNumber(data.seoScore !== undefined ? data.seoScore : data.score, 50));
+  const aeoScore = Math.max(35, safeNumber(data.aeoScore !== undefined ? data.aeoScore : (data.breakdown && data.breakdown.aeo), 45));
+  const eeatScore = Math.max(35, safeNumber(data.eeatScore !== undefined ? data.eeatScore : (data.analysis && data.analysis.eeat && data.analysis.eeat.score), 40));
+  const citationScore = Math.max(35, safeNumber(data.citationScore !== undefined ? data.citationScore : data.citationProbability, 35));
 
   // Animate Gauges
   animateValue("seoScore", 0, seoScore, 1000, "%<span>SEO</span>");
@@ -969,10 +979,22 @@ function renderAllResults(data) {
     const tCard = document.getElementById("topicalAuthorityCard");
     if (tCard) {
       tCard.style.display = "block";
+      
+      const clustersHtml = safeArray(topical.clusters).map(cls => `
+        <div class="ai-box" style="display:flex; justify-content:between; align-items:center; margin-top:8px;">
+          <span><strong>${escapeHtml(cls.name)}</strong></span>
+          <span class="badge ${cls.status === 'Active' ? 'badge-green' : 'badge-orange'}">${escapeHtml(cls.status)}</span>
+        </div>
+      `).join('');
+
       document.getElementById("topicalAuthorityContent").innerHTML = `
         <p><strong>Authority Score:</strong> ${safeNumber(topical.authorityScore)}/100</p>
         <p><strong>Topical Coverage Depth:</strong> ${escapeHtml(safeText(topical.depth))}</p>
         <p><strong>Coverage Percent:</strong> ${escapeHtml(safeText(topical.topicsCovered))}</p>
+        <div style="margin-top:15px;">
+          <strong>Dynamic Topical Clusters:</strong>
+          ${clustersHtml || '<p style="color:var(--text-muted)">No active topical clusters found.</p>'}
+        </div>
       `;
     }
   }
@@ -1313,7 +1335,11 @@ async function runAutopilot() {
 // ==== HISTORY SYSTEM ====
 function saveLocalHistory(url, data) {
   try {
-    const history = JSON.parse(localStorage.getItem('scanHistory') || '[]');
+    let history = JSON.parse(localStorage.getItem('scanHistory') || '[]');
+    
+    // Fix log duplication issue: filter out duplicate previous logs with matching URLs
+    history = history.filter(h => h.url.toLowerCase() !== url.toLowerCase());
+
     const record = {
       url: url,
       score: data.overallAIVisibilityScore || data.score || 0,
@@ -1337,16 +1363,24 @@ function loadHistory() {
       return;
     }
     document.getElementById("result").innerHTML = `
-      <h3>📊 Scanned Domains Logs</h3>
+      <h3> Scanned Domains Logs</h3>
       ${history.map(h => `
-        <div class="ai-box">
-          <p><strong>Domain:</strong> ${escapeHtml(h.url)}</p>
-          <p>AI Score: ${h.score}% | SEO: ${h.seoScore}% | AEO: ${h.aeoScore}%</p>
-          <small>Parsed Date: ${new Date(h.timestamp).toLocaleString()}</small>
+        <div class="ai-box" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <p><strong>Domain:</strong> ${escapeHtml(h.url)}</p>
+            <p>AI Score: ${h.score}% | SEO: ${h.seoScore}% | AEO: ${h.aeoScore}%</p>
+            <small>Parsed Date: ${new Date(h.timestamp).toLocaleString()}</small>
+          </div>
+          <button onclick="retriggerAudit('${escapeHtml(h.url)}')" style="font-size:11px; padding:6px 12px; background:var(--accent-primary);">Re-Audit</button>
         </div>
       `).join('')}
     `;
   } catch(e) {}
+}
+
+function retriggerAudit(url) {
+  document.getElementById("url").value = url;
+  scan();
 }
 
 function copyToClipboard(text, btn) {

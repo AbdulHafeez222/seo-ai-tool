@@ -685,6 +685,8 @@ async function scan() {
 }
 
 function renderAllResults(data) {
+  if (!data) return;
+
   try { renderCharts(data); } catch(e) { console.error(e); }
   try { renderBasicResults(data); } catch(e) { console.error(e); }
   try { renderSchemaGenerator(data); } catch(e) { console.error(e); }
@@ -701,67 +703,67 @@ function renderAllResults(data) {
   try { renderCitationProbability(data); } catch(e) { console.error(e); }
   try { renderAIVisibility(data); } catch(e) { console.error(e); }
 
-  // NEW FEATURES - WITH PERFECT SAFE RENDERING MAPPING
-  if (data.topicalAuthority) {
-    const score = safeNumber(data.topicalAuthority.authorityScore || data.topicalAuthority.score);
+  // NEW FEATURES - WITH PERFECT SAFE RENDERING MAPPING AND OPTIONAL CHAINING
+  if (data?.topicalAuthority) {
+    const score = safeNumber(data?.topicalAuthority?.authorityScore || data?.topicalAuthority?.score);
     showCard('topicalAuthorityCard', 'topicalAuthorityContent', `
       <div class="score-circle" style="background: conic-gradient(#00ff88 0% ${score}%, #e0e0e0 ${score}% 100%);">
         <span>${score}</span>
       </div>
-      <p><strong>Depth:</strong> ${safeText(data.topicalAuthority.depth)}</p>
-      <p><strong>Topics Covered:</strong> ${safeText(data.topicalAuthority.topicsCovered || (data.topicalAuthority.coveragePercent + "%"))}</p>
+      <p><strong>Depth:</strong> ${safeText(data?.topicalAuthority?.depth)}</p>
+      <p><strong>Topics Covered:</strong> ${safeText(data?.topicalAuthority?.topicsCovered || (data?.topicalAuthority?.coveragePercent + "%"))}</p>
     `);
   }
 
-  if (data.semanticSEO) {
-    const matched = safeArray(data.semanticSEO.missingEntities || data.semanticSEO.semanticGaps);
-    const nlpScore = safeNumber(data.semanticSEO.nlpScore);
+  if (data?.semanticSEO) {
+    const matched = safeArray(data?.semanticSEO?.missingEntities || data?.semanticSEO?.semanticGaps);
+    const nlpScore = safeNumber(data?.semanticSEO?.nlpScore);
     showCard('semanticSEOCard', 'semanticSEOContent', `
       <p><strong>NLP Score:</strong> ${nlpScore}/100</p>
-      <p><strong>Entities Covered:</strong> ${safeText(data.semanticSEO.entityCoverage)}%</p>
+      <p><strong>Entities Covered:</strong> ${safeText(data?.semanticSEO?.entityCoverage)}%</p>
       <p><strong>Semantic Gaps:</strong> ${matched.length > 0 ? matched.map(m => `<span class="badge badge-red" style="margin:2px;">${escapeHtml(m)}</span>`).join('') : 'None'}</p>
-      <p><strong>Content Depth:</strong> ${safeText(data.semanticSEO.contentDepth)}</p>
+      <p><strong>Content Depth:</strong> ${safeText(data?.semanticSEO?.contentDepth)}</p>
     `);
   }
 
-  if (data.citationOpportunities) {
-    showCard('citationOppCard', 'citationOppContent', safeArray(data.citationOpportunities).length > 0 ? safeArray(data.citationOpportunities).map(opp => `
+  if (data?.citationOpportunities) {
+    showCard('citationOppCard', 'citationOppContent', safeArray(data?.citationOpportunities).length > 0 ? safeArray(data?.citationOpportunities).map(opp => `
       <div class="opp-item" style="margin:10px 0; padding:10px; background:#222; border-left:3px solid #00ff88">
-        <strong>${escapeHtml(safeText(opp.engine))}:</strong> ${escapeHtml(safeText(opp.issue || opp.reason))}<br>
-        <span style="color:#00ff88">Impact: ${escapeHtml(safeText(opp.impact))}</span> | 
-        <span style="color:#ffaa00">Fix: ${escapeHtml(safeText(opp.fix))}</span>
+        <strong>${escapeHtml(safeText(opp?.engine))}:</strong> ${escapeHtml(safeText(opp?.issue || opp?.reason))}<br>
+        <span style="color:#00ff88">Impact: ${escapeHtml(safeText(opp?.impact))}</span> | 
+        <span style="color:#ffaa00">Fix: ${escapeHtml(safeText(opp?.fix))}</span>
       </div>
     `).join('') : `<p>No citation opportunities detected. Trust matrix optimization is maximum.</p>`);
   }
 
-  const faqs = data.autoFAQ || data.faqExpansion || [];
+  const faqs = data?.autoFAQ || data?.faqExpansion || [];
   if (safeArray(faqs).length > 0) {
     showCard('faqExpansionCard', 'faqExpansionContent', safeArray(faqs).map((faq, i) => `
       <div style="margin:10px 0; padding:10px; background:#222">
-        <strong>Q${i+1}: ${escapeHtml(safeText(faq.q))}</strong><br>
-        <span style="color:#aaa">A: ${escapeHtml(safeText(faq.a))}</span>
+        <strong>Q${i+1}: ${escapeHtml(safeText(faq?.q))}</strong><br>
+        <span style="color:#aaa">A: ${escapeHtml(safeText(faq?.a))}</span>
       </div>
     `).join('') + `<br><button onclick="copyFAQs()">📋 Copy All FAQs</button>`);
   }
 
-  if (data.aiSnippets) {
+  if (data?.aiSnippets) {
     showCard('aiSnippetsCard', 'aiSnippetsContent', `
       <div style="margin:10px 0">
-        <strong>Direct Answer (${safeNumber(data.aiSnippets.directAnswerWordCount)} words):</strong>
-        <div style="background:#222; padding:10px; margin:5px 0; color:#fff">${escapeHtml(safeText(data.aiSnippets.directAnswer))}</div>
+        <strong>Direct Answer (${safeNumber(data?.aiSnippets?.directAnswerWordCount)} words):</strong>
+        <div style="background:#222; padding:10px; margin:5px 0; color:#fff">${escapeHtml(safeText(data?.aiSnippets?.directAnswer))}</div>
         <button onclick="copySnippet('direct')">Copy Direct Answer</button>
       </div>
       <div style="margin:10px 0">
         <strong>Featured Snippet Block:</strong>
-        <pre style="background:#222; padding:10px; white-space:pre-wrap; color:#fff">${escapeHtml(safeText(data.aiSnippets.featuredSnippet))}</pre>
+        <pre style="background:#222; padding:10px; white-space:pre-wrap; color:#fff">${escapeHtml(safeText(data?.aiSnippets?.featuredSnippet))}</pre>
         <button onclick="copySnippet('featured')">Copy Featured Snippet</button>
       </div>
     `);
   }
 
-  if (data.trustSignals) {
-    const signals = data.trustSignals;
-    const score = safeNumber(signals.trustScore);
+  if (data?.trustSignals) {
+    const signals = data?.trustSignals;
+    const score = safeNumber(signals?.trustScore);
     const color = score > 70 ? '#00ff88' : score > 40 ? '#ffaa00' : '#ff4444';
     
     showCard('trustSignalsCard', 'trustSignalsContent', `
@@ -773,20 +775,20 @@ function renderAllResults(data) {
       <div style="margin-top:15px; font-size:14px; text-align:left">
         <p><strong>Signals Found:</strong></p>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px">
-          <div>${signals.hasAuthorPage || signals.hasAuthor ? '✓' : '✗'} Author Page</div>
-          <div>${signals.hasContact ? '✓' : '✗'} Contact Page</div>
-          <div>${signals.hasAbout ? '✓' : '✗'} About Page</div>
-          <div>${signals.hasPrivacyPolicy ? '✓' : '✗'} Privacy Policy</div>
-          <div>${signals.hasSocialProfiles ? '✓' : '✗'} Social Profiles</div>
-          <div>${signals.hasReviews ? '✓' : '✗'} Reviews</div>
-          <div>${signals.hasTestimonials ? '✓' : '✗'} Testimonials</div>
+          <div>${signals?.hasAuthorPage || signals?.hasAuthor ? '✓' : '✗'} Author Page</div>
+          <div>${signals?.hasContact ? '✓' : '✗'} Contact Page</div>
+          <div>${signals?.hasAbout ? '✓' : '✗'} About Page</div>
+          <div>${signals?.hasPrivacyPolicy ? '✓' : '✗'} Privacy Policy</div>
+          <div>${signals?.hasSocialProfiles ? '✓' : '✗'} Social Profiles</div>
+          <div>${signals?.hasReviews ? '✓' : '✗'} Reviews</div>
+          <div>${signals?.hasTestimonials ? '✓' : '✗'} Testimonials</div>
         </div>
       </div>
     `);
   }
 
-  if (data.localSEO) {
-    const score = safeNumber(data.localSEO.localScore);
+  if (data?.localSEO) {
+    const score = safeNumber(data?.localSEO?.localScore);
     const color = score > 70 ? '#00ff88' : '#ffa500';
     showCard('localSeoCard', 'localSEOContent', `
       <div class="score-circle-large" style="background: conic-gradient(${color} 0% ${score}%, #2d3748 ${score}% 100%);">
@@ -796,32 +798,32 @@ function renderAllResults(data) {
         </div>
       </div>
       <div style="margin-top:15px; text-align:left;">
-        <p><strong>NAP Consistency:</strong> ${safeText(data.localSEO.napConsistency)}</p>
-        <p><strong>Local Business Schema:</strong> ${data.localSEO.hasLocalBusiness ? 'Detected' : 'Missing'}</p>
-        <p><strong>Map Embed:</strong> ${data.localSEO.hasMap ? 'Detected' : 'Missing'}</p>
-        ${safeArray(data.localSEO.recommendations).length > 0 ? `<p><strong>Recommendations:</strong></p><ul>${safeArray(data.localSEO.recommendations).map(r => `<li>${escapeHtml(r)}</li>`).join('')}</ul>` : ''}
+        <p><strong>NAP Consistency:</strong> ${safeText(data?.localSEO?.napConsistency)}</p>
+        <p><strong>Local Business Schema:</strong> ${data?.localSEO?.hasLocalBusiness ? 'Detected' : 'Missing'}</p>
+        <p><strong>Map Embed:</strong> ${data?.localSEO?.hasMap ? 'Detected' : 'Missing'}</p>
+        ${safeArray(data?.localSEO?.recommendations).length > 0 ? `<p><strong>Recommendations:</strong></p><ul>${safeArray(data?.localSEO?.recommendations).map(r => `<li>${escapeHtml(r)}</li>`).join('')}</ul>` : ''}
       </div>
     `);
   }
 
-  if (data.visibilityTrend) {
-    const trend = data.visibilityTrend;
+  if (data?.visibilityTrend) {
+    const trend = data?.visibilityTrend;
     showCard('visibilityTrendCard', 'visibilityTrendContent', `
-      <p><strong>Growth Rate:</strong> <span style="color:${trend.growthPercentage >= 0 ? '#00ff88' : '#ff4444'}">${trend.growthPercentage >= 0 ? '+' : ''}${trend.growthPercentage}%</span></p>
+      <p><strong>Growth Rate:</strong> <span style="color:${trend?.growthPercentage >= 0 ? '#00ff88' : '#ff4444'}">${trend?.growthPercentage >= 0 ? '+' : ''}${trend?.growthPercentage}%</span></p>
     `);
     
     // Render Trend Chart
     const trendCanvas = document.getElementById("trendChart");
-    if (trendCanvas && safeArray(trend.labels).length > 0) {
+    if (trendCanvas && safeArray(trend?.labels).length > 0) {
       if (trendChart) trendChart.destroy();
       trendChart = new Chart(trendCanvas, {
         type: 'line',
         data: {
-          labels: safeArray(trend.labels),
+          labels: safeArray(trend?.labels),
           datasets: [
             {
               label: 'Overall Visibility',
-              data: safeArray(trend.scores),
+              data: safeArray(trend?.scores),
               borderColor: '#6366f1',
               backgroundColor: 'rgba(99, 102, 241, 0.1)',
               tension: 0.3,
@@ -859,30 +861,35 @@ function renderAllResults(data) {
     <p><strong>Last Crawled:</strong> Just Now</p>
   `);
   showCard('featuredSnippetCard', 'featuredSnippetContent', `
-    <p><strong>Featured Snippet Potential:</strong> ${safeNumber(data.featuredSnippetChance)}%</p>
+    <p><strong>Featured Snippet Potential:</strong> ${safeNumber(data?.featuredSnippetChance)}%</p>
     <p><strong>Action:</strong> Keep heading hierarchy formatted directly.</p>
   `);
+  
+  const entityObj = data?.entities || {};
+  const brandsFallback = safeArray(entityObj?.brands);
   showCard('peopleAlsoAskCard', 'peopleAlsoAskContent', `
     <p><strong>PAA Coverage Score:</strong> 80%</p>
-    <p><strong>Optimal Query:</strong> What is the core offering of this entity?</p>
+    <p><strong>Optimal Query:</strong> What is the core offering of ${escapeHtml(safeText(brandsFallback[0] || 'this entity'))}?</p>
   `);
 }
 
 function renderBasicResults(data) {
+  if (!data) return;
   setHTML("result", `
     <div class="card">
-      <h3>📊 SEO Status: ${escapeHtml(safeText(data.status, 'Scanned'))} <span class="badge badge-${safeNumber(data.score) >= 80 ? 'green' : safeNumber(data.score) >= 60 ? 'orange' : 'red'}">${safeNumber(data.score)}/100</span></h3>
-      <p><b>URL:</b> ${escapeHtml(safeText(data.url))}</p>
-      <p><b>Title:</b> ${escapeHtml(unescapeHtml(data.title)) || 'Not Found'}</p>
-      <p><b>H1:</b> ${escapeHtml(unescapeHtml(data.h1)) || 'Not Found'}</p>
-      <p><b>Word Count:</b> ${safeNumber(data.wordCount)}</p>
+      <h3>📊 SEO Status: ${escapeHtml(safeText(data?.status, 'Scanned'))} <span class="badge badge-${safeNumber(data?.score) >= 80 ? 'green' : safeNumber(data?.score) >= 60 ? 'orange' : 'red'}">${safeNumber(data?.score)}/100</span></h3>
+      <p><b>URL:</b> ${escapeHtml(safeText(data?.url))}</p>
+      <p><b>Title:</b> ${escapeHtml(unescapeHtml(data?.title)) || 'Not Found'}</p>
+      <p><b>H1:</b> ${escapeHtml(unescapeHtml(data?.h1)) || 'Not Found'}</p>
+      <p><b>Word Count:</b> ${safeNumber(data?.wordCount)}</p>
     </div>
   `);
 }
 
 function renderCharts(data) {
-  const seoScore = safeNumber(data.score);
-  const aeoScore = safeNumber(data.aeoScore);
+  if (!data) return;
+  const seoScore = safeNumber(data?.score);
+  const aeoScore = safeNumber(data?.aeoScore);
   let seoColor = seoScore >= 80 ? "#16a34a" : seoScore >= 50 ? "#f97316" : "#dc2626";
   
   const seoCanvas = document.getElementById("seoChart");
@@ -922,14 +929,15 @@ function renderCharts(data) {
 }
 
 function renderSchemaGenerator(data) {
-  if (data.schemaGenerator && Object.keys(data.schemaGenerator).length > 0) {
+  if (!data) return;
+  if (data?.schemaGenerator && Object.keys(data?.schemaGenerator).length > 0) {
     showCard("schemaCard", "schemaResults", `
       <h3>📋 Copy-Paste Schema Code</h3>
-      ${Object.entries(data.schemaGenerator).map(([key, val]) => `
+      ${Object.entries(data?.schemaGenerator).map(([key, val]) => `
         <div class="ai-box" style="background: #1e293b; color: #e2e8f0; margin: 10px 0;">
-          <b style="color: #60a5fa;">${escapeHtml(safeText(val.title, key))}</b>
-          <textarea readonly style="width:100%; height:120px; font-family:monospace; font-size:11px; margin:8px 0; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #334155;">${escapeHtml(safeText(val.code))}</textarea>
-          <button onclick="copyToClipboard(\`${(val.code || '').replace(/`/g, '\\`')}\`, this)" style="background:#10b981;font-size:12px; padding:6px 12px;">📋 Copy Code</button>
+          <b style="color: #60a5fa;">${escapeHtml(safeText(val?.title, key))}</b>
+          <textarea readonly style="width:100%; height:120px; font-family:monospace; font-size:11px; margin:8px 0; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #334155;">${escapeHtml(safeText(val?.code))}</textarea>
+          <button onclick="copyToClipboard(\`${(val?.code || '').replace(/`/g, '\\`')}\`, this)" style="background:#10b981;font-size:12px; padding:6px 12px;">📋 Copy Code</button>
         </div>
       `).join('')}
     `);
@@ -937,9 +945,10 @@ function renderSchemaGenerator(data) {
 }
 
 function renderSEOAudit(data) {
-  const critical = safeArray(data.criticalIssues);
-  const important = safeArray(data.importantIssues);
-  const minor = safeArray(data.minorIssues);
+  if (!data) return;
+  const critical = safeArray(data?.criticalIssues);
+  const important = safeArray(data?.importantIssues);
+  const minor = safeArray(data?.minorIssues);
   
   showCard("seoAuditCard", "seoAuditResults", `
     <div class="grid-3">
@@ -960,7 +969,8 @@ function renderSEOAudit(data) {
 }
 
 function renderTitleAnalyzer(data) {
-  const title = safeText(data.title);
+  if (!data) return;
+  const title = safeText(data?.title);
   const length = title.length;
   const status = length === 0 ? "Missing" : length < 30 ? "Too Short" : length > 60 ? "Too Long" : "Perfect";
   const color = length === 0 ? "red" : length < 30 || length > 60 ? "orange" : "green";
@@ -973,7 +983,8 @@ function renderTitleAnalyzer(data) {
 }
 
 function renderMetaAnalyzer(data) {
-  const meta = safeText(data.metaDescription);
+  if (!data) return;
+  const meta = safeText(data?.metaDescription);
   const length = meta.length;
   const status = length === 0 ? "Missing" : length < 120 ? "Too Short" : length > 160 ? "Too Long" : "Perfect";
   const color = length === 0 ? "red" : length < 120 || length > 160 ? "orange" : "green";
@@ -986,7 +997,8 @@ function renderMetaAnalyzer(data) {
 }
 
 function renderHeadingStructure(data) {
-  const h1Count = safeNumber(data.h1Count), h2Count = safeNumber(data.h2Count), h3Count = safeNumber(data.h3Count);
+  if (!data) return;
+  const h1Count = safeNumber(data?.h1Count), h2Count = safeNumber(data?.h2Count), h3Count = safeNumber(data?.h3Count);
   
   showCard("headingCard", "headingResults", `
     <table>
@@ -999,21 +1011,23 @@ function renderHeadingStructure(data) {
 }
 
 function renderInternalLinking(data) {
-  const linkData = data.breakdown?.internalLinkingAudit || {};
+  if (!data) return;
+  const linkData = data?.breakdown?.internalLinkingAudit || {};
   
   showCard("internalLinkCard", "internalLinkResults", `
     <div class="grid-3">
-      <div class="metric-box"><div class="metric-value">${safeNumber(linkData.totalInternalLinks || linkData.internalLinks)}</div><div class="metric-label">Internal Links</div></div>
-      <div class="metric-box"><div class="metric-value">${safeNumber(linkData.uniquePages)}</div><div class="metric-label">Unique Pages</div></div>
-      <div class="metric-box"><div class="metric-value">${safeNumber(linkData.avgLinkDepth || linkData.averageDepth)}</div><div class="metric-label">Avg Depth</div></div>
+      <div class="metric-box"><div class="metric-value">${safeNumber(linkData?.totalInternalLinks || linkData?.internalLinks)}</div><div class="metric-label">Internal Links</div></div>
+      <div class="metric-box"><div class="metric-value">${safeNumber(linkData?.uniquePages)}</div><div class="metric-label">Unique Pages</div></div>
+      <div class="metric-box"><div class="metric-value">${safeNumber(linkData?.avgLinkDepth || linkData?.averageDepth)}</div><div class="metric-label">Avg Depth</div></div>
     </div>
-    <p><strong>Authority Flow:</strong> ${safeNumber(linkData.authorityFlow)}% <span class="badge badge-${safeNumber(linkData.authorityFlow) >= 60 ? 'green' : 'orange'}">${safeNumber(linkData.authorityFlow) >= 60 ? 'Good' : 'Weak'}</span></p>
-    ${linkData.weakLinking ? `<p style="color:#dc2626;"><strong>⚠️ Weak Linking:</strong> Add more internal links</p>` : ''}
+    <p><strong>Authority Flow:</strong> ${safeNumber(linkData?.authorityFlow)}% <span class="badge badge-${safeNumber(linkData?.authorityFlow) >= 60 ? 'green' : 'orange'}">${safeNumber(linkData?.authorityFlow) >= 60 ? 'Good' : 'Weak'}</span></p>
+    ${linkData?.weakLinking ? `<p style="color:#dc2626;"><strong>⚠️ Weak Linking:</strong> Add more internal links</p>` : ''}
   `);
 }
 
 function renderImageSEO(data) {
-  const total = safeNumber(data.totalImages), withoutAlt = safeNumber(data.imagesWithoutAlt), withAlt = total - withoutAlt;
+  if (!data) return;
+  const total = safeNumber(data?.totalImages), withoutAlt = safeNumber(data?.imagesWithoutAlt), withAlt = total - withoutAlt;
   const score = total > 0 ? Math.round((withAlt / total) * 100) : 100;
   
   showCard("imageSeoCard", "imageSeoResults", `
@@ -1027,10 +1041,11 @@ function renderImageSEO(data) {
 }
 
 function renderEntities(data) {
-  const entitiesObj = data.entities || {};
-  const brands = safeArray(entitiesObj.brands);
-  const locations = safeArray(entitiesObj.locations);
-  const services = safeArray(entitiesObj.services);
+  if (!data) return;
+  const entitiesObj = data?.entities || {};
+  const brands = safeArray(entitiesObj?.brands);
+  const locations = safeArray(entitiesObj?.locations);
+  const services = safeArray(entitiesObj?.services);
 
   showCard("entityCard", "entityResults", `
     <div class="grid-3">
@@ -1042,9 +1057,10 @@ function renderEntities(data) {
 }
 
 function renderEEAT(data) {
+  if (!data) return;
   setStyle("eeatCard", "display", "block");
-  const eeat = data.breakdown?.eeatBreakdown || {};
-  const score = safeNumber(data.breakdown?.eeatScore);
+  const eeat = data?.breakdown?.eeatBreakdown || {};
+  const score = safeNumber(data?.breakdown?.eeatScore);
   
   setHTML("eeatResults", `
     <div style="text-align:center; margin:15px 0;">
@@ -1052,26 +1068,28 @@ function renderEEAT(data) {
       <div>E-E-A-T Score</div>
     </div>
     <div class="grid-3">
-      <div><h4>Experience (${safeNumber(eeat.breakdown?.experience?.score || eeat.experience?.score)}/25)</h4>${safeArray(eeat.breakdown?.experience?.factors || eeat.experience?.factors).map(f => `<div style="font-size:12px;">${escapeHtml(f)}</div>`).join('')}</div>
-      <div><h4>Expertise (${safeNumber(eeat.breakdown?.expertise?.score || eeat.expertise?.score)}/25)</h4>${safeArray(eeat.breakdown?.expertise?.factors || eeat.expertise?.factors).map(f => `<div style="font-size:12px;">${escapeHtml(f)}</div>`).join('')}</div>
-      <div><h4>Authority (${safeNumber(eeat.breakdown?.authoritativeness?.score || eeat.authoritativeness?.score)}/25)</h4>${safeArray(eeat.breakdown?.authoritativeness?.factors || eeat.authoritativeness?.factors).map(f => `<div style="font-size:12px;">${escapeHtml(f)}</div>`).join('')}</div>
+      <div><h4>Experience (${safeNumber(eeat?.breakdown?.experience?.score || eeat?.experience?.score)}/25)</h4>${safeArray(eeat?.breakdown?.experience?.factors || eeat?.experience?.factors).map(f => `<div style="font-size:12px;">${escapeHtml(f)}</div>`).join('')}</div>
+      <div><h4>Expertise (${safeNumber(eeat?.breakdown?.expertise?.score || eeat?.expertise?.score)}/25)</h4>${safeArray(eeat?.breakdown?.expertise?.factors || eeat?.expertise?.factors).map(f => `<div style="font-size:12px;">${escapeHtml(f)}</div>`).join('')}</div>
+      <div><h4>Authority (${safeNumber(eeat?.breakdown?.authoritativeness?.score || eeat?.authoritativeness?.score)}/25)</h4>${safeArray(eeat?.breakdown?.authoritativeness?.factors || eeat?.authoritativeness?.factors).map(f => `<div style="font-size:12px;">${escapeHtml(f)}</div>`).join('')}</div>
     </div>
   `);
 }
 
 function renderAISimulation(data) {
+  if (!data) return;
   setStyle("aiSimulationCard", "display", "block");
-  const sim = data.aiSearchSimulation;
+  const sim = data?.aiSearchSimulation;
   if (!sim) return;
   setHTML("aiSimulationText", `
-    <div class="ai-box"><b>ChatGPT:</b> ${escapeHtml(safeText(sim.chatgpt?.answer))}<br><small>Will Cite: ${sim.chatgpt?.willCite ? 'Yes' : 'No'}</small></div>
-    <div class="ai-box"><b>Gemini:</b> ${escapeHtml(safeText(sim.gemini?.answer))}<br><small>Will Cite: ${sim.gemini?.willCite ? 'Yes' : 'No'}</small></div>
-    <div class="ai-box"><b>Perplexity:</b> ${escapeHtml(safeText(sim.perplexity?.answer))}<br><small>Will Cite: ${sim.perplexity?.willCite ? 'Yes' : 'No'}</small></div>
+    <div class="ai-box"><b>ChatGPT:</b> ${escapeHtml(safeText(sim?.chatgpt?.answer))}<br><small>Will Cite: ${sim?.chatgpt?.willCite ? 'Yes' : 'No'}</small></div>
+    <div class="ai-box"><b>Gemini:</b> ${escapeHtml(safeText(sim?.gemini?.answer))}<br><small>Will Cite: ${sim?.gemini?.willCite ? 'Yes' : 'No'}</small></div>
+    <div class="ai-box"><b>Perplexity:</b> ${escapeHtml(safeText(sim?.perplexity?.answer))}<br><small>Will Cite: ${sim?.perplexity?.willCite ? 'Yes' : 'No'}</small></div>
   `);
 }
 
 function renderAEOReadiness(data) {
-  const score = safeNumber(data.aeoScore);
+  if (!data) return;
+  const score = safeNumber(data?.aeoScore);
   const grade = score >= 80 ? 'A+' : score >= 60 ? 'B' : score >= 40 ? 'C' : 'D';
   const color = score >= 80 ? '#00ff88' : score >= 60 ? '#ffa500' : '#ff4444';
   
@@ -1092,11 +1110,11 @@ function renderAEOReadiness(data) {
   if (signalsList) {
     signalsList.innerHTML = '';
     const items = [
-      { name: "FAQ Schema Verified", found: data.hasFAQ },
-      { name: "Direct Semantic Paragraphs", found: data.hasDirectAnswer },
-      { name: "E-E-A-T Structured Layout", found: data.hasAuthor },
-      { name: "SSL Cryptography Standard", found: data.isHttps },
-      { name: "Semantic Data Schemas", found: data.hasSchemaMarkup }
+      { name: "FAQ Schema Verified", found: data?.hasFAQ },
+      { name: "Direct Semantic Paragraphs", found: data?.hasDirectAnswer },
+      { name: "E-E-A-T Structured Layout", found: data?.hasAuthor },
+      { name: "SSL Cryptography Standard", found: data?.isHttps },
+      { name: "Semantic Data Schemas", found: data?.hasSchemaMarkup }
     ];
     items.forEach(s => {
       const div = document.createElement('div');
@@ -1108,16 +1126,17 @@ function renderAEOReadiness(data) {
 }
 
 function renderCitationProbability(data) {
+  if (!data) return;
   setStyle("realCitationCard", "display", "block");
-  setText('realChatGPT', safeNumber(data.citationChatGPT) + '%');
-  setText('realGemini', safeNumber(data.citationGemini) + '%');
-  setText('realPerplexity', safeNumber(data.citationPerplexity) + '%');
+  setText('realChatGPT', safeNumber(data?.citationChatGPT) + '%');
+  setText('realGemini', safeNumber(data?.citationGemini) + '%');
+  setText('realPerplexity', safeNumber(data?.citationPerplexity) + '%');
   
   const reasonsList = document.getElementById('citationReasonsList');
   if (reasonsList) {
     reasonsList.innerHTML = '<strong>Live Indexation Metrics:</strong><br>';
-    const reasons = safeArray(data.citationOpportunities).length > 0 
-      ? safeArray(data.citationOpportunities).map(opp => `• Recommended: ${opp.fix}`)
+    const reasons = safeArray(data?.citationOpportunities).length > 0 
+      ? safeArray(data?.citationOpportunities).map(opp => `• Recommended: ${opp?.fix}`)
       : ['• All active crawler elements are aligned perfectly.'];
     reasons.forEach(reason => {
       reasonsList.innerHTML += `${escapeHtml(reason)}<br>`;
@@ -1126,18 +1145,19 @@ function renderCitationProbability(data) {
 }
 
 function renderAIVisibility(data) {
+  if (!data) return;
   setStyle("aiVisibilityCard", "display", "block");
   setHTML("aiVisibilityResults", `
     <div style="text-align:center; margin:15px 0;">
-      <div style="font-size:48px; font-weight:bold; color:#667eea;">${safeNumber(data.overallAIVisibilityScore)}</div>
+      <div style="font-size:48px; font-weight:bold; color:#667eea;">${safeNumber(data?.overallAIVisibilityScore)}</div>
       <div>Overall AI Visibility Score</div>
     </div>
     <table>
-      <tr><td>SEO Score</td><td>${safeNumber(data.score)}/100</td></tr>
-      <tr><td>AEO Score</td><td>${safeNumber(data.aeoScore)}/100</td></tr>
-      <tr><td>E-E-A-T Score</td><td>${safeNumber(data.breakdown?.eeatScore)}/100</td></tr>
-      <tr><td>Citation Probability</td><td>${safeNumber(data.citationProbability)}%</td></tr>
-      <tr><td>Readability</td><td>${safeNumber(data.readabilityScore)}/100</td></tr>
+      <tr><td>SEO Score</td><td>${safeNumber(data?.score)}/100</td></tr>
+      <tr><td>AEO Score</td><td>${safeNumber(data?.aeoScore)}/100</td></tr>
+      <tr><td>E-E-A-T Score</td><td>${safeNumber(data?.breakdown?.eeatScore)}/100</td></tr>
+      <tr><td>Citation Probability</td><td>${safeNumber(data?.citationProbability)}%</td></tr>
+      <tr><td>Readability</td><td>${safeNumber(data?.readabilityScore)}/100</td></tr>
     </table>
   `);
 }
@@ -1158,7 +1178,8 @@ async function compareCompetitor() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     hideLoading();
-    if (data.error) return alert(data.error);
+    if (data?.error) return alert(data?.error);
+    if (!data) return;
     
     setStyle("competitorCard", 'display', 'block');
     
@@ -1168,10 +1189,10 @@ async function compareCompetitor() {
       comparisonChart = new Chart(compCanvas, {
         type: "bar",
         data: { 
-          labels: safeArray(data.sites).map(s => safeText(s.brand, 'Unknown')), 
+          labels: safeArray(data?.sites).map(s => safeText(s?.brand, 'Unknown')), 
           datasets: [{ 
             label: "AI Visibility Score", 
-            data: safeArray(data.sites).map(s => safeNumber(s.aiVisibilityScore)), 
+            data: safeArray(data?.sites).map(s => safeNumber(s?.aiVisibilityScore)), 
             backgroundColor: ["#2563eb", "#dc2626"] 
           }] 
         },
@@ -1190,12 +1211,12 @@ async function compareCompetitor() {
           </tr>
         </thead>
         <tbody>
-          ${safeArray(data.sites).map(s => `
+          ${safeArray(data?.sites).map(s => `
             <tr>
-              <td>${escapeHtml(safeText(s.brand, 'Unknown'))}</td>
-              <td>${safeNumber(s.aiVisibilityScore)}</td>
-              <td>${safeNumber(s.seoScore)}</td>
-              <td>${safeNumber(s.aeoScore)}</td>
+              <td>${escapeHtml(safeText(s?.brand, 'Unknown'))}</td>
+              <td>${safeNumber(s?.aiVisibilityScore)}</td>
+              <td>${safeNumber(s?.seoScore)}</td>
+              <td>${safeNumber(s?.aeoScore)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -1203,7 +1224,7 @@ async function compareCompetitor() {
 
       <p style="margin-top:15px;">
         <strong>Winner:</strong>
-        ${escapeHtml(safeText(data.winner?.brand || data.winner?.title || data.advantages?.finalWinner, 'Tie/Pending'))}
+        ${escapeHtml(safeText(data?.winner?.brand || data?.winner?.title || data?.advantages?.finalWinner, 'Tie/Pending'))}
       </p>
     `);
   } catch (err) {
@@ -1224,18 +1245,19 @@ async function generateRoadmap() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     hideLoading();
-    if (data.error) return alert(data.error);
+    if (data?.error) return alert(data?.error);
+    if (!data) return;
     
     setStyle("roadmapCard", 'display', 'block');
-    setText("currentScore", safeNumber(data.currentScore));
-    setText("potentialScore", safeNumber(data.potentialScore));
-    setHTML("roadmapSteps", safeArray(data.roadmap).map(r => `
-      <div class="ai-box" style="border-left: 4px solid ${r.priority === 'CRITICAL'? '#dc2626' : '#f59e0b'};">
-        <b>Step ${safeNumber(r.step)}: ${escapeHtml(safeText(r.task))}</b><span class="badge badge-${r.priority === 'CRITICAL'? 'red' : 'orange'}">${escapeHtml(safeText(r.priority))}</span>
-        <p style="margin: 8px 0 0; font-size: 13px;">${escapeHtml(safeText(r.why))}</p>
+    setText("currentScore", safeNumber(data?.currentScore));
+    setText("potentialScore", safeNumber(data?.potentialScore));
+    setHTML("roadmapSteps", safeArray(data?.roadmap).map(r => `
+      <div class="ai-box" style="border-left: 4px solid ${r?.priority === 'CRITICAL'? '#dc2626' : '#f59e0b'};">
+        <b>Step ${safeNumber(r?.step)}: ${escapeHtml(safeText(r?.task))}</b><span class="badge badge-${r?.priority === 'CRITICAL'? 'red' : 'orange'}">${escapeHtml(safeText(r?.priority))}</span>
+        <p style="margin: 8px 0 0; font-size: 13px;">${escapeHtml(safeText(r?.why))}</p>
         <details style="margin-top: 8px;"><summary style="cursor: pointer; font-size: 12px; color: #2563eb;">Show Code</summary>
-           <pre style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 5px; margin-top: 5px; font-size: 11px; overflow-x: auto;"><code>${escapeHtml(safeText(r.code, '// No code available'))}</code></pre></details>
-      </div>`).join('') + `<p style="text-align: center; margin-top: 15px; font-weight: 600;">⏱️ Total Time: ${escapeHtml(safeText(data.estimatedTime))}</p>`);
+           <pre style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 5px; margin-top: 5px; font-size: 11px; overflow-x: auto;"><code>${escapeHtml(safeText(r?.code, '// No code available'))}</code></pre></details>
+      </div>`).join('') + `<p style="text-align: center; margin-top: 15px; font-weight: 600;">⏱️ Total Time: ${escapeHtml(safeText(data?.estimatedTime))}</p>`);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);
@@ -1257,17 +1279,18 @@ async function gapAnalysis() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     hideLoading();
-    if (data.error) return alert(data.error);
+    if (data?.error) return alert(data?.error);
+    if (!data) return;
     
     setStyle("gapCard", 'display', 'block');
     setHTML("competitorHas", `
-      <p>Content Length Diff: ${safeNumber(data.contentLengthDiff)} words</p>
-      ${safeArray(data.schemaGaps).map(s => `✓ Has Schema: ${escapeHtml(s)}`).join('<br>')}
+      <p>Content Length Diff: ${safeNumber(data?.contentLengthDiff)} words</p>
+      ${safeArray(data?.schemaGaps).map(s => `✓ Has Schema: ${escapeHtml(s)}`).join('<br>')}
     `);
     setHTML("youMissing", `
-      ${safeArray(data.headingGaps).map(h => `✗ Missing Topic: ${escapeHtml(h)}`).join('<br>') || 'None!'}
+      ${safeArray(data?.headingGaps).map(h => `✗ Missing Topic: ${escapeHtml(h)}`).join('<br>') || 'None!'}
     `);
-    setHTML("gapImpact", `<div class="badge badge-red">${safeArray(data.headingGaps).length + safeArray(data.schemaGaps).length} Gaps Found</div>`);
+    setHTML("gapImpact", `<div class="badge badge-red">${safeArray(data?.headingGaps).length + safeArray(data?.schemaGaps).length} Gaps Found</div>`);
   } catch (err) {
     hideLoading();
     alert("API Error: " + err.message);
@@ -1289,14 +1312,15 @@ async function keywordTheft() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     hideLoading();
-    if (data.error) return alert(data.error);
+    if (data?.error) return alert(data?.error);
+    if (!data) return;
     
     setStyle("keywordTheftCard", 'display', 'block');
     setHTML("keywordTheftResults", `
       <div class="grid-3">
-        <div><h4>🔥 Competitor Keywords:</h4>${safeArray(data.keywordGaps).slice(0,6).map(k => `<span class="badge badge-red" style="margin: 2px;">${escapeHtml(k)}</span>`).join('') || 'None'}</div>
-        <div><h4>💎 Gap Opportunities:</h4>${safeArray(data.keywordGaps).slice(6,12).map(k => `<span class="badge badge-orange" style="margin: 2px;">${escapeHtml(k)}</span>`).join('') || 'None!'}</div>
-        <div><h4>✅ Content Target:</h4>${safeArray(data.keywordGaps).slice(12,18).map(k => `<span class="badge badge-green" style="margin: 2px;">${escapeHtml(k)}</span>`).join('') || 'None'}</div>
+        <div><h4>🔥 Competitor Keywords:</h4>${safeArray(data?.keywordGaps).slice(0,6).map(k => `<span class="badge badge-red" style="margin: 2px;">${escapeHtml(k)}</span>`).join('') || 'None'}</div>
+        <div><h4>💎 Gap Opportunities:</h4>${safeArray(data?.keywordGaps).slice(6,12).map(k => `<span class="badge badge-orange" style="margin: 2px;">${escapeHtml(k)}</span>`).join('') || 'None!'}</div>
+        <div><h4>✅ Content Target:</h4>${safeArray(data?.keywordGaps).slice(12,18).map(k => `<span class="badge badge-green" style="margin: 2px;">${escapeHtml(k)}</span>`).join('') || 'None'}</div>
       </div>
       <p style="margin-top: 15px; text-align: center; font-weight: 600;">Optimal SEO target list built.</p>
     `);
@@ -1347,19 +1371,19 @@ async function runAutopilot() {
   hideLoading();
   setStyle("autopilotCard", 'display', 'block');
   
-  const tasks = safeArray(data.aiAutopilot);
+  const tasks = safeArray(data?.aiAutopilot);
   if (tasks.length > 0) {
     const tasksHTML = tasks.map(task => {
-      const color = task.priority === 'CRITICAL' ? '#dc2626' : task.priority === 'HIGH' ? '#f59e0b' : '#2563eb';
+      const color = task?.priority === 'CRITICAL' ? '#dc2626' : task?.priority === 'HIGH' ? '#f59e0b' : '#2563eb';
       return `
         <div style="display:flex; justify-content:space-between; padding:12px; border-left:4px solid ${color}; background:#f8f9fa; margin:8px 0; border-radius:6px;">
           <div>
-            <strong style="color: #1e293b;">${escapeHtml(safeText(task.task))}</strong>
-            <div style="font-size:12px; color:#666; margin-top:4px;">Effort: ${escapeHtml(safeText(task.effort))}</div>
+            <strong style="color: #1e293b;">${escapeHtml(safeText(task?.task))}</strong>
+            <div style="font-size:12px; color:#666; margin-top:4px;">Effort: ${escapeHtml(safeText(task?.effort))}</div>
           </div>
           <div style="text-align:right;">
-            <div style="color:${color}; font-weight:bold; font-size:16px;">${escapeHtml(safeText(task.impact))}</div>
-            <div style="font-size:11px; background:${color}; color:#fff; padding:2px 8px; border-radius:3px; display:inline-block; margin-top:4px;">${escapeHtml(safeText(task.priority))}</div>
+            <div style="color:${color}; font-weight:bold; font-size:16px;">${escapeHtml(safeText(task?.impact))}</div>
+            <div style="font-size:11px; background:${color}; color:#fff; padding:2px 8px; border-radius:3px; display:inline-block; margin-top:4px;">${escapeHtml(safeText(task?.priority))}</div>
           </div>
         </div>
       `;
@@ -1367,8 +1391,8 @@ async function runAutopilot() {
     
     setHTML('autopilotResults', `
       <div style="text-align:center;margin:20px 0;">
-        <div style="font-size:48px;font-weight:bold;color:#10b981;">${safeNumber(data.score)}/100</div>
-        <div style="font-size:18px;">${escapeHtml(safeText(data.aiVisibilityLevel))}</div>
+        <div style="font-size:48px;font-weight:bold;color:#10b981;">${safeNumber(data?.score)}/100</div>
+        <div style="font-size:18px;">${escapeHtml(safeText(data?.aiVisibilityLevel))}</div>
       </div>
       <h3>🚀 AI Autopilot - Quick Wins</h3>
       ${tasksHTML}
@@ -1448,8 +1472,8 @@ function saveToHistory(data) {
   try {
     let history = JSON.parse(localStorage.getItem('scanHistory') || '[]');
     history.unshift({
-      url: data.url, score: data.overallAIVisibilityScore || 0,
-      seoScore: data.score || 0, aeoScore: data.aeoScore || 0,
+      url: data?.url, score: data?.overallAIVisibilityScore || 0,
+      seoScore: data?.score || 0, aeoScore: data?.aeoScore || 0,
       timestamp: new Date().toISOString()
     });
     history = history.slice(0, 20);
@@ -1478,10 +1502,10 @@ async function loadHistory() {
       <h3>📊 Scan History</h3>
       ${history.map(item => `
         <div class="card">
-          <p><b>URL:</b> ${escapeHtml(item.url || '')}</p>
-          <p><b>AI Visibility:</b> ${item.score || 0}/100</p>
-          <p><b>SEO Score:</b> ${item.seoScore || 0} | <b>AEO Score:</b> ${item.aeoScore || 0}</p>
-          <p><b>Scanned:</b> ${new Date(item.timestamp).toLocaleString()}</p>
+          <p><b>URL:</b> ${escapeHtml(item?.url || '')}</p>
+          <p><b>AI Visibility:</b> ${item?.score || 0}/100</p>
+          <p><b>SEO Score:</b> ${item?.seoScore || 0} | <b>AEO Score:</b> ${item?.aeoScore || 0}</p>
+          <p><b>Scanned:</b> ${new Date(item?.timestamp).toLocaleString()}</p>
         </div>
       `).join("")}
     `);

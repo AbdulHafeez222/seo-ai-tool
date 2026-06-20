@@ -1356,10 +1356,19 @@ export async function analyzeSingleUrl(url) {
 
     // ========== CRITICAL ENTITY ALLOCATION ENGINE ==========
     const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas);
-    const { brands = [], locations = [], services = [], people = [], organizations = [], products = [], totalEntities = 0 } = entityData;
+    
+    // Defensive extraction block to guarantee array instantiation
+    const extractedBrands = Array.isArray(entityData?.brands) ? entityData.brands : [];
+    const extractedLocations = Array.isArray(entityData?.locations) ? entityData.locations : [];
+    const extractedServices = Array.isArray(entityData?.services) ? entityData.services : [];
+    const extractedPeople = Array.isArray(entityData?.people) ? entityData.people : [];
+    const extractedOrganizations = Array.isArray(entityData?.organizations) ? entityData.organizations : [];
+    const extractedProducts = Array.isArray(entityData?.products) ? entityData.products : [];
+    const totalEntities = Number.isInteger(entityData?.totalEntities) ? entityData.totalEntities : 0;
+
     console.log("ENTITIES FOUND", totalEntities);
 
-    const brandName = brands[0] || getBrandNameEnhanced(url, $, title, schemas);
+    const brandName = extractedBrands[0] || getBrandNameEnhanced(url, $, title, schemas);
     const mainTopic = (h1 && h1 !== "Not Found") ? h1 : (safeArraySlice(title.split(" "), 0, 3).join(" ") || "this service");
 
     // FAQ Generator
@@ -1370,30 +1379,30 @@ export async function analyzeSingleUrl(url) {
         a: metaDescription && metaDescription !== "Not Found" ? metaDescription : `We offer complete solutions for ${mainTopic} with industry-leading practices.` 
       });
     }
-    if (services.length > 0) {
+    if (extractedServices.length > 0) {
       autoFAQ.push({
-        q: `How can I get started with ${services[0]}?`,
-        a: `To get started with ${services[0]}, you can contact our expert team via our website portal.`
+        q: `How can I get started with ${extractedServices[0]}?`,
+        a: `To get started with ${extractedServices[0]}, you can contact our expert team via our website portal.`
       });
     }
 
     let aiExtractedAnswer = "No clear answer found";
     if (bodyText && bodyText.length > 50) {
       const firstPara = bodyText.split('.')[0];
-      const serviceName = services[0] || 'expert digital solutions';
-      const locationInfo = locations.length > 0 && !locations.includes("Global") ? ` for clients in ${locations[0]}` : '';
+      const serviceName = extractedServices[0] || 'expert digital solutions';
+      const locationInfo = extractedLocations.length > 0 && !extractedLocations.includes("Global") ? ` for clients in ${extractedLocations[0]}` : '';
       aiExtractedAnswer = `${brandName} is a verified provider of ${serviceName}${locationInfo}. Key highlights include: ${safeArraySlice(firstPara.split(' '), 0, 20).join(' ')}...`;
     }
 
     const aiSearchSimulation = {
       query: `What is the primary offering of ${brandName}?`,
       chatgpt: {
-        answer: hasDirectAnswer ? `${brandName} offers ${services[0] || mainTopic}. ${safeArraySlice(metaDescription, 0, 100)}` : `Based on live indexes, ${brandName} specializes in ${safeArraySlice(keywords, 0, 3).join(', ')}. For specific details, explore their web services.`,
+        answer: hasDirectAnswer ? `${brandName} offers ${extractedServices[0] || mainTopic}. ${safeArraySlice(metaDescription, 0, 100)}` : `Based on live indexes, ${brandName} specializes in ${safeArraySlice(keywords, 0, 3).join(', ')}. For specific details, explore their web services.`,
         sources: hasAuthor ? ["Official Website", "Author Profile"] : ["Official Website"],
         willCite: hasDirectAnswer && hasFAQ && listCount >= 2
       },
       gemini: {
-        answer: hasSchemaMarkup ? `According to structured JSON-LD data: ${title}. Core solutions include ${safeArraySlice(services, 0, 2).join(' and ')}. ${hasLastModified ? 'Last updated: ' + lastModified : ''}` : `${title}. ${safeArraySlice(metaDescription, 0, 120)}`,
+        answer: hasSchemaMarkup ? `According to structured JSON-LD data: ${title}. Core solutions include ${safeArraySlice(extractedServices, 0, 2).join(' and ')}. ${hasLastModified ? 'Last updated: ' + lastModified : ''}` : `${title}. ${safeArraySlice(metaDescription, 0, 120)}`,
         sources: hasSchemaMarkup ? ["Schema.org Data", "Website"] : ["Website"],
         willCite: hasSchemaMarkup && tableCount > 0 && hasAuthor
       },
@@ -1474,6 +1483,7 @@ export async function analyzeSingleUrl(url) {
 
     console.log("FINAL PAYLOAD READY");
 
+    // Strictly validated API response containing nested entities with guaranteed safe arrays
     return {
       success: true,
       crawlSuccess: true,
@@ -1536,9 +1546,9 @@ export async function analyzeSingleUrl(url) {
       recommendedSchemas,
       keywords: keywords || [],
       entities: {
-        brands: brands || [],
-        locations: locations || [],
-        services: services || []
+        brands: extractedBrands,
+        locations: extractedLocations,
+        services: extractedServices
       },
       readabilityScore,
       aiTrustScore,
@@ -1582,13 +1592,13 @@ export async function analyzeSingleUrl(url) {
       localSEO,
       visibilityTrend,
       aiEntities: { 
-        brands: brands || [], 
-        locations: locations || [], 
-        services: services || [], 
-        people: people || [], 
-        organizations: organizations || [], 
-        products: products || [], 
-        totalEntities: totalEntities || 0 
+        brands: extractedBrands, 
+        locations: extractedLocations, 
+        services: extractedServices, 
+        people: extractedPeople, 
+        organizations: extractedOrganizations, 
+        products: extractedProducts, 
+        totalEntities: totalEntities 
       },
       internalLinkIntelligence: internalLinkData,
       brokenLinkCount: 0,

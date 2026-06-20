@@ -96,9 +96,67 @@ export function tokenizeKeywords(text = "") {
     .slice(0, 15);
 }
 
+// Safe execution wrapper for AI analysis sub-modules
+export function safeRun(fn, fallback = null) {
+  try {
+    return fn();
+  } catch (e) {
+    console.error("[SAFE RUN BLOCK BYPASS]", e.message);
+    return fallback;
+  }
+}
+
 // ========== STARTUP INTEGRITY VERIFICATION ==========
 if (typeof tokenizeKeywords !== "function") {
   throw new Error("FATAL: tokenizeKeywords function is missing or failed to initialize.");
+}
+
+// Normalize URL to prevent duplicate locks (handles protocol discrepancies and slashes)
+export function normalizeUrl(url) {
+  let u = safeString(url).trim().toLowerCase();
+  u = u.replace(/^(https?:\/\/)?(www\.)?/, "");
+  u = u.replace(/\/$/, "");
+  return u.replace(/\s+/g, '');
+}
+
+// Anti-bot detection checker (Prevents false-positive CDN references)
+export function isBlockedHTML(html = "", status = 200) {
+  if (!html || typeof html !== "string") return true;
+
+  const blockedStatuses = [401, 403, 429, 503];
+  if (blockedStatuses.includes(status)) {
+    return true;
+  }
+
+  const lowercaseHtml = html.toLowerCase();
+  
+  const strictBlockedPatterns = [
+    "cf-browser-verification",
+    "__cf_chl_opt",
+    "error code 1020",
+    "verify you are human"
+  ];
+
+  if (strictBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
+    return true;
+  }
+
+  if (html.length < 5000) {
+    const shortBlockedPatterns = [
+      "security check",
+      "access denied",
+      "ddos protection",
+      "anti-bot",
+      "ray id",
+      "challenge-form",
+      "turnstile"
+    ];
+    if (shortBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // ========== RESILIENT USER-AGENT ROTATION ENGINE ==========
@@ -223,6 +281,54 @@ async function safeFetch(url, options = {}) {
   }
 
   return { data: "", status: lastStatus, isError: true, errorMsg: lastError?.message || "Crawl failure across all request layers." };
+}
+
+// ========== ROBUST PAGE VALIDATOR (NO FALSE POSITIVES) ==========
+export function validateHtmlContent(html, status = 200) {
+  if (!html || typeof html !== 'string') {
+    return { crawlBlocked: true, reason: "Empty HTML response received", crawlQuality: { score: 0, status: "Blocked" } };
+  }
+
+  if (isBlockedHTML(html, status)) {
+    return { 
+      crawlBlocked: true, 
+      reason: `Anti-bot protection page detected`, 
+      crawlQuality: { score: 10, status: "Blocked" } 
+    };
+  }
+
+  const $ = cheerio.load(html);
+  $('script, style, svg, noscript').remove();
+  const textContent = $('body').text().replace(/\s+/g, ' ').trim();
+  const wordCount = textContent.split(/\s+/).filter(Boolean).length;
+
+  if (wordCount < 10) {
+    if (html.includes('__NEXT_DATA__') || html.includes('root') || html.includes('app')) {
+      return {
+        crawlBlocked: true,
+        reason: "JavaScript SPA / Client-Side Rendering (CSR) detected without server rendered text",
+        crawlQuality: { score: 20, status: "JS Restricted" }
+      };
+    }
+    return {
+      crawlBlocked: true,
+      reason: "No readable textual content found",
+      crawlQuality: { score: 15, status: "Empty" }
+    };
+  }
+
+  let score = 95;
+  if (wordCount < 100) score -= 15;
+  if (html.includes('__NEXT_DATA__') || html.includes('nuxt')) score -= 5;
+  
+  return {
+    crawlBlocked: false,
+    reason: "Fully Accessible",
+    crawlQuality: {
+      score: clamp(score, 0, 100),
+      status: score >= 85 ? "Excellent" : "Fair"
+    }
+  };
 }
 
 // ========== ROBUST SCHEMA DETECTION ENGINE ==========
@@ -956,11 +1062,6 @@ export async function analyzeSingleUrl(url) {
     const phone = phoneMatch ? phoneMatch[0] : null;
     const hasEmail = !!email;
     const hasPhone = !!phone;
-
-    const allText = bodyText.toLowerCase();
-    const hasPrivacyPolicy = allText.includes("privacy policy") || allText.includes("privacy");
-    const hasAboutPage = allText.includes("about us") || allText.includes("about");
-    const hasContactPage = allText.includes("contact us") || allText.includes("contact");
 
     const keywords = tokenizeKeywords(bodyText);
 

@@ -578,6 +578,24 @@ function safeNumber(num, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function cleanDomainBrand(url) {
+  try {
+    if (!url) return "Not Available";
+    let hostname = String(url).trim().toLowerCase();
+    hostname = hostname.replace(/^(https?:\/\/)?(www\.)?/, "");
+    const parts = hostname.split('/');
+    const mainHost = parts[0].split(':')[0];
+    const hostParts = mainHost.split('.');
+    if (hostParts.length > 1) {
+      // Return second-to-last segment (e.g. "hafeezdigitalstudio" for "hafeezdigitalstudio.com")
+      const segment = hostParts[hostParts.length - 2];
+      return segment.charAt(0).toUpperCase() + segment.slice(1);
+    }
+    return mainHost;
+  } catch(e) {}
+  return "Competitor Brand";
+}
+
 // ==== SAFE DOM HELPERS ====
 function setHTML(id, html) {
   const el = document.getElementById(id);
@@ -624,14 +642,14 @@ function unescapeHtml(text) {
 function copyFAQs() {
   const faqs = lastScanData?.autoFAQ || lastScanData?.faqExpansion || [];
   if (safeArray(faqs).length === 0) return;
-  const text = safeArray(faqs).map((f, i) => `Q${i+1}: ${f.q}\nA: ${f.a}`).join('\n\n');
+  const text = safeArray(faqs).map((f, i) => `Q${i+1}: ${f?.q}\nA: ${f?.a}`).join('\n\n');
   navigator.clipboard.writeText(text);
   alert('FAQs copied!');
 }
 
 function copySnippet(type) {
   if (!lastScanData?.aiSnippets) return;
-  const text = type === 'direct' ? lastScanData.aiSnippets.directAnswer : lastScanData.aiSnippets.featuredSnippet;
+  const text = type === 'direct' ? lastScanData?.aiSnippets?.directAnswer : lastScanData?.aiSnippets?.featuredSnippet;
   navigator.clipboard.writeText(text);
   alert('Snippet copied!');
 }
@@ -1049,9 +1067,9 @@ function renderEntities(data) {
 
   showCard("entityCard", "entityResults", `
     <div class="grid-3">
-      <div><h4>🏢 Brands:</h4>${brands.map(b => `<span class="badge badge-purple" style="margin:2px;">${escapeHtml(b)}</span>`).join('') || 'None'}</div>
-      <div><h4>📍 Locations:</h4>${locations.map(l => `<span class="badge badge-green" style="margin:2px;">${escapeHtml(l)}</span>`).join('') || 'None'}</div>
-      <div><h4>💼 Services:</h4>${services.map(s => `<span class="badge badge-orange" style="margin:2px;">${escapeHtml(s)}</span>`).join('') || 'None'}</div>
+      <div><h4>🏢 Brands:</h4><p style="font-weight:600; color:var(--text-primary);">${brands.length ? escapeHtml(brands.join(", ")) : "Not Available"}</p></div>
+      <div><h4>📍 Locations:</h4><p style="font-weight:600; color:var(--text-primary);">${locations.length ? escapeHtml(locations.join(", ")) : "Not Available"}</p></div>
+      <div><h4>💼 Services:</h4><p style="font-weight:600; color:var(--text-primary);">${services.length ? escapeHtml(services.join(", ")) : "Not Available"}</p></div>
     </div>
   `);
 }
@@ -1189,7 +1207,7 @@ async function compareCompetitor() {
       comparisonChart = new Chart(compCanvas, {
         type: "bar",
         data: { 
-          labels: safeArray(data?.sites).map(s => safeText(s?.brand, 'Unknown')), 
+          labels: safeArray(data?.sites).map(s => cleanDomainBrand(s?.url)), 
           datasets: [{ 
             label: "AI Visibility Score", 
             data: safeArray(data?.sites).map(s => safeNumber(s?.aiVisibilityScore)), 
@@ -1200,6 +1218,9 @@ async function compareCompetitor() {
       });
     }
     
+    // Strict Competitor Domain brand extraction
+    const rawWinner = data?.winner?.url ? cleanDomainBrand(data.winner.url) : cleanDomainBrand(comp);
+
     setHTML("comparisonDetails", `
       <table style="width:100%;border-collapse:collapse;">
         <thead>
@@ -1213,7 +1234,7 @@ async function compareCompetitor() {
         <tbody>
           ${safeArray(data?.sites).map(s => `
             <tr>
-              <td>${escapeHtml(safeText(s?.brand, 'Unknown'))}</td>
+              <td>${escapeHtml(cleanDomainBrand(s?.url))}</td>
               <td>${safeNumber(s?.aiVisibilityScore)}</td>
               <td>${safeNumber(s?.seoScore)}</td>
               <td>${safeNumber(s?.aeoScore)}</td>
@@ -1224,7 +1245,7 @@ async function compareCompetitor() {
 
       <p style="margin-top:15px;">
         <strong>Winner:</strong>
-        ${escapeHtml(safeText(data?.winner?.brand || data?.winner?.title || data?.advantages?.finalWinner, 'Tie/Pending'))}
+        ${escapeHtml(rawWinner)}
       </p>
     `);
   } catch (err) {

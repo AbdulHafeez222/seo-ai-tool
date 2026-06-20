@@ -564,9 +564,10 @@ let scanInProgress = false;
 
 // ==== RESILIENT SAFE HELPERS ====
 function safeText(value, fallback = "Not Available") {
-  return (value == null || String(value).trim() === "" || String(value).trim() === "undefined" || String(value).trim() === "null")
+  const text = (value == null || String(value).trim() === "" || String(value).trim() === "undefined" || String(value).trim() === "null")
     ? fallback
     : String(value).trim();
+  return cleanText(text);
 }
 
 function safeArray(arr) {
@@ -576,6 +577,15 @@ function safeArray(arr) {
 function safeNumber(num, fallback = 0) {
   const parsed = Number(num);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function cleanText(text) {
+  if (!text) return "";
+  const badPatterns = ["In/a", "0LD0", "whoissource", "Density00", "Diagnosis", "Summary report"];
+  for (const p of badPatterns) {
+    if (text.includes(p)) return "";
+  }
+  return text;
 }
 
 function cleanDomainBrand(url) {
@@ -677,7 +687,10 @@ async function scan() {
     console.log("SCAN REQUEST SENT");
     const res = await fetch(`${API_BASE}/scan?url=${encodeURIComponent(url)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const rawData = await res.json();
+    
+    // SAFE RESPONSE WRAPPING
+    const data = rawData || {};
     
     console.log("API RESPONSE", data);
     console.log("ENTITIES", data?.entities);

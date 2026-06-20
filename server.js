@@ -57,6 +57,18 @@ app.use(express.static("public"));
 
 // Safe Fallback Registry Engine to handle any possible ReferenceErrors gracefully
 const fallbackRegistry = {
+  cleanDomainBrand: (url) => {
+    try {
+      const u = String(url || "").trim();
+      if (!u) return "Brand Authority";
+      const parsed = new URL(u.match(/^https?:\/\//i) ? u : 'https://' + u);
+      const host = parsed.hostname.replace("www.", "");
+      const brand = host.split('.')[0] || 'Brand Authority';
+      return brand.charAt(0).toUpperCase() + brand.slice(1);
+    } catch {
+      return "Brand Authority";
+    }
+  },
   cleanText: (input) => {
     if (input === undefined || input === null) return "";
     let text = String(input);
@@ -197,6 +209,7 @@ const fallbackRegistry = {
 };
 
 // Expose polyfills globally to guarantee no ReferenceErrors can crash execution
+globalThis.cleanDomainBrand = globalThis.cleanDomainBrand || fallbackRegistry.cleanDomainBrand;
 globalThis.cleanText = globalThis.cleanText || fallbackRegistry.cleanText;
 globalThis.safeString = globalThis.safeString || fallbackRegistry.safeString;
 globalThis.safeArray = globalThis.safeArray || fallbackRegistry.safeArray;
@@ -213,6 +226,7 @@ globalThis.isBlockedHTML = globalThis.isBlockedHTML || fallbackRegistry.isBlocke
 globalThis.validateHtmlContent = globalThis.validateHtmlContent || fallbackRegistry.validateHtmlContent;
 
 // Explicit ES6 module exports for safety
+export const cleanDomainBrand = globalThis.cleanDomainBrand;
 export const cleanText = globalThis.cleanText;
 export const safeString = globalThis.safeString;
 export const safeArray = globalThis.safeArray;
@@ -327,8 +341,12 @@ async function safeFetch(url, options = {}) {
   let lastStatus = 500;
 
   // Try Playwright first for rendering dynamic targets
-  const pwResult = await fetchPlaywright(url);
-  if (pwResult) return pwResult;
+  try {
+    const pwResult = await fetchPlaywright(url);
+    if (pwResult) return pwResult;
+  } catch (e) {
+    console.warn("Dynamic Playwright layer bypassed safely:", e.message);
+  }
 
   for (let retry = 0; retry < 2; retry++) {
     for (let i = 0; i < USER_AGENTS.length; i++) {
@@ -1795,7 +1813,7 @@ export async function analyzeSingleUrl(url) {
 }
 
 export function competitorContentGap(userData, compData) {
-  if (userData.stopProcessing || compData.stopProcessing) {
+  if (!userData || !compData || userData.stopProcessing || compData.stopProcessing) {
     return {
       headingGaps: [],
       keywordGaps: [],
@@ -1986,13 +2004,13 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
       req.user.scansToday = Math.min(PLAN_LIMITS[req.user.plan], req.user.scansToday + 2);
     }
 
-    const seoAdvantage = (site1.score || 0) - (site2.score || 0);
-    const aeoAdvantage = (site1.aeoScore || 0) - (site2.aeoScore || 0);
-    const eeatAdvantage = (site1.breakdown?.eeatScore || 0) - (site2.breakdown?.eeatScore || 0);
-    const citationAdvantage = (site1.citationProbability || 0) - (site2.citationProbability || 0);
-    const trustAdvantage = (site1.aiTrustScore || 0) - (site2.aiTrustScore || 0);
+    const seoAdvantage = (site1?.score || 0) - (site2?.score || 0);
+    const aeoAdvantage = (site1?.aeoScore || 0) - (site2?.aeoScore || 0);
+    const eeatAdvantage = (site1?.breakdown?.eeatScore || 0) - (site2?.breakdown?.eeatScore || 0);
+    const citationAdvantage = (site1?.citationProbability || 0) - (site2?.citationProbability || 0);
+    const trustAdvantage = (site1?.aiTrustScore || 0) - (site2?.aiTrustScore || 0);
 
-    const leaderBrand = site1.overallAIVisibilityScore >= site2.overallAIVisibilityScore ? (site1.title || "Your Site") : (site2.title || "Competitor Site");
+    const leaderBrand = site1?.overallAIVisibilityScore >= site2?.overallAIVisibilityScore ? (site1?.title || "Your Site") : (site2?.title || "Competitor Site");
 
     const competitorAdvantage = {
       seoAdvantage: { diff: Math.abs(seoAdvantage), leader: seoAdvantage > 0 ? "You" : (seoAdvantage < 0 ? "Competitor" : "Tie") },
@@ -2005,17 +2023,17 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
 
     res.json({
       status: "success",
-      seoScore: site1.overallAIVisibilityScore || 0,
-      aeoScore: site1.aeoScore || 0,
-      eeatScore: site1.eeatScore || 0,
-      citationScore: site1.citationScore || 0,
+      seoScore: site1?.overallAIVisibilityScore || 0,
+      aeoScore: site1?.aeoScore || 0,
+      eeatScore: site1?.eeatScore || 0,
+      citationScore: site1?.citationScore || 0,
       sites: [
-        { brand: getBrandNameEnhanced(site1.url, cheerio.load("<html></html>"), site1.title, {}), url: site1.url, aiVisibilityScore: site1.overallAIVisibilityScore, seoScore: site1.score, aeoScore: site1.aeoScore },
-        { brand: getBrandNameEnhanced(site2.url, cheerio.load("<html></html>"), site2.title, {}), url: site2.url, aiVisibilityScore: site2.overallAIVisibilityScore, seoScore: site2.score, aeoScore: site2.aeoScore }
+        { brand: getBrandNameEnhanced(site1?.url, cheerio.load("<html></html>"), site1?.title, {}), url: site1?.url, aiVisibilityScore: site1?.overallAIVisibilityScore, seoScore: site1?.score, aeoScore: site1?.aeoScore },
+        { brand: getBrandNameEnhanced(site2?.url, cheerio.load("<html></html>"), site2?.title, {}), url: site2?.url, aiVisibilityScore: site2?.overallAIVisibilityScore, seoScore: site2?.score, aeoScore: site2?.aeoScore }
       ],
       advantages: competitorAdvantage,
       competitorAdvantage,
-      winner: site1.overallAIVisibilityScore >= site2.overallAIVisibilityScore ? site1 : site2,
+      winner: site1?.overallAIVisibilityScore >= site2?.overallAIVisibilityScore ? site1 : site2,
       winnerReason: `${leaderBrand} commands clear performance leads overall.`
     });
   } catch (err) {
@@ -2038,18 +2056,18 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
     
     res.json({
       status: "success",
-      seoScore: userData.seoScore || 0,
-      aeoScore: userData.aeoScore || 0,
-      eeatScore: userData.eeatScore || 0,
-      citationScore: userData.citationScore || 0,
+      seoScore: userData?.seoScore || 0,
+      aeoScore: userData?.aeoScore || 0,
+      eeatScore: userData?.eeatScore || 0,
+      citationScore: userData?.citationScore || 0,
       ...gapData,
       keywordGap: {
-        competitorKeywords: gapData.keywordGaps.slice(0, 5),
-        missingKeywords: gapData.keywordGaps.slice(5, 10),
-        opportunityKeywords: gapData.keywordGaps.slice(10, 15)
+        competitorKeywords: gapData?.keywordGaps?.slice(0, 5) || [],
+        missingKeywords: gapData?.keywordGaps?.slice(5, 10) || [],
+        opportunityKeywords: gapData?.keywordGaps?.slice(10, 15) || []
       },
       gapAnalysis: {
-        missingTopics: gapData.headingGaps
+        missingTopics: gapData?.headingGaps || []
       }
     });
   } catch (err) {
@@ -2064,29 +2082,29 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
     
     const data = await analyzeSingleUrl(url);
 
-    if (data.stopProcessing) {
+    if (data?.stopProcessing) {
       return res.json({ currentScore: null, potentialScore: null, roadmap: [], estimatedTime: "0 hours" });
     }
 
-    const autopilotTasks = data.aiAutopilot || [];
+    const autopilotTasks = data?.aiAutopilot || [];
     const roadmap = autopilotTasks.map((task, i) => ({
       step: i + 1, 
-      task: task.task || 'Optimize Framework', 
-      priority: task.priority || 'MEDIUM',
-      why: task.priority === 'CRITICAL' ? 'Blocks real-time citations across ChatGPT search indexes.' : 'Boosts indexing accuracy.',
-      code: task.task?.includes('Schema') ? '<script type="application/ld+json">...</script>' : 'Modify local elements',
-      impact: task.impact || '+5',
-      effort: task.effort || '15 mins'
+      task: task?.task || 'Optimize Framework', 
+      priority: task?.priority || 'MEDIUM',
+      why: task?.priority === 'CRITICAL' ? 'Blocks real-time citations across ChatGPT search indexes.' : 'Boosts indexing accuracy.',
+      code: task?.task?.includes('Schema') ? '<script type="application/ld+json">...</script>' : 'Modify local elements',
+      impact: task?.impact || '+5',
+      effort: task?.effort || '15 mins'
     }));
     
     res.json({
       status: "success",
-      seoScore: data.seoScore || 0,
-      aeoScore: data.aeoScore || 0,
-      eeatScore: data.eeatScore || 0,
-      citationScore: data.citationScore || 0,
-      currentScore: data.overallAIVisibilityScore || 0,
-      potentialScore: Math.min(100, (data.overallAIVisibilityScore || 0) + 15),
+      seoScore: data?.seoScore || 0,
+      aeoScore: data?.aeoScore || 0,
+      eeatScore: data?.eeatScore || 0,
+      citationScore: data?.citationScore || 0,
+      currentScore: data?.overallAIVisibilityScore || 0,
+      potentialScore: Math.min(100, (data?.overallAIVisibilityScore || 0) + 15),
       roadmap,
       aiRoadmap: {
         roadmap
@@ -2117,6 +2135,7 @@ function validateRequiredSystemHelpers() {
   console.log("🔍 System validation running...");
 
   const helpers = [
+    { name: "cleanDomainBrand", fn: typeof cleanDomainBrand === "function" ? cleanDomainBrand : null },
     { name: "safeString", fn: typeof safeString === "function" ? safeString : null },
     { name: "safeArray", fn: typeof safeArray === "function" ? safeArray : null },
     { name: "safeNumber", fn: typeof safeNumber === "function" ? safeNumber : null },

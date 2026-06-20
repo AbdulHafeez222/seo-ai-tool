@@ -666,16 +666,26 @@ function copySnippet(type) {
 
 // ========== MAIN SCAN ==========
 async function scan() {
-  if (scanInProgress) return;
+  // STRICT DOUBLE-CLICK REPEAT GUARD
+  if (scanInProgress) {
+    console.warn("Scan already in progress. Ignoring duplicate trigger.");
+    return;
+  }
+  scanInProgress = true;
 
   const urlEl = document.getElementById("url");
-  if (!urlEl) return alert("URL input not found");
+  if (!urlEl) {
+    scanInProgress = false;
+    return alert("URL input not found");
+  }
   
   let url = urlEl.value.trim();
-  if (!url) return alert("Enter URL");
+  if (!url) {
+    scanInProgress = false;
+    return alert("Enter URL");
+  }
   if (!url.startsWith("http")) url = "https://" + url;
 
-  scanInProgress = true;
   const scanBtn = document.getElementById("scanBtn");
   if (scanBtn) scanBtn.disabled = true;
 
@@ -684,16 +694,15 @@ async function scan() {
   setHTML("result", "");
 
   try {
-    console.log("SCAN REQUEST SENT");
+    console.log("SCAN REQUEST SENT - SINGLE INVOCATION RUN");
     const res = await fetch(`${API_BASE}/scan?url=${encodeURIComponent(url)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const rawData = await res.json();
     
-    // SAFE RESPONSE WRAPPING
+    // SAFE RESPONSE WRAPPING & PARSING
     const data = rawData || {};
     
-    console.log("API RESPONSE", data);
-    console.log("ENTITIES", data?.entities);
+    console.log("API RESPONSE RECEIVED", data);
     
     lastScanData = data;
     saveToHistory(data);
@@ -704,6 +713,7 @@ async function scan() {
       return;
     }
     
+    // Render UI Exactly Once per scan completion
     renderAllResults(data);
     
   } catch (err) {
@@ -716,6 +726,7 @@ async function scan() {
 }
 
 function renderAllResults(data) {
+  // STRICT DEFENSIVE GUARDS ON ROOT RESPONSE DATA
   if (!data) return;
 
   try { renderCharts(data); } catch(e) { console.error(e); }
@@ -1073,10 +1084,12 @@ function renderImageSEO(data) {
 
 function renderEntities(data) {
   if (!data) return;
-  const entitiesObj = data?.entities || {};
-  const brands = safeArray(entitiesObj?.brands);
-  const locations = safeArray(entitiesObj?.locations);
-  const services = safeArray(entitiesObj?.services);
+  
+  // SAFE EXTRACTION AND FALLBACK VALUES
+  const entities = data?.entities || {};
+  const brands = safeArray(entities?.brands);
+  const locations = safeArray(entities?.locations);
+  const services = safeArray(entities?.services);
 
   showCard("entityCard", "entityResults", `
     <div class="grid-3">

@@ -3,13 +3,12 @@ import * as cheerio from "cheerio";
 import cors from "cors";
 import axios from "axios";
 import https from "https";
-import crypto from "crypto";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 const scanHistory = [];
 const trendDB = {}; // In-memory database for tracking historical scores
-const activeScans = new Map(); // Global scan locks per normalized URL
+const activeScans = new Map(); // Global thread-safe scanner request lock Map
 
 app.use(cors());
 app.use(express.json());
@@ -17,15 +16,44 @@ app.use(express.static("."));
 app.use(express.static("public"));
 
 // =========================================================================
-// ========== PART 1: HOISTED HELPER UTILITIES (DEFENSIVE CODING) ==========
+// ========== SECTION 1: GLOBAL HIGH-PERFORMANCE RAW STRING SANITIZERS =====
 // =========================================================================
+
+/**
+ * High-performance, recursive string sanitizer.
+ * Drops raw scraping toolbar fragments, SEOquake metrics, and null leaks.
+ */
+export function cleanText(input) {
+  if (input === undefined || input === null) return "";
+  let text = String(input);
+  
+  const badPatterns = [
+    /I\s*n\/a\s*L\s*0\s*LD\s*0\s*I\s*n\/a\s*whois\s*source/gi,
+    /Summary\s*report\s*Diagnosis\s*Density/gi,
+    /LD\s*0\s*I\s*n\/a/gi,
+    /In\/a/gi,
+    /0LD0/gi,
+    /whoissource/gi,
+    /Density00/gi,
+    /Diagnosis/gi,
+    /Summary report/gi,
+    /L0LD/gi
+  ];
+
+  for (const pattern of badPatterns) {
+    text = text.replace(pattern, "");
+  }
+
+  return text.replace(/\s+/g, " ").trim();
+}
 
 export function safeString(input) {
   if (input === undefined || input === null) return "";
-  return String(input)
-    .replace(/<[^>]*>/g, "")
-    .replace(/undefined|null/g, "")
-    .trim();
+  return cleanText(
+    String(input)
+      .replace(/<[^>]*>/g, "") // Strip HTML elements safely
+      .replace(/undefined|null/g, "")
+  );
 }
 
 export function safeArray(v) {
@@ -67,7 +95,7 @@ export function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
   return "Low";
 }
 
-// Safe execution wrapper for AI modules
+// Safe execution wrapper for AI analysis sub-modules
 export function safeRun(fn, fallback = null) {
   try {
     return fn();
@@ -77,28 +105,7 @@ export function safeRun(fn, fallback = null) {
   }
 }
 
-// Clean raw scraped string from SEOquake toolbar garbage
-export function cleanGarbageText(text) {
-  if (!text || typeof text !== "string") return "";
-  let t = text;
-  const badPatterns = [
-    /I\s*n\/a\s*L\s*0\s*LD\s*0\s*I\s*n\/a\s*whois\s*source/gi,
-    /Summary\s*report\s*Diagnosis\s*Density/gi,
-    /LD\s*0\s*I\s*n\/a/gi,
-    /In\/a/gi,
-    /0LD0/gi,
-    /whoissource/gi,
-    /Density00/gi,
-    /Diagnosis/gi,
-    /Summary report/gi
-  ];
-  for (const pattern of badPatterns) {
-    t = t.replace(pattern, "");
-  }
-  return t.replace(/\s+/g, " ").trim();
-}
-
-// Normalize URL to prevent duplicates (http vs https, trailing slashes, www, uppercase/whitespace)
+// Normalize URL to prevent duplicate locks (handles protocol discrepancies and slashes)
 export function normalizeUrl(url) {
   let u = safeString(url).trim().toLowerCase();
   u = u.replace(/^(https?:\/\/)?(www\.)?/, "");
@@ -106,7 +113,7 @@ export function normalizeUrl(url) {
   return u.replace(/\s+/g, '');
 }
 
-// Anti-bot detection checker (Optimized to prevent false-positive CDN references)
+// Anti-bot detection checker (Prevents false-positive CDN references)
 export function isBlockedHTML(html = "", status = 200) {
   if (!html || typeof html !== "string") return true;
 
@@ -154,7 +161,7 @@ const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
 ];
 
-// ========== LAYER 3 HTTPS REQUEST FALLBACK ==========
+// ========== DIRECT HTTPS REQUEST FALLBACK (LAYER 3) ==========
 function fetchHttpsLayer(url, headers) {
   return new Promise((resolve, reject) => {
     try {
@@ -303,7 +310,7 @@ export function validateHtmlContent(html, status = 200) {
   };
 }
 
-// ========== SCHEMA DETECTION ==========
+// ========== ROBUST SCHEMA DETECTION ENGINE ==========
 export function detectAllSchemas($, html) {
   const schemas = {
     FAQPage: { present: false, count: 0, data: [], recommended: false },
@@ -313,7 +320,8 @@ export function detectAllSchemas($, html) {
     LocalBusiness: { present: false, count: 0, data: [], recommended: false },
     BreadcrumbList: { present: false, count: 0, data: [], recommended: false },
     WebSite: { present: false, count: 0, data: [], recommended: true },
-    Product: { present: false, count: 0, data: [], recommended: false }
+    Product: { present: false, count: 0, data: [], recommended: false },
+    Person: { present: false, count: 0, data: [], recommended: false }
   };
 
   try {
@@ -361,32 +369,18 @@ export function getBrandNameEnhanced(url, $, title, schemas) {
     if (schemas?.Organization?.present && schemas?.Organization?.data?.length > 0) {
       const orgName = schemas.Organization.data[0]?.name;
       if (orgName && typeof orgName === 'string' && orgName.trim().length > 0) {
-        return orgName.trim();
+        return cleanText(orgName);
       }
     }
     
     const logoAlt = $('img[src*="logo" i]').attr('alt') || $('img[class*="logo" i]').attr('alt') || $('img[id*="logo" i]').attr('alt');
     if (logoAlt && logoAlt.trim().length > 1 && logoAlt.trim().length < 50) {
-      return logoAlt.trim();
+      return cleanText(logoAlt);
     }
 
     const ogSiteName = $('meta[property="og:site_name"]').attr("content") || $('meta[name="application-name"]').attr("content");
     if (ogSiteName && ogSiteName.trim().length > 0) {
-      return ogSiteName.trim();
-    }
-
-    if (title && typeof title === 'string' && title !== "No Title Found" && title !== "Not Found") {
-      const parts = title.split(/[|–-]/);
-      if (parts.length > 1) {
-        const lastPart = parts[parts.length - 1].trim();
-        if (lastPart.length > 1 && lastPart.length < 30 && !lastPart.toLowerCase().includes('home') && !lastPart.toLowerCase().includes('page')) {
-          return lastPart;
-        }
-        const firstPart = parts[0].trim();
-        if (firstPart.length > 1 && firstPart.length < 30 && !firstPart.toLowerCase().includes('home') && !firstPart.toLowerCase().includes('page')) {
-          return firstPart;
-        }
-      }
+      return cleanText(ogSiteName);
     }
 
     const domain = new URL(url).hostname.replace("www.", "");
@@ -397,25 +391,6 @@ export function getBrandNameEnhanced(url, $, title, schemas) {
   } catch (e) {}
 
   return "Brand Authority";
-}
-
-// ========== KEYWORD TOKENS / CLEAN TOKENIZER FIX ==========
-export function tokenizeKeywords(text = "") {
-  if (!text) return [];
-  const tokens = text.match(/\b[a-zA-Z]{3,15}(?:\s+[a-zA-Z]{3,15}){0,1}\b/g) || [];
-  const stopWords = ['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'under', 'from', 'with', 'your', 'this', 'that', 'were', 'been', 'have', 'more', 'some', 'them', 'then', 'also', 'here', 'homepage', 'navigation', 'contact', 'search'];
-  
-  const freq = {};
-  tokens.forEach(tok => {
-    const t = tok.toLowerCase().trim();
-    if (t.length > 3 && !stopWords.includes(t)) {
-      freq[t] = (freq[t] || 0) + 1;
-    }
-  });
-
-  return Object.keys(freq)
-    .sort((a, b) => freq[b] - freq[a])
-    .slice(0, 15);
 }
 
 // ========== ENTITY EXTRACTION ENGINE v2 ==========
@@ -504,7 +479,7 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
   });
 
   const cleanList = (arr, fallback = []) => {
-    const result = [...new Set(safeArray(arr).map(x => safeString(x).trim()).filter(x => x.length > 1))].map(cleanGarbageText).filter(Boolean);
+    const result = [...new Set(safeArray(arr).map(x => safeString(x).trim()).filter(x => x.length > 1))].map(cleanText).filter(Boolean);
     return result.length > 0 ? result.slice(0, 10) : fallback;
   };
 
@@ -740,7 +715,7 @@ export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
   const directAnswer = safeDesc || `This playbook breaks down all standard frameworks about ${keyword}.`;
 
   return {
-    directAnswer: cleanGarbageText(directAnswer),
+    directAnswer: cleanText(directAnswer),
     directAnswerWordCount: directAnswer.split(/\s+/).filter(Boolean).length,
     featuredSnippet: `## ${safeH1 || 'Overview'}\n\n${contentSentence ? `Key insights include: ${contentSentence}` : `Essential overview of ${keyword}.`}`,
     aiOverviewAnswer: `According to live page analysis, ${safeH1 || 'this platform'} specializes in providing high-performance solutions for ${keyword}.`,
@@ -1179,7 +1154,7 @@ export async function analyzeSingleUrl(url) {
 
     // Assign rawBodyText after DOM loader is established & filter extension toolbar noise
     rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
-    rawBodyText = cleanGarbageText(rawBodyText);
+    rawBodyText = cleanText(rawBodyText);
 
     $('script, style, nav, footer, header, noscript, svg').remove();
 
@@ -1191,7 +1166,7 @@ export async function analyzeSingleUrl(url) {
               safeString($("h1").first().text()).trim() || 
               `${formattedNicheTitle} Platform`;
     }
-    title = cleanGarbageText(title);
+    title = cleanText(title);
     console.log("TITLE FOUND", title);
 
     let metaDescription = safeString($('meta[name="description"]').attr("content")).trim();
@@ -1201,19 +1176,16 @@ export async function analyzeSingleUrl(url) {
                         safeString($("p").first().text()).substring(0, 150).trim() || 
                         `Comprehensive services and architectural layouts tailored around ${estimatedNiche}.`;
     }
-    metaDescription = cleanGarbageText(metaDescription);
+    metaDescription = cleanText(metaDescription);
     console.log("META FOUND", metaDescription);
 
-    let h1 = safeString($("h1").first().text()).trim();
-    if (!h1 || h1.toLowerCase().includes("not found")) {
-      h1 = safeString($("h2").first().text()).trim() || `Proven ${formattedNicheTitle} Systems`;
-    }
-    h1 = cleanGarbageText(h1);
+    let h1 = safeString($("h1").first().text()).trim() || `Proven ${formattedNicheTitle} Systems`;
+    h1 = cleanText(h1);
 
     const bodyText = rawBodyText || "No content scanned.";
     const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
-    const h2s = $("h2").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean).map(cleanGarbageText).filter(Boolean) || [];
-    const h3s = $("h3").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean).map(cleanGarbageText).filter(Boolean) || [];
+    const h2s = $("h2").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
+    const h3s = $("h3").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
 
     const schemas = detectAllSchemas($, html);
     const uniqueSchemas = Object.keys(schemas).filter(k => schemas[k]?.present) || [];
@@ -1415,22 +1387,22 @@ export async function analyzeSingleUrl(url) {
       const locationInfo = extractedLocations.length > 0 && !extractedLocations.includes("Global") ? ` for clients in ${extractedLocations[0]}` : '';
       aiExtractedAnswer = `${brandName} is a verified provider of ${serviceName}${locationInfo}. Key highlights include: ${safeArraySlice(firstPara.split(' '), 0, 20).join(' ')}...`;
     }
-    aiExtractedAnswer = cleanGarbageText(aiExtractedAnswer);
+    aiExtractedAnswer = cleanText(aiExtractedAnswer);
 
     const aiSearchSimulation = {
       query: `What is the primary offering of ${brandName}?`,
       chatgpt: {
-        answer: cleanGarbageText(hasDirectAnswer ? `${brandName} offers ${extractedServices[0] || mainTopic}. ${safeArraySlice(metaDescription, 0, 100)}` : `Based on live indexes, ${brandName} specializes in ${safeArraySlice(keywords, 0, 3).join(', ')}. For specific details, explore their web services.`),
+        answer: cleanText(hasDirectAnswer ? `${brandName} offers ${extractedServices[0] || mainTopic}. ${safeArraySlice(metaDescription, 0, 100)}` : `Based on live indexes, ${brandName} specializes in ${safeArraySlice(keywords, 0, 3).join(', ')}. For specific details, explore their web services.`),
         sources: hasAuthor ? ["Official Website", "Author Profile"] : ["Official Website"],
         willCite: hasDirectAnswer && hasFAQ && listCount >= 2
       },
       gemini: {
-        answer: cleanGarbageText(hasSchemaMarkup ? `According to structured JSON-LD data: ${title}. Core solutions include ${safeArraySlice(extractedServices, 0, 2).join(' and ')}. ${hasLastModified ? 'Last updated: ' + lastModified : ''}` : `${title}. ${safeArraySlice(metaDescription, 0, 120)}`),
+        answer: cleanText(hasSchemaMarkup ? `According to structured JSON-LD data: ${title}. Core solutions include ${safeArraySlice(extractedServices, 0, 2).join(' and ')}. ${hasLastModified ? 'Last updated: ' + lastModified : ''}` : `${title}. ${safeArraySlice(metaDescription, 0, 120)}`),
         sources: hasSchemaMarkup ? ["Schema.org Data", "Website"] : ["Website"],
         willCite: hasSchemaMarkup && tableCount > 0 && hasAuthor
       },
       perplexity: {
-        answer: cleanGarbageText(hasLastModified ? `${aiExtractedAnswer} [Updated ${lastModified}]` : aiExtractedAnswer),
+        answer: cleanText(hasLastModified ? `${aiExtractedAnswer} [Updated ${lastModified}]` : aiExtractedAnswer),
         sources: hasLastModified ? ["Official Site (2026)", "Cited Sources"] : ["Official Site"],
         willCite: hasDirectAnswer && hasLastModified && externalLinksCount > 3
       },
@@ -1680,7 +1652,7 @@ app.get("/scan", async (req, res) => {
   if (activeScans.has(normalized)) {
     const startTime = activeScans.get(normalized);
     if (Date.now() - startTime < 60000) {
-      return res.json({
+      return res.status(409).json({
         status: "already_scanning",
         message: "Scan already in progress"
       });

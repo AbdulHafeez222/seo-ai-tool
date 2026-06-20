@@ -3,7 +3,7 @@ import * as cheerio from "cheerio";
 import cors from "cors";
 import axios from "axios";
 import https from "https";
-import path from "from"; // will use path module safely
+import path from "path";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -521,7 +521,7 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
     'New York', 'London', 'Toronto', 'Sydney', 'Berlin', 'Paris', 'Dubai', 'Singapore', 'Tokyo', 'Chicago', 'San Francisco', 'Karachi', 'Lahore', 'Islamabad'
   ];
   cityPatterns.forEach(city => {
-    if (new RegExp(`\\b${city}\\b`, 'i').test(combinedText)) {
+    if (new RegExp(`\\b${city}</p>\\b`, 'i').test(combinedText)) {
       locations.push(city);
     }
   });
@@ -2106,5 +2106,5 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 AI Visibility Platform v8.0 running on port ${PORT}`);
+  console.log(`... AI Visibility Platform v8.0 running on port ${PORT}`);
 });

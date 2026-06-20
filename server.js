@@ -171,7 +171,7 @@ function fetchHttpsLayer(url, headers) {
         path: parsedUrl.pathname + parsedUrl.search,
         method: 'GET',
         headers: headers,
-        timeout: 10000,
+        timeout: 12000,
         rejectUnauthorized: false
       };
 
@@ -194,33 +194,62 @@ function fetchHttpsLayer(url, headers) {
 
 // ========== RESILIENT MULTI-LAYER FETCH ENGINE ==========
 async function safeFetch(url, options = {}) {
-  const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-  const headers = {
-    "User-Agent": ua,
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
-    "Referer": "https://www.google.com/",
-    "Upgrade-Insecure-Requests": "1",
-    "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
-    ...options.headers
-  };
-
-  let lastError;
+  let lastError = null;
   let lastStatus = 500;
 
-  // Layer 1: Native fetch
+  // Layer 1: Axios Client (Highly configured timeout and header rotation)
+  for (let i = 0; i < USER_AGENTS.length; i++) {
+    const ua = USER_AGENTS[i];
+    const headers = {
+      "User-Agent": ua,
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Connection": "keep-alive",
+      "Referer": "https://www.google.com/",
+      "Upgrade-Insecure-Requests": "1",
+      "Cache-Control": "no-cache",
+      "Pragma": "no-cache",
+      ...options.headers
+    };
+
+    try {
+      const response = await axios.get(url, {
+        headers,
+        timeout: 12000,
+        maxRedirects: 5,
+        validateStatus: (status) => status < 400,
+        httpsAgent: new https.Agent({ rejectUnauthorized: false })
+      });
+      
+      lastStatus = response.status;
+      if (response.data && typeof response.data === 'string' && response.data.length >= 100) {
+        return { data: response.data, status: response.status };
+      }
+    } catch (axiosError) {
+      lastError = axiosError;
+      console.log(`Crawl error (Layer 1 - Attempt ${i + 1}):`, axiosError.message);
+      if (axiosError.response) lastStatus = axiosError.response.status;
+    }
+  }
+
+  // Layer 2: Native global fetch fallback
   try {
+    const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    
     const res = await fetch(url, {
       ...options,
-      headers,
+      headers: {
+        "User-Agent": ua,
+        "Accept": "text/html,application/xhtml+xml",
+        "Referer": "https://www.google.com/"
+      },
       signal: controller.signal,
       redirect: 'follow'
     });
+    
     clearTimeout(timeoutId);
     lastStatus = res.status;
     const text = await res.text();
@@ -229,37 +258,23 @@ async function safeFetch(url, options = {}) {
     }
   } catch (err) {
     lastError = err;
+    console.log("Crawl error (Layer 2 - Fetch Fallback):", err.message);
   }
 
-  // Layer 2: Axios
+  // Layer 3: Direct Core HTTPS Client Fallback
   try {
-    const response = await axios.get(url, {
-      headers,
-      timeout: 8000,
-      maxRedirects: 5,
-      validateStatus: (status) => status < 400, 
-    });
-    lastStatus = response.status;
-    if (response.data && typeof response.data === 'string' && response.data.length >= 100) {
-      return { data: response.data, status: response.status };
-    }
-  } catch (axiosError) {
-    lastError = axiosError;
-    if (axiosError.response) lastStatus = axiosError.response.status;
-  }
-
-  // Layer 3: Direct HTTPS Client
-  try {
-    const response = await fetchHttpsLayer(url, headers);
-    lastStatus = response.statusCode || lastStatus;
+    const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+    const response = await fetchHttpsLayer(url, { "User-Agent": ua, "Accept": "text/html" });
+    lastStatus = response.status || lastStatus;
     if (response.status < 400 && response.data && response.data.length >= 100) {
       return response;
     }
   } catch (httpsError) {
     lastError = httpsError;
+    console.log("Crawl error (Layer 3 - HTTPS Core Native):", httpsError.message);
   }
 
-  return { data: "", status: lastStatus, isError: true, errorMsg: lastError?.message || "Fetch timeout" };
+  return { data: "", status: lastStatus, isError: true, errorMsg: lastError?.message || "Crawl failure across all request layers." };
 }
 
 // ========== ROBUST PAGE VALIDATOR (NO FALSE POSITIVES) ==========

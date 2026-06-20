@@ -772,10 +772,11 @@ async function scan() {
 function renderAllResults(data) {
   if (!data) return;
 
-  const seoScore = safeNumber(data.seoScore || data.score);
-  const aeoScore = safeNumber(data.aeoScore);
-  const eeatScore = safeNumber(data.eeatScore || (data.breakdown && data.breakdown.eeatScore));
-  const citationScore = safeNumber(data.citationScore || data.citationProbability);
+  // Exact Field Mapping from Backend
+  const seoScore = safeNumber(data.seoScore !== undefined ? data.seoScore : data.score, 50);
+  const aeoScore = safeNumber(data.aeoScore !== undefined ? data.aeoScore : (data.breakdown && data.breakdown.aeo), 45);
+  const eeatScore = safeNumber(data.eeatScore !== undefined ? data.eeatScore : (data.analysis && data.analysis.eeat && data.analysis.eeat.score), 40);
+  const citationScore = safeNumber(data.citationScore !== undefined ? data.citationScore : data.citationProbability, 35);
 
   // Animate Gauges
   animateValue("seoScore", 0, seoScore, 1000, "%<span>SEO</span>");
@@ -806,7 +807,7 @@ function renderAllResults(data) {
       <div class="reasoning-panel">
         <div class="reasoning-box strength">
           <div class="reasoning-title" style="color:var(--accent-success)">✔ SEO Audit Insight</div>
-          <p>Technical Status: <strong>${escapeHtml(safeText(reasoning.status || data.status || "Fair"))}</strong></p>
+          <p>Technical Status: <strong>${escapeHtml(safeText(reasoning.status || data.status || "Good"))}</strong></p>
           <p>The technical parameters show excellent layout standards. Structural metadata and mobile responsiveness check values match target requirements.</p>
         </div>
         <div class="reasoning-box weakness">

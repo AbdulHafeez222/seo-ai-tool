@@ -77,6 +77,27 @@ export function safeRun(fn, fallback = null) {
   }
 }
 
+// Clean raw scraped string from SEOquake toolbar garbage
+export function cleanGarbageText(text) {
+  if (!text || typeof text !== "string") return "";
+  let t = text;
+  const badPatterns = [
+    /I\s*n\/a\s*L\s*0\s*LD\s*0\s*I\s*n\/a\s*whois\s*source/gi,
+    /Summary\s*report\s*Diagnosis\s*Density/gi,
+    /LD\s*0\s*I\s*n\/a/gi,
+    /In\/a/gi,
+    /0LD0/gi,
+    /whoissource/gi,
+    /Density00/gi,
+    /Diagnosis/gi,
+    /Summary report/gi
+  ];
+  for (const pattern of badPatterns) {
+    t = t.replace(pattern, "");
+  }
+  return t.replace(/\s+/g, " ").trim();
+}
+
 // Normalize URL to prevent duplicates (http vs https, trailing slashes, www, uppercase/whitespace)
 export function normalizeUrl(url) {
   let u = safeString(url).trim().toLowerCase();
@@ -483,7 +504,7 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
   });
 
   const cleanList = (arr, fallback = []) => {
-    const result = [...new Set(safeArray(arr).map(x => safeString(x).trim()).filter(x => x.length > 1))];
+    const result = [...new Set(safeArray(arr).map(x => safeString(x).trim()).filter(x => x.length > 1))].map(cleanGarbageText).filter(Boolean);
     return result.length > 0 ? result.slice(0, 10) : fallback;
   };
 
@@ -719,7 +740,7 @@ export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
   const directAnswer = safeDesc || `This playbook breaks down all standard frameworks about ${keyword}.`;
 
   return {
-    directAnswer: directAnswer,
+    directAnswer: cleanGarbageText(directAnswer),
     directAnswerWordCount: directAnswer.split(/\s+/).filter(Boolean).length,
     featuredSnippet: `## ${safeH1 || 'Overview'}\n\n${contentSentence ? `Key insights include: ${contentSentence}` : `Essential overview of ${keyword}.`}`,
     aiOverviewAnswer: `According to live page analysis, ${safeH1 || 'this platform'} specializes in providing high-performance solutions for ${keyword}.`,
@@ -1158,9 +1179,7 @@ export async function analyzeSingleUrl(url) {
 
     // Assign rawBodyText after DOM loader is established & filter extension toolbar noise
     rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
-    rawBodyText = rawBodyText.replace(/I\s*n\/a\s*L\s*0\s*LD\s*0\s*I\s*n\/a\s*whois\s*source/gi, "");
-    rawBodyText = rawBodyText.replace(/Summary\s*report\s*Diagnosis\s*Density/gi, "");
-    rawBodyText = rawBodyText.replace(/LD\s*0\s*I\s*n\/a/gi, "");
+    rawBodyText = cleanGarbageText(rawBodyText);
 
     $('script, style, nav, footer, header, noscript, svg').remove();
 
@@ -1172,6 +1191,7 @@ export async function analyzeSingleUrl(url) {
               safeString($("h1").first().text()).trim() || 
               `${formattedNicheTitle} Platform`;
     }
+    title = cleanGarbageText(title);
     console.log("TITLE FOUND", title);
 
     let metaDescription = safeString($('meta[name="description"]').attr("content")).trim();
@@ -1181,17 +1201,19 @@ export async function analyzeSingleUrl(url) {
                         safeString($("p").first().text()).substring(0, 150).trim() || 
                         `Comprehensive services and architectural layouts tailored around ${estimatedNiche}.`;
     }
+    metaDescription = cleanGarbageText(metaDescription);
     console.log("META FOUND", metaDescription);
 
     let h1 = safeString($("h1").first().text()).trim();
     if (!h1 || h1.toLowerCase().includes("not found")) {
       h1 = safeString($("h2").first().text()).trim() || `Proven ${formattedNicheTitle} Systems`;
     }
+    h1 = cleanGarbageText(h1);
 
     const bodyText = rawBodyText || "No content scanned.";
     const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
-    const h2s = $("h2").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean) || [];
-    const h3s = $("h3").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean) || [];
+    const h2s = $("h2").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean).map(cleanGarbageText).filter(Boolean) || [];
+    const h3s = $("h3").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean).map(cleanGarbageText).filter(Boolean) || [];
 
     const schemas = detectAllSchemas($, html);
     const uniqueSchemas = Object.keys(schemas).filter(k => schemas[k]?.present) || [];
@@ -1393,21 +1415,22 @@ export async function analyzeSingleUrl(url) {
       const locationInfo = extractedLocations.length > 0 && !extractedLocations.includes("Global") ? ` for clients in ${extractedLocations[0]}` : '';
       aiExtractedAnswer = `${brandName} is a verified provider of ${serviceName}${locationInfo}. Key highlights include: ${safeArraySlice(firstPara.split(' '), 0, 20).join(' ')}...`;
     }
+    aiExtractedAnswer = cleanGarbageText(aiExtractedAnswer);
 
     const aiSearchSimulation = {
       query: `What is the primary offering of ${brandName}?`,
       chatgpt: {
-        answer: hasDirectAnswer ? `${brandName} offers ${extractedServices[0] || mainTopic}. ${safeArraySlice(metaDescription, 0, 100)}` : `Based on live indexes, ${brandName} specializes in ${safeArraySlice(keywords, 0, 3).join(', ')}. For specific details, explore their web services.`,
+        answer: cleanGarbageText(hasDirectAnswer ? `${brandName} offers ${extractedServices[0] || mainTopic}. ${safeArraySlice(metaDescription, 0, 100)}` : `Based on live indexes, ${brandName} specializes in ${safeArraySlice(keywords, 0, 3).join(', ')}. For specific details, explore their web services.`),
         sources: hasAuthor ? ["Official Website", "Author Profile"] : ["Official Website"],
         willCite: hasDirectAnswer && hasFAQ && listCount >= 2
       },
       gemini: {
-        answer: hasSchemaMarkup ? `According to structured JSON-LD data: ${title}. Core solutions include ${safeArraySlice(extractedServices, 0, 2).join(' and ')}. ${hasLastModified ? 'Last updated: ' + lastModified : ''}` : `${title}. ${safeArraySlice(metaDescription, 0, 120)}`,
+        answer: cleanGarbageText(hasSchemaMarkup ? `According to structured JSON-LD data: ${title}. Core solutions include ${safeArraySlice(extractedServices, 0, 2).join(' and ')}. ${hasLastModified ? 'Last updated: ' + lastModified : ''}` : `${title}. ${safeArraySlice(metaDescription, 0, 120)}`),
         sources: hasSchemaMarkup ? ["Schema.org Data", "Website"] : ["Website"],
         willCite: hasSchemaMarkup && tableCount > 0 && hasAuthor
       },
       perplexity: {
-        answer: hasLastModified ? `${aiExtractedAnswer} [Updated ${lastModified}]` : aiExtractedAnswer,
+        answer: cleanGarbageText(hasLastModified ? `${aiExtractedAnswer} [Updated ${lastModified}]` : aiExtractedAnswer),
         sources: hasLastModified ? ["Official Site (2026)", "Cited Sources"] : ["Official Site"],
         willCite: hasDirectAnswer && hasLastModified && externalLinksCount > 3
       },
@@ -1602,7 +1625,8 @@ export async function analyzeSingleUrl(url) {
       },
       internalLinkIntelligence: internalLinkData,
       brokenLinkCount: 0,
-      lcpScore: 1200
+      lcpScore: 1200,
+      aiExtractedAnswer
     };
   } catch (err) {
     return fallbackSafePayload(url, err);

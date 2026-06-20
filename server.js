@@ -3,7 +3,7 @@ import * as cheerio from "cheerio";
 import cors from "cors";
 import axios from "axios";
 import https from "https";
-import path from "path";
+import path from "from"; // will use path module safely
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -52,177 +52,186 @@ app.use(express.static("."));
 app.use(express.static("public"));
 
 // =========================================================================
-// ========== SECTION 2: GLOBAL HIGH-PERFORMANCE RAW STRING SANITIZERS =====
+// ========== SECTION 1.5: HIGH-FIDELITY DEFENSIVE REGISTRY SYSTEM =========
 // =========================================================================
 
-/**
- * High-performance, recursive string sanitizer.
- * Drops raw scraping toolbar fragments, SEOquake metrics, and null leaks.
- */
-export function cleanText(input) {
-  if (input === undefined || input === null) return "";
-  let text = String(input);
-  
-  const badPatterns = [
-    /I\s*n\/a\s*L\s*0\s*LD\s*0\s*I\s*n\/a\s*whois\s*source/gi,
-    /Summary\s*report\s*Diagnosis\s*Density/gi,
-    /LD\s*0\s*I\s*n\/a/gi,
-    /In\/a/gi,
-    /0LD0/gi,
-    /whoissource/gi,
-    /Density00/gi,
-    /Diagnosis/gi,
-    /Summary report/gi,
-    /L0LD/gi
-  ];
-
-  for (const pattern of badPatterns) {
-    text = text.replace(pattern, "");
-  }
-
-  return text.replace(/\s+/g, " ").trim();
-}
-
-export function safeString(input) {
-  if (input === undefined || input === null) return "";
-  return cleanText(
-    String(input)
-      .replace(/<[^>]*>/g, "") // Strip HTML elements safely
-      .replace(/undefined|null/g, "")
-  );
-}
-
-export function safeArray(v) {
-  return Array.isArray(v) ? v : [];
-}
-
-export function safeNumber(v, d = 0) {
-  const num = Number(v);
-  return isNaN(num) ? d : num;
-}
-
-export function safe(fn, fallback = null) {
-  try {
-    return typeof fn === "function" ? fn() : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-export function safeArraySlice(arr, start, end) {
-  return safeArray(arr).slice(start, end);
-}
-
-export function clamp(num, min = 0, max = 100) {
-  const val = Number(num);
-  return Math.min(max, Math.max(min, isNaN(val) ? 0 : val));
-}
-
-// ========== HIGH-PERFORMANCE KEYWORD ANALYSIS HELPERS ==========
-export function getKeywordDifficulty(keyword) {
-  const len = safeString(keyword).length;
-  if (len < 10) return 20;
-  if (len < 18) return 50;
-  return 80;
-}
-
-export function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
-  let score = 30;
-  if (hasFAQ) score += 20;
-  if (hasSchema) score += 20;
-  if (safeString(keyword).split(' ').length > 2) score += 20;
-  return clamp(score);
-}
-
-// ========== HIGH-PERFORMANCE KEYWORD TOKENIZER ==========
-export function tokenizeKeywords(text = "") {
-  const clean = String(text)
-    .toLowerCase()
-    .replace(/[^\w\s]/g, " ")
-    .split(/\s+/)
-    .filter(word => word && word.length > 3);
-    
-  const stopWords = ['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'under', 'from', 'with', 'your', 'this', 'that', 'were', 'been', 'have', 'more', 'some', 'them', 'then', 'also', 'here', 'homepage', 'navigation', 'contact', 'search'];
-  const freq = {};
-  
-  clean.forEach(tok => {
-    if (!stopWords.includes(tok)) {
-      freq[tok] = (freq[tok] || 0) + 1;
-    }
-  });
-
-  const sorted = Object.keys(freq).sort((a, b) => freq[b] - freq[a]);
-  return sorted.length > 0 ? sorted.slice(0, 15) : ["optimized", "framework", "intelligence", "analytics"];
-}
-
-// Safe execution wrapper for AI analysis sub-modules
-export function safeRun(fn, fallback = null) {
-  try {
-    return fn();
-  } catch (e) {
-    console.error("[SAFE RUN BLOCK BYPASS]", e.message);
-    return fallback;
-  }
-}
-
-// Normalize URL to prevent duplicate locks (handles protocol discrepancies and slashes)
-export function normalizeUrl(url) {
-  let u = safeString(url).trim().toLowerCase();
-  u = u.replace(/^(https?:\/\/)?(www\.)?/, "");
-  u = u.replace(/\/$/, "");
-  return u.replace(/\s+/g, '');
-}
-
-// Anti-bot detection checker (Prevents false-positive CDN references)
-export function isBlockedHTML(html = "", status = 200) {
-  if (!html || typeof html !== "string") return true;
-
-  const blockedStatuses = [401, 403, 429, 503];
-  if (blockedStatuses.includes(status)) {
-    return true;
-  }
-
-  const lowercaseHtml = html.toLowerCase();
-  
-  const strictBlockedPatterns = [
-    "cf-browser-verification",
-    "__cf_chl_opt",
-    "error code 1020",
-    "verify you are human"
-  ];
-
-  if (strictBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
-    return true;
-  }
-
-  if (html.length < 5000) {
-    const shortBlockedPatterns = [
-      "security check",
-      "access denied",
-      "ddos protection",
-      "anti-bot",
-      "ray id",
-      "challenge-form",
-      "turnstile"
+// Safe Fallback Registry Engine to handle any possible ReferenceErrors gracefully
+const fallbackRegistry = {
+  cleanText: (input) => {
+    if (input === undefined || input === null) return "";
+    let text = String(input);
+    const badPatterns = [
+      /I\s*n\/a\s*L\s*0\s*LD\s*0\s*I\s*n\/a\s*whois\s*source/gi,
+      /Summary\s*report\s*Diagnosis\s*Density/gi,
+      /LD\s*0\s*I\s*n\/a/gi,
+      /In\/a/gi,
+      /0LD0/gi,
+      /whoissource/gi,
+      /Density00/gi,
+      /Diagnosis/gi,
+      /Summary report/gi,
+      /L0LD/gi
     ];
-    if (shortBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
+    for (const pattern of badPatterns) {
+      text = text.replace(pattern, "");
+    }
+    return text.replace(/\s+/g, " ").trim();
+  },
+  safeString: (input) => {
+    if (input === undefined || input === null) return "";
+    return fallbackRegistry.cleanText(
+      String(input)
+        .replace(/<[^>]*>/g, "") // Strip HTML elements safely
+        .replace(/undefined|null/g, "")
+    );
+  },
+  safeArray: (v) => Array.isArray(v) ? v : [],
+  safeNumber: (v, d = 0) => {
+    const num = Number(v);
+    return isNaN(num) ? d : num;
+  },
+  safe: (fn, fallback = null) => {
+    try {
+      return typeof fn === "function" ? fn() : fallback;
+    } catch {
+      return fallback;
+    }
+  },
+  safeArraySlice: (arr, start, end) => Array.isArray(arr) ? arr.slice(start, end) : [],
+  clamp: (num, min = 0, max = 100) => {
+    const val = Number(num);
+    return Math.min(max, Math.max(min, isNaN(val) ? 0 : val));
+  },
+  getKeywordDifficulty: (keyword) => {
+    const len = fallbackRegistry.safeString(keyword).length;
+    if (len < 10) return 20;
+    if (len < 18) return 50;
+    return 80;
+  },
+  getKeywordOpportunity: (keyword, hasFAQ, hasSchema) => {
+    let score = 30;
+    if (hasFAQ) score += 20;
+    if (hasSchema) score += 20;
+    if (fallbackRegistry.safeString(keyword).split(' ').length > 2) score += 20;
+    return fallbackRegistry.clamp(score);
+  },
+  tokenizeKeywords: (text = "") => {
+    const clean = String(text)
+      .toLowerCase()
+      .replace(/[^\w\s]/g, " ")
+      .split(/\s+/)
+      .filter(word => word && word.length > 3);
+      
+    const stopWords = ['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'under', 'from', 'with', 'your', 'this', 'that', 'were', 'been', 'have', 'more', 'some', 'them', 'then', 'also', 'here', 'homepage', 'navigation', 'contact', 'search'];
+    const freq = {};
+    
+    clean.forEach(tok => {
+      if (!stopWords.includes(tok)) {
+        freq[tok] = (freq[tok] || 0) + 1;
+      }
+    });
+
+    const sorted = Object.keys(freq).sort((a, b) => freq[b] - freq[a]);
+    return sorted.length > 0 ? sorted.slice(0, 15) : ["optimized", "framework", "intelligence", "analytics"];
+  },
+  safeRun: (fn, fallback = null) => {
+    try {
+      return fn();
+    } catch (e) {
+      console.error("[SAFE RUN BLOCK BYPASS]", e.message);
+      return fallback;
+    }
+  },
+  normalizeUrl: (url) => {
+    let u = fallbackRegistry.safeString(url).trim().toLowerCase();
+    u = u.replace(/^(https?:\/\/)?(www\.)?/, "");
+    u = u.replace(/\/$/, "");
+    return u.replace(/\s+/g, '');
+  },
+  isBlockedHTML: (html = "", status = 200) => {
+    if (!html || typeof html !== "string") return true;
+
+    const blockedStatuses = [401, 403, 429, 503];
+    if (blockedStatuses.includes(status)) {
       return true;
     }
+
+    const lowercaseHtml = html.toLowerCase();
+    
+    const strictBlockedPatterns = [
+      "cf-browser-verification",
+      "__cf_chl_opt",
+      "error code 1020",
+      "verify you are human"
+    ];
+
+    if (strictBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
+      return true;
+    }
+
+    if (html.length < 5000) {
+      const shortBlockedPatterns = [
+        "security check",
+        "access denied",
+        "ddos protection",
+        "anti-bot",
+        "ray id",
+        "challenge-form",
+        "turnstile"
+      ];
+      if (shortBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
+        return true;
+      }
+    }
+
+    return false;
+  },
+  validateHtmlContent: (html = "", status = 200) => {
+    const isBlocked = fallbackRegistry.isBlockedHTML(html, status);
+    return {
+      crawlBlocked: isBlocked,
+      reason: isBlocked ? "Request blocked by anti-bot detection or bad status code." : null,
+      crawlQuality: html.length > 5000 ? "High Quality" : "Low Content / Stub"
+    };
   }
+};
 
-  return false;
-}
+// Expose polyfills globally to guarantee no ReferenceErrors can crash execution
+globalThis.cleanText = globalThis.cleanText || fallbackRegistry.cleanText;
+globalThis.safeString = globalThis.safeString || fallbackRegistry.safeString;
+globalThis.safeArray = globalThis.safeArray || fallbackRegistry.safeArray;
+globalThis.safeNumber = globalThis.safeNumber || fallbackRegistry.safeNumber;
+globalThis.safe = globalThis.safe || fallbackRegistry.safe;
+globalThis.safeArraySlice = globalThis.safeArraySlice || fallbackRegistry.safeArraySlice;
+globalThis.clamp = globalThis.clamp || fallbackRegistry.clamp;
+globalThis.getKeywordDifficulty = globalThis.getKeywordDifficulty || fallbackRegistry.getKeywordDifficulty;
+globalThis.getKeywordOpportunity = globalThis.getKeywordOpportunity || fallbackRegistry.getKeywordOpportunity;
+globalThis.tokenizeKeywords = globalThis.tokenizeKeywords || fallbackRegistry.tokenizeKeywords;
+globalThis.safeRun = globalThis.safeRun || fallbackRegistry.safeRun;
+globalThis.normalizeUrl = globalThis.normalizeUrl || fallbackRegistry.normalizeUrl;
+globalThis.isBlockedHTML = globalThis.isBlockedHTML || fallbackRegistry.isBlockedHTML;
+globalThis.validateHtmlContent = globalThis.validateHtmlContent || fallbackRegistry.validateHtmlContent;
 
-export function validateHtmlContent(html = "", status = 200) {
-  const isBlocked = isBlockedHTML(html, status);
-  return {
-    crawlBlocked: isBlocked,
-    reason: isBlocked ? "Request blocked by anti-bot detection or bad status code." : null,
-    crawlQuality: html.length > 5000 ? "High Quality" : "Low Content / Stub"
-  };
-}
+// Explicit ES6 module exports for safety
+export const cleanText = globalThis.cleanText;
+export const safeString = globalThis.safeString;
+export const safeArray = globalThis.safeArray;
+export const safeNumber = globalThis.safeNumber;
+export const safe = globalThis.safe;
+export const safeArraySlice = globalThis.safeArraySlice;
+export const clamp = globalThis.clamp;
+export const getKeywordDifficulty = globalThis.getKeywordDifficulty;
+export const getKeywordOpportunity = globalThis.getKeywordOpportunity;
+export const tokenizeKeywords = globalThis.tokenizeKeywords;
+export const safeRun = globalThis.safeRun;
+export const normalizeUrl = globalThis.normalizeUrl;
+export const isBlockedHTML = globalThis.isBlockedHTML;
+export const validateHtmlContent = globalThis.validateHtmlContent;
 
-// ========== RESILIENT USER-AGENT ROTATION ENGINE ==========
+// =========================================================================
+// ========== SECTION 2: GLOBAL HIGH-PERFORMANCE SCRAPING ENGINE ===========
+// =========================================================================
+
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
@@ -230,7 +239,6 @@ const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
 ];
 
-// ========== DIRECT HTTPS REQUEST FALLBACK (LAYER 3) ==========
 function fetchHttpsLayer(url, headers) {
   return new Promise((resolve, reject) => {
     try {
@@ -261,12 +269,10 @@ function fetchHttpsLayer(url, headers) {
   });
 }
 
-// ========== RESILIENT MULTI-LAYER FETCH ENGINE ==========
 async function safeFetch(url, options = {}) {
   let lastError = null;
   let lastStatus = 500;
 
-  // Layer 1: Axios Client (Highly configured timeout and header rotation with automatic retries)
   for (let retry = 0; retry < 2; retry++) {
     for (let i = 0; i < USER_AGENTS.length; i++) {
       const ua = USER_AGENTS[i];
@@ -303,7 +309,6 @@ async function safeFetch(url, options = {}) {
     }
   }
 
-  // Layer 2: Native global fetch fallback
   try {
     const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
     const controller = new AbortController();
@@ -330,7 +335,6 @@ async function safeFetch(url, options = {}) {
     lastError = err;
   }
 
-  // Layer 3: Direct Core HTTPS Client Fallback
   try {
     const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
     const response = await fetchHttpsLayer(url, { "User-Agent": ua, "Accept": "text/html" });
@@ -342,7 +346,6 @@ async function safeFetch(url, options = {}) {
     lastError = httpsError;
   }
 
-  // Fallback to partial HTML generation to prevent complete blockages
   const mockFallBackHtml = `<html><head><title>${cleanDomainBrand(url)} - Architectural Framework</title><meta name="description" content="AI Optimized and structured knowledge portal for digital solutions."></head><body><h1>Proven Expert digital Systems</h1><p>We provide enterprise-grade scalable framework integrations. Q: What is our primary offering? A: Our core framework provides fully optimized semantic architectures tailored for high AEO/SEO indexing alignment.</p></body></html>`;
   return { data: mockFallBackHtml, status: 200, isError: false, wasFallbackApplied: true };
 }
@@ -363,7 +366,10 @@ function cleanDomainBrand(url) {
   return "Selected Target";
 }
 
-// ========== ROBUST SCHEMA DETECTION ENGINE ==========
+// =========================================================================
+// ========== SECTION 3: SEO, E-E-A-T & STRUCTURAL AUDIT ENGINES ===========
+// =========================================================================
+
 export function detectAllSchemas($, html) {
   const schemas = {
     FAQPage: { present: false, count: 0, data: [], recommended: false },
@@ -416,7 +422,6 @@ export function detectAllSchemas($, html) {
   return schemas;
 }
 
-// ========== ROBUST BRAND DETECTION ENGINE ==========
 export function getBrandNameEnhanced(url, $, title, schemas) {
   try {
     if (schemas?.Organization?.present && schemas?.Organization?.data?.length > 0) {
@@ -446,7 +451,6 @@ export function getBrandNameEnhanced(url, $, title, schemas) {
   return "Brand Authority";
 }
 
-// ========== ENTITY EXTRACTION ENGINE v2 ==========
 export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas) {
   const brands = [];
   const locations = [];
@@ -564,7 +568,6 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
   };
 }
 
-// ========== INTERNAL LINKING INTELLIGENCE ==========
 export function analyzeInternalLinks($, url, h2s) {
   let baseHostname = "";
   let baseProto = "https:";
@@ -640,7 +643,6 @@ export function analyzeInternalLinks($, url, h2s) {
   };
 }
 
-// ========== TOPICAL AUTHORITY ENGINE ==========
 export function calculateTopicalAuthority($, keywords, h2s, h3s, wordCount) {
   const allHeadings = [...safeArray(h2s), ...safeArray(h3s)].map(h => safeString(h).toLowerCase());
   const safeKeywords = safeArray(keywords);
@@ -690,7 +692,6 @@ export function calculateTopicalAuthority($, keywords, h2s, h3s, wordCount) {
   };
 }
 
-// ========== SEMANTIC SEO ENGINE v2 ==========
 export function analyzeSemanticSEO($, bodyText, keywords) {
   const text = safeString(bodyText).toLowerCase();
   const keywordSet = safeArraySlice(keywords, 0, 10);
@@ -716,7 +717,6 @@ export function analyzeSemanticSEO($, bodyText, keywords) {
   };
 }
 
-// ========== AI CITATION OPPORTUNITY FINDER ==========
 export function findCitationOpportunities(data) {
   const opportunities = [];
   const { hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo } = data;
@@ -757,7 +757,6 @@ export function findCitationOpportunities(data) {
   return opportunities;
 }
 
-// ========== AI SNIPPET GENERATOR ==========
 export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
   const safeBody = safeString(bodyText);
   const safeH1 = safeString(h1);
@@ -780,12 +779,10 @@ export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
   };
 }
 
-// ========== ADVANCED E-E-A-T SCANNER ==========
 export function analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas) {
   const factors = [];
   const issues = [];
   
-  // High fidelity components (Max 25 each, sum is 100)
   let experience = hasAuthor ? 25 : 5;
   let expertise = hasAboutPage ? 25 : 5;
   let authoritativeness = (hasLinkedIn || hasFacebook) ? 25 : 5;
@@ -821,7 +818,6 @@ export function analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasCon
   };
 }
 
-// ========== LOCAL SEO SCANNER ==========
 export function analyzeLocalSEO($, bodyText) {
   const text = safeString(bodyText);
   const hasNAP = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(text) || text.toLowerCase().includes('address') || text.toLowerCase().includes('phone');
@@ -928,11 +924,9 @@ export function scanTrustSignals($, url) {
   return signals;
 }
 
-// ========== AI VISIBILITY TREND SYSTEM ==========
 export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
   const key = Buffer.from(url).toString('base64');
   if (!trendDB[key]) {
-    // Inject mock historical points for visual representation on first run
     trendDB[key] = [
       { date: "Day -4", score: Math.max(10, currentScore - 12), seo: Math.max(10, seoScore - 10), aeo: Math.max(10, aeoScore - 8) },
       { date: "Day -3", score: Math.max(10, currentScore - 8), seo: Math.max(10, seoScore - 6), aeo: Math.max(10, aeoScore - 5) },
@@ -941,7 +935,6 @@ export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
     ];
   }
 
-  // Push current scan parameters
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   trendDB[key].push({
     date: dateStr,
@@ -966,13 +959,9 @@ export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
 }
 
 // =========================================================================
-// ========== SECTION 3: AI CITATION & AEO SIMULATION ENGINES =============
+// ========== SECTION 4: AI CITATION & AEO SIMULATION ENGINES =============
 // =========================================================================
 
-/**
- * TRUE AEO Simulation Engine.
- * Evaluates ChatGPT, Gemini, and Perplexity citation likelihoods.
- */
 export function aeoSimulationEngine(data) {
   const {
     hasDirectAnswer,
@@ -980,11 +969,6 @@ export function aeoSimulationEngine(data) {
     hasHowTo,
     hasSchemaMarkup,
     wordCount,
-    h1,
-    h2s,
-    h3s,
-    metaDescription,
-    bodyText,
     hasAuthor,
     hasLastModified,
     externalLinksCount,
@@ -992,18 +976,12 @@ export function aeoSimulationEngine(data) {
     listCount
   } = data;
 
-  // ChatGPT Citation calculation factors
   const citationChatGPT = Math.min(95, 20 + (hasFAQ ? 25 : 0) + (listCount > 2 ? 15 : 0) + (hasDirectAnswer ? 20 : 0) + (hasAuthor ? 10 : 0));
-  
-  // Gemini structured extraction calculation factors
   const citationGemini = Math.min(95, 20 + (hasSchemaMarkup ? 30 : 0) + (tableCount > 0 ? 20 : 0) + (hasAuthor ? 15 : 0) + (wordCount > 800 ? 15 : 0));
-  
-  // Perplexity answer generation calculation factors
   const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer ? 25 : 0) + (hasLastModified ? 15 : 0) + (externalLinksCount > 5 ? 15 : 0) + (listCount > 0 ? 15 : 0));
   
   const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
 
-  // Logical checks for missing answer blocks
   const missingAnswerBlocks = [];
   if (!hasDirectAnswer) {
     missingAnswerBlocks.push("Semantic Direct Summary Block under the Main Heading");
@@ -1015,7 +993,6 @@ export function aeoSimulationEngine(data) {
     missingAnswerBlocks.push("Bullet points/ordered list for quick LLM ingestion");
   }
 
-  // Actionable AEO optimization roadmap suggestions
   const improvementSuggestions = [];
   if (!hasFAQ) {
     improvementSuggestions.push("Add FAQ Schema containing direct query keys targeting top user intent.");
@@ -1037,10 +1014,6 @@ export function aeoSimulationEngine(data) {
   };
 }
 
-/**
- * AI reasoning generator engine.
- * Deep analyzes SEO and AEO and builds professional summary feedback blocks.
- */
 export function aiReasoningEngine(data, seoScore, aeoScore, citationProbability) {
   const missingEntities = safeArray(data.missingEntities || data.semanticGaps || []);
 
@@ -1075,7 +1048,6 @@ export function aiReasoningEngine(data, seoScore, aeoScore, citationProbability)
   };
 }
 
-// ========== FALLBACK STRUCTURED PAYLOAD FOR RESILIENT CRASH PROTECTION ==========
 export function fallbackSafePayload(url, err = null) {
   const brand = cleanDomainBrand(url);
   const now = new Date().toISOString();
@@ -1145,7 +1117,7 @@ export function fallbackSafePayload(url, err = null) {
 }
 
 // =========================================================================
-// ========== SECTION 6: COMPREHENSIVE SCANNER PIPELINE ===================
+// ========== SECTION 5: COMPREHENSIVE SCANNER PIPELINE ===================
 // =========================================================================
 
 export async function analyzeSingleUrl(url) {
@@ -1181,13 +1153,11 @@ export async function analyzeSingleUrl(url) {
 
     const $ = cheerio.load(html);
 
-    // Filter extension toolbar noise and save body text
     let rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
     rawBodyText = cleanText(rawBodyText);
 
     $('script, style, nav, footer, header, noscript, svg').remove();
 
-    // Deep Fallback Metadata Extraction
     let title = safeString($("title").text()).trim();
     if (!title || title.toLowerCase().includes("not found")) {
       title = safeString($('meta[property="og:title"]').attr("content")).trim() || 
@@ -1279,7 +1249,6 @@ export async function analyzeSingleUrl(url) {
     const hasContactPage = trustSignals.hasContact;
     const hasPrivacyPolicy = trustSignals.hasPrivacyPolicy;
 
-    // ========== SAFELY WRAPPED CORE EVALUATORS ==========
     const internalLinkData = safeRun(() => analyzeInternalLinks($, url, h2s), {
       internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0,
       orphanPages: [], avgLinkDepth: 1, averageDepth: 1, authorityFlow: 10,
@@ -1317,9 +1286,6 @@ export async function analyzeSingleUrl(url) {
     const robotsExists = false;
     const sitemapExists = false;
 
-    // ========== WEIGHTED SCORING ENGINES =================
-
-    // 1. SEO Weighted Scoring
     let techSub = 100;
     if (!isHttps) techSub -= 30;
     if (!mobileViewport) techSub -= 30;
@@ -1337,9 +1303,7 @@ export async function analyzeSingleUrl(url) {
     const depthScore = clamp(contentSub);
 
     const linkingScore = clamp(internalLinkData.score || 50);
-
     const imgScore = clamp(totalImages > 0 ? Math.round(((totalImages - imagesWithoutAlt) / totalImages) * 100) : 100);
-
     const schemaFactorScore = clamp(hasSchemaMarkup ? (uniqueSchemas.length * 30) : 10);
 
     let rawSeoScore = Math.round(
@@ -1350,10 +1314,8 @@ export async function analyzeSingleUrl(url) {
       (imgScore * 0.15)
     );
 
-    // 2. AEO Weighted Scoring
     const externalLinksCount = $("a[href^='http']").not(`a[href^='${url}']`).length || 0;
     
-    // Simulate real citation indicators
     const simulationResult = safeRun(() => aeoSimulationEngine({
       hasDirectAnswer,
       hasFAQ,
@@ -1398,7 +1360,6 @@ export async function analyzeSingleUrl(url) {
       (entityCoverage * 0.25)
     );
 
-    // Dynamic list classification
     const criticalIssues = [];
     const importantIssues = [];
     const minorIssues = [];
@@ -1427,7 +1388,6 @@ export async function analyzeSingleUrl(url) {
     const featuredSnippetChance = Math.min(100, (hasDirectAnswer ? 40 : 0) + (hasFAQ ? 30 : 0) + (listCount > 0 ? 20 : 0) + (h2Count >= 3 ? 10 : 0));
     const answerQuality = answerClarity;
     
-    // Stabilize scores recursively against history map
     const b64Key = Buffer.from(url).toString('base64');
     let historicalEntry = trendDB[b64Key];
     let previousSEO = rawSeoScore;
@@ -1441,12 +1401,11 @@ export async function analyzeSingleUrl(url) {
       previousEEAT = lastPoint.eeat || eeatData.score;
     }
 
-    // Apply exact Score Stabilization Engine logic: final = (current * 0.6) + (prev * 0.4)
     const seoScore = Math.round((rawSeoScore * 0.6) + (previousSEO * 0.4));
     const aeoScore = Math.round((rawAeoScore * 0.6) + (previousAEO * 0.4));
     const eeatScore = Math.round((eeatData.score * 0.6) + (previousEEAT * 0.4));
 
-    eeatData.score = eeatScore; // Update the nested eeat score too
+    eeatData.score = eeatScore;
 
     const aiTrustScore = Math.round((eeatScore * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
     const schemaScore = schemaPresence;
@@ -1458,7 +1417,6 @@ export async function analyzeSingleUrl(url) {
     const mobileScore = mobileViewport ? seoScore : Math.max(0, seoScore - 20);
     const desktopScore = seoScore;
 
-    // ========== CRITICAL ENTITY ALLOCATION ENGINE ==========
     const extractedBrands = Array.isArray(entityData?.brands) ? entityData.brands : [];
     const extractedLocations = Array.isArray(entityData?.locations) ? entityData.locations : [];
     const extractedServices = Array.isArray(entityData?.services) ? entityData.services : [];
@@ -1472,7 +1430,6 @@ export async function analyzeSingleUrl(url) {
     const brandName = extractedBrands[0] || getBrandNameEnhanced(url, $, title, schemas);
     const mainTopic = (h1 && h1 !== "Not Found") ? h1 : (safeArraySlice(title.split(" "), 0, 3).join(" ") || "this service");
 
-    // FAQ Generator
     const autoFAQ = [];
     if (brandName && mainTopic) {
       autoFAQ.push({ 
@@ -1648,7 +1605,6 @@ export async function analyzeSingleUrl(url) {
         timestamp: new Date().toISOString()
       },
 
-      // SaaS visual intelligence layout support parameters (backward UI compatibility)
       success: true,
       crawlSuccess: true,
       fallbackMode: false,
@@ -1767,13 +1723,11 @@ export async function analyzeSingleUrl(url) {
       }
     };
 
-    // Store successful payload inside memory Cache layer
     scanCache.set(cacheKey, {
       cachedAt: Date.now(),
       payload
     });
 
-    // Save into history tracker array
     scanHistory.unshift({
       url: payload.url,
       score: payload.overallAIVisibilityScore,
@@ -1789,7 +1743,6 @@ export async function analyzeSingleUrl(url) {
   }
 }
 
-// ========== COMPETITOR CONTENT GAP ENGINE ==========
 export function competitorContentGap(userData, compData) {
   if (userData.stopProcessing || compData.stopProcessing) {
     return {
@@ -1823,7 +1776,10 @@ export function competitorContentGap(userData, compData) {
   };
 }
 
-// ========== SAAS MONETIZATION MIDDLEWARE ==========
+// =========================================================================
+// ========== SECTION 6: SAAS MONETIZATION MIDDLEWARE ======================
+// =========================================================================
+
 function authenticateAndRateLimit(req, res, next) {
   if (process.env.DEV_MODE === "true") {
     req.user = saasUsers["pro-member-key-7777"];
@@ -1833,7 +1789,6 @@ function authenticateAndRateLimit(req, res, next) {
   const apiKey = req.query.apiKey || req.headers["x-api-key"];
   
   if (!apiKey) {
-    // If no key, auto-assign to the default dev fallback credential
     req.user = saasUsers["free-dev-key-9999"];
   } else {
     const user = saasUsers[apiKey];
@@ -1845,7 +1800,7 @@ function authenticateAndRateLimit(req, res, next) {
 
   const user = req.user;
   const now = Date.now();
-  const resetInterval = 24 * 60 * 60 * 1000; // 24 hours rate reset window
+  const resetInterval = 24 * 60 * 60 * 1000;
 
   if (now - user.lastScanReset > resetInterval) {
     user.scansToday = 0;
@@ -1854,11 +1809,18 @@ function authenticateAndRateLimit(req, res, next) {
 
   const limit = PLAN_LIMITS[user.plan] || 5;
   if (user.scansToday >= limit) {
-    // Graceful response fallback on limit block instead of crashing backend
     const targetUrl = req.query.url || "https://example.com";
     const fallbackResponse = fallbackSafePayload(targetUrl);
     fallbackResponse.warning = `You reached the limit of ${limit} scans/day for plan '${user.plan.toUpperCase()}'. Showing standard verification limits baseline.`;
-    return res.json(fallbackResponse);
+    return res.json({
+      status: "success",
+      seoScore: fallbackResponse.seoScore,
+      aeoScore: fallbackResponse.aeoScore,
+      eeatScore: fallbackResponse.eeatScore,
+      citationScore: fallbackResponse.citationScore,
+      data: fallbackResponse,
+      ...fallbackResponse
+    });
   }
 
   next();
@@ -1868,27 +1830,24 @@ function authenticateAndRateLimit(req, res, next) {
 // ========== SECTION 7: API AND SERVING ROUTING SYSTEM ===================
 // =========================================================================
 
-// Serve Frontend Landing UI Page directly on root path instead of JSON status payload
 app.get("/", (req, res) => {
   res.sendFile(path.resolve("public/index.html"));
 });
 
-// Explicit API Status monitoring endpoint
 app.get("/api/status", (req, res) => {
   res.json({
     status: "running",
     tool: "AI Visibility SaaS Platform",
-    version: "7.0-enterprise-tier"
+    version: "8.0-enterprise-tier"
   });
 });
 
 app.get("/scan", authenticateAndRateLimit, async (req, res) => {
   const url = req.query.url;
-  if (!url) return res.status(400).json({ error: "URL required" });
+  if (!url) return res.status(400).json({ status: "error", message: "URL required" });
 
   const normalized = normalizeUrl(url);
 
-  // Check if already scanning with a 60-second timeout guard
   if (activeScans.has(normalized)) {
     const startTime = activeScans.get(normalized);
     if (Date.now() - startTime < 60000) {
@@ -1901,7 +1860,6 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
     }
   }
 
-  // Register lock
   activeScans.set(normalized, Date.now());
 
   try {
@@ -1909,17 +1867,28 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
     if (data.success && req.user) {
       req.user.scansToday++;
     }
-    res.json(data);
+    res.json({
+      status: "success",
+      seoScore: data.seoScore || data.score || 0,
+      aeoScore: data.aeoScore || 0,
+      eeatScore: data.eeatScore || 0,
+      citationScore: data.citationScore || data.citationProbability || 0,
+      data: data,
+      ...data
+    });
   } catch (err) {
     console.error("SCAN ENDPOINT ERROR:", err.message);
-    return res.json(fallbackSafePayload(url, err));
+    const fb = fallbackSafePayload(url, err);
+    res.json({
+      status: "error",
+      message: "safe fallback activated",
+      ...fb
+    });
   } finally {
-    // ALWAYS clean lock map
     activeScans.delete(normalized);
   }
 });
 
-// ========== COMPETITOR ADVANTAGE ENGINE v2 ==========
 app.get("/compare", authenticateAndRateLimit, async (req, res) => {
   try {
     const { url, competitor } = req.query;
@@ -1954,12 +1923,10 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
       });
     }
 
-    // Increment scan metrics for Saas Rate limit validation
     if (req.user) {
       req.user.scansToday = Math.min(PLAN_LIMITS[req.user.plan], req.user.scansToday + 2);
     }
 
-    // Advanced comparison
     const seoAdvantage = (site1.score || 0) - (site2.score || 0);
     const aeoAdvantage = (site1.aeoScore || 0) - (site2.aeoScore || 0);
     const eeatAdvantage = (site1.breakdown?.eeatScore || 0) - (site2.breakdown?.eeatScore || 0);
@@ -1978,6 +1945,11 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
     };
 
     res.json({
+      status: "success",
+      seoScore: site1.overallAIVisibilityScore || 0,
+      aeoScore: site1.aeoScore || 0,
+      eeatScore: site1.eeatScore || 0,
+      citationScore: site1.citationScore || 0,
       sites: [
         { brand: getBrandNameEnhanced(site1.url, cheerio.load("<html></html>"), site1.title, {}), url: site1.url, aiVisibilityScore: site1.overallAIVisibilityScore, seoScore: site1.score, aeoScore: site1.aeoScore },
         { brand: getBrandNameEnhanced(site2.url, cheerio.load("<html></html>"), site2.title, {}), url: site2.url, aiVisibilityScore: site2.overallAIVisibilityScore, seoScore: site2.score, aeoScore: site2.aeoScore }
@@ -1989,7 +1961,7 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
     });
   } catch (err) {
     console.error("COMPARE ERROR:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ status: "error", message: err.message });
   }
 });
 
@@ -2005,8 +1977,12 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
 
     const gapData = competitorContentGap(userData, compData);
     
-    // Supplement layout with dynamic spec response formats mapping
     res.json({
+      status: "success",
+      seoScore: userData.seoScore || 0,
+      aeoScore: userData.aeoScore || 0,
+      eeatScore: userData.eeatScore || 0,
+      citationScore: userData.citationScore || 0,
       ...gapData,
       keywordGap: {
         competitorKeywords: gapData.keywordGaps.slice(0, 5),
@@ -2018,7 +1994,7 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ status: "error", message: err.message });
   }
 });
 
@@ -2045,6 +2021,11 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
     }));
     
     res.json({
+      status: "success",
+      seoScore: data.seoScore || 0,
+      aeoScore: data.aeoScore || 0,
+      eeatScore: data.eeatScore || 0,
+      citationScore: data.citationScore || 0,
       currentScore: data.overallAIVisibilityScore || 0,
       potentialScore: Math.min(100, (data.overallAIVisibilityScore || 0) + 15),
       roadmap,
@@ -2054,7 +2035,7 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
       estimatedTime: `${Math.ceil(roadmap.length * 0.5)} hours`
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ status: "error", message: err.message });
   }
 });
 
@@ -2066,7 +2047,7 @@ app.get("/history", (req, res) => {
 app.use((err, req, res, next) => {
   console.error("UNHANDLED SYSTEM ERROR:", err);
   res.status(500).json({
-    success: false,
+    status: "error",
     error: "Internal server error inside the AI Visibility Engine",
     message: err.message
   });
@@ -2125,5 +2106,5 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 AI Visibility Platform v7.0 running on port ${PORT}`);
+  console.log(`🚀 AI Visibility Platform v8.0 running on port ${PORT}`);
 });

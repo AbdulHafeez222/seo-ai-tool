@@ -6,17 +6,43 @@ import https from "https";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
+
+// =========================================================================
+// ========== SECTION 1: IN-MEMORY CACHE & SAAS DB PARAMETERS ==============
+// =========================================================================
 const scanHistory = [];
 const trendDB = {}; // In-memory database for tracking historical scores
 const activeScans = new Map(); // Global thread-safe scanner request lock Map
 
-app.use(cors());
-app.use(express.json());
-app.use(express.static("."));
-app.use(express.static("public"));
+// SaaS Cache to prevent duplicate heavy crawling/scanning within 10 minutes
+const scanCache = new Map();
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache validation TTL
+
+// SaaS User DB simulation (Stripe-ready schema mapping)
+const saasUsers = {
+  "free-dev-key-9999": {
+    email: "developer@free.aeo",
+    plan: "free",
+    scansToday: 0,
+    lastScanReset: Date.now(),
+    apiKey: "free-dev-key-9999"
+  },
+  "pro-member-key-7777": {
+    email: "enterprise@premium.aeo",
+    plan: "pro",
+    scansToday: 0,
+    lastScanReset: Date.now(),
+    apiKey: "pro-member-key-7777"
+  }
+};
+
+const PLAN_LIMITS = {
+  free: 5,
+  pro: 100
+};
 
 // =========================================================================
-// ========== SECTION 1: GLOBAL HIGH-PERFORMANCE RAW STRING SANITIZERS =====
+// ========== SECTION 2: GLOBAL HIGH-PERFORMANCE RAW STRING SANITIZERS =====
 // =========================================================================
 
 /**
@@ -924,7 +950,7 @@ export function fallbackSafePayload(url, err = null) {
 }
 
 // =========================================================================
-// ========== SECTION 2: AI CITATION & AEO SIMULATION ENGINES =============
+// ========== SECTION 3: AI CITATION & AEO SIMULATION ENGINES =============
 // =========================================================================
 
 /**
@@ -1034,7 +1060,7 @@ export function aiReasoningEngine(data, seoScore, aeoScore, citationProbability)
 }
 
 // =========================================================================
-// ========== SECTION 3: COMPREHENSIVE SCANNER PIPELINE ===================
+// ========== SECTION 4: COMPREHENSIVE SCANNER PIPELINE ===================
 // =========================================================================
 
 export async function analyzeSingleUrl(url) {
@@ -1043,6 +1069,13 @@ export async function analyzeSingleUrl(url) {
     url = safeString(url).trim();
     if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
     url = url.replace(/\s+/g, '');
+
+    const cacheKey = normalizeUrl(url);
+    const cachedData = scanCache.get(cacheKey);
+    if (cachedData && (Date.now() - cachedData.cachedAt < CACHE_TTL_MS)) {
+      console.log("📦 Returning cached analysis report for:", url);
+      return cachedData.payload;
+    }
 
     let htmlData = { data: "", status: 200, isError: false };
     const startTime = Date.now();
@@ -1202,7 +1235,7 @@ export async function analyzeSingleUrl(url) {
     // ========== WEIGHTED SCORING ENGINES =================
 
     // 1. SEO Weighted Scoring
-    // Factors: technical (30%), content depth (30%), internal linking (15%), image SEO (10%), schema (15%)
+    // Factors: technical (30%), content depth (25%), internal linking (15%), schema (15%), image SEO (15%)
     let techSub = 100;
     if (!isHttps) techSub -= 30;
     if (!mobileViewport) techSub -= 30;
@@ -1225,16 +1258,16 @@ export async function analyzeSingleUrl(url) {
 
     const schemaFactorScore = clamp(hasSchemaMarkup ? (uniqueSchemas.length * 30) : 10);
 
-    const seoScore = Math.round(
+    let rawSeoScore = Math.round(
       (techScore * 0.30) +
-      (depthScore * 0.30) +
+      (depthScore * 0.25) +
       (linkingScore * 0.15) +
-      (imgScore * 0.10) +
-      (schemaFactorScore * 0.15)
+      (schemaFactorScore * 0.15) +
+      (imgScore * 0.15)
     );
 
     // 2. AEO Weighted Scoring
-    // Factors: answer clarity (30%), schema presence (20%), entity coverage (20%), citation readiness (30%)
+    // Factors: Answer clarity (30%), Citation readiness (25%), Schema presence (20%), Entity coverage (25%)
     const externalLinksCount = $("a[href^='http']").not(`a[href^='${url}']`).length || 0;
     
     // Simulate real citation indicators
@@ -1275,11 +1308,11 @@ export async function analyzeSingleUrl(url) {
     const entityCoverage = clamp(safeArray(entityData?.entities).length * 10);
     const citationReadiness = citationProbability;
 
-    const aeoScore = Math.round(
+    let rawAeoScore = Math.round(
       (answerClarity * 0.30) +
+      (citationReadiness * 0.25) +
       (schemaPresence * 0.20) +
-      (entityCoverage * 0.20) +
-      (citationReadiness * 0.30)
+      (entityCoverage * 0.25)
     );
 
     // Dynamic list classification
@@ -1308,16 +1341,36 @@ export async function analyzeSingleUrl(url) {
     if (!hasCanonical) { importantIssues.push("Canonical URL missing"); }
     if (!hasFavicon) { minorIssues.push("Favicon missing"); }
 
-    const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 60 ? "Good" : seoScore >= 40 ? "Fair" : "Poor";
-    const aeoStatus = aeoScore >= 80 ? "ChatGPT Ready" : aeoScore >= 50 ? "AI Friendly" : "Needs Work";
-
     const featuredSnippetChance = Math.min(100, (hasDirectAnswer ? 40 : 0) + (hasFAQ ? 30 : 0) + (listCount > 0 ? 20 : 0) + (h2Count >= 3 ? 10 : 0));
     const answerQuality = answerClarity;
-    const aiTrustScore = Math.round((eeatData.score * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
+    
+    // Stabilize scores recursively against history map
+    const b64Key = Buffer.from(url).toString('base64');
+    let historicalEntry = trendDB[b64Key];
+    let previousSEO = rawSeoScore;
+    let previousAEO = rawAeoScore;
+    let previousEEAT = eeatData.score;
 
+    if (historicalEntry && historicalEntry.length > 0) {
+      const lastPoint = historicalEntry[historicalEntry.length - 1];
+      previousSEO = lastPoint.seo || rawSeoScore;
+      previousAEO = lastPoint.aeo || rawAeoScore;
+      previousEEAT = lastPoint.eeat || eeatData.score;
+    }
+
+    // Apply exact Score Stabilization Engine logic: final = (current * 0.6) + (prev * 0.4)
+    const seoScore = Math.round((rawSeoScore * 0.6) + (previousSEO * 0.4));
+    const aeoScore = Math.round((rawAeoScore * 0.6) + (previousAEO * 0.4));
+    const eeatScore = Math.round((eeatData.score * 0.6) + (previousEEAT * 0.4));
+
+    eeatData.score = eeatScore; // Update the nested eeat score too
+
+    const aiTrustScore = Math.round((eeatScore * 0.4) + (seoScore * 0.3) + (aeoScore * 0.3));
     const schemaScore = schemaPresence;
     const overallAIVisibilityScore = Math.round((seoScore * 0.30) + (aeoScore * 0.20) + (aiTrustScore * 0.15) + (citationProbability * 0.15) + (readabilityScore * 0.10) + (schemaScore * 0.10));
 
+    const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 60 ? "Good" : seoScore >= 40 ? "Fair" : "Poor";
+    const aeoStatus = aeoScore >= 80 ? "ChatGPT Ready" : aeoScore >= 50 ? "AI Friendly" : "Needs Work";
     const aiVisibilityLevel = overallAIVisibilityScore >= 80 ? "Excellent" : overallAIVisibilityScore >= 60 ? "Good" : overallAIVisibilityScore >= 40 ? "Fair" : "Poor";
     const mobileScore = mobileViewport ? seoScore : Math.max(0, seoScore - 20);
     const desktopScore = seoScore;
@@ -1453,8 +1506,7 @@ export async function analyzeSingleUrl(url) {
 
     console.log("FINAL PAYLOAD READY");
 
-    // Strictly validated API response containing nested entities with guaranteed safe arrays
-    return {
+    const payload = {
       success: true,
       crawlSuccess: true,
       fallbackMode: false,
@@ -1478,7 +1530,7 @@ export async function analyzeSingleUrl(url) {
       breakdown: {
         seo: seoScore,
         aeo: aeoScore,
-        eeatScore: eeatData.score,
+        eeatScore: eeatScore,
         eeatBreakdown: eeatData,
         internalLinkingAudit: internalLinkData,
         trust: aiTrustScore,
@@ -1584,6 +1636,24 @@ export async function analyzeSingleUrl(url) {
         improvementSuggestions: simulationResult.improvementSuggestions
       }
     };
+
+    // Store successful payload inside memory Cache layer
+    scanCache.set(cacheKey, {
+      cachedAt: Date.now(),
+      payload
+    });
+
+    // Save into history tracker array
+    scanHistory.unshift({
+      url: payload.url,
+      score: payload.overallAIVisibilityScore,
+      seoScore: payload.score,
+      aeoScore: payload.aeoScore,
+      timestamp: new Date().toISOString()
+    });
+    if (scanHistory.length > 50) scanHistory.pop();
+
+    return payload;
   } catch (err) {
     return fallbackSafePayload(url, err);
   }
@@ -1623,10 +1693,46 @@ export function competitorContentGap(userData, compData) {
   };
 }
 
-// ========== API ENDPOINTS ==========
-app.get("/", (req, res) => res.json({ status: "running", tool: "AI Visibility Platform", version: "6.0-production-ai-engine" }));
+// ========== SAAS MONETIZATION MIDDLEWARE ==========
+function authenticateAndRateLimit(req, res, next) {
+  const apiKey = req.query.apiKey || req.headers["x-api-key"];
+  
+  if (!apiKey) {
+    // If no key, auto-assign to the default dev fallback credential
+    req.user = saasUsers["free-dev-key-9999"];
+  } else {
+    const user = saasUsers[apiKey];
+    if (!user) {
+      return res.status(401).json({ success: false, error: "Unauthorized: Invalid API Key" });
+    }
+    req.user = user;
+  }
 
-app.get("/scan", async (req, res) => {
+  const user = req.user;
+  const now = Date.now();
+  const resetInterval = 24 * 60 * 60 * 1000; // 24 hours rate reset window
+
+  if (now - user.lastScanReset > resetInterval) {
+    user.scansToday = 0;
+    user.lastScanReset = now;
+  }
+
+  const limit = PLAN_LIMITS[user.plan] || 5;
+  if (user.scansToday >= limit) {
+    return res.status(429).json({
+      success: false,
+      error: "Rate Limit Exceeded",
+      message: `You reached the limit of ${limit} scans/day for plan '${user.plan.toUpperCase()}'. Upgrade your tier for premium quotas.`
+    });
+  }
+
+  next();
+}
+
+// ========== API ENDPOINTS ==========
+app.get("/", (req, res) => res.json({ status: "running", tool: "AI Visibility SaaS Platform", version: "7.0-enterprise-tier" }));
+
+app.get("/scan", authenticateAndRateLimit, async (req, res) => {
   const url = req.query.url;
   if (!url) return res.status(400).json({ error: "URL required" });
 
@@ -1650,6 +1756,9 @@ app.get("/scan", async (req, res) => {
 
   try {
     const data = await analyzeSingleUrl(url);
+    if (data.success && req.user) {
+      req.user.scansToday++;
+    }
     res.json(data);
   } catch (err) {
     console.error("SCAN ENDPOINT ERROR:", err.message);
@@ -1666,7 +1775,7 @@ app.get("/scan", async (req, res) => {
 });
 
 // ========== COMPETITOR ADVANTAGE ENGINE v2 ==========
-app.get("/compare", async (req, res) => {
+app.get("/compare", authenticateAndRateLimit, async (req, res) => {
   try {
     const { url, competitor } = req.query;
     if (!url || !competitor) return res.status(400).json({ error: "Both URLs required" });
@@ -1698,6 +1807,11 @@ app.get("/compare", async (req, res) => {
         competitorAdvantage: null,
         winnerReason: "Comparison not applicable: Deep crawl blocked."
       });
+    }
+
+    // Increment scan metrics for Saas Rate limit validation
+    if (req.user) {
+      req.user.scansToday = Math.min(PLAN_LIMITS[req.user.plan], req.user.scansToday + 2);
     }
 
     // Advanced comparison
@@ -1734,7 +1848,7 @@ app.get("/compare", async (req, res) => {
   }
 });
 
-app.get("/content-gap", async (req, res) => {
+app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
   try {
     const { url, competitor } = req.query;
     if (!url || !competitor) return res.status(400).json({ error: "Both URLs required" });
@@ -1751,7 +1865,7 @@ app.get("/content-gap", async (req, res) => {
   }
 });
 
-app.get("/roadmap", async (req, res) => {
+app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: "URL required" });
@@ -1850,5 +1964,5 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 AI Visibility Platform v6.0-production running on port ${PORT}`);
+  console.log(`🚀 AI Visibility Platform v7.0 running on port ${PORT}`);
 });

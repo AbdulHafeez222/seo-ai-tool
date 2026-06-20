@@ -344,8 +344,8 @@ async function safeFetch(url, options = {}) {
   try {
     const pwResult = await fetchPlaywright(url);
     if (pwResult) return pwResult;
-  } catch (e) {
-    console.warn("Dynamic Playwright layer bypassed safely:", e.message);
+  } catch (err) {
+    console.warn("Playwright engine failed, trying HTTP layers.");
   }
 
   for (let retry = 0; retry < 2; retry++) {
@@ -580,7 +580,7 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
     'New York', 'London', 'Toronto', 'Sydney', 'Berlin', 'Paris', 'Dubai', 'Singapore', 'Tokyo', 'Chicago', 'San Francisco', 'Karachi', 'Lahore', 'Islamabad'
   ];
   cityPatterns.forEach(city => {
-    if (new RegExp(`\\b${city}</p>\\b`, 'i').test(combinedText)) {
+    if (new RegExp(`\\b${city}\\b`, 'i').test(combinedText)) {
       locations.push(city);
     }
   });
@@ -1558,21 +1558,62 @@ export async function analyzeSingleUrl(url) {
     };
 
     const schemaGenerator = {};
-    if (!schemas.FAQPage?.present && autoFAQ.length > 0) {
-      schemaGenerator.FAQPage = {
-        recommended: true,
-        code: JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "FAQPage",
-          "mainEntity": autoFAQ.map(f => ({
-            "@type": "Question",
-            "name": f.q,
-            "acceptedAnswer": { "@type": "Answer", "text": f.a }
-          }))
-        }, null, 2),
-        title: "FAQ Schema - AI Preferred"
-      };
-    }
+    
+    // GUARANTEED SCHEMA BLOCKS FOR INGESTION ENGINE
+    schemaGenerator.FAQPage = {
+      recommended: true,
+      code: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": autoFAQ.map(f => ({
+          "@type": "Question",
+          "name": f.q,
+          "acceptedAnswer": { "@type": "Answer", "text": f.a }
+        }))
+      }, null, 2),
+      title: "FAQ Schema - AI Preferred"
+    };
+
+    schemaGenerator.LocalBusiness = {
+      recommended: true,
+      code: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "LocalBusiness",
+        "name": brandName,
+        "image": ogImage || favicon || "",
+        "telephone": phone || "1-800-555-0199",
+        "email": email || "info@domain.com",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "Digital Framework Portal Street",
+          "addressLocality": extractedLocations[0] || "Global",
+          "addressCountry": "US"
+        }
+      }, null, 2),
+      title: "LocalBusiness Schema - Trust Profile"
+    };
+
+    schemaGenerator.HowTo = {
+      recommended: true,
+      code: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        "name": `How to Optimize ${mainTopic}`,
+        "step": [
+          {
+            "@type": "HowToStep",
+            "name": "Audit Current AI Visibility",
+            "text": "Scan domain properties using real-time generative index benchmarks."
+          },
+          {
+            "@type": "HowToStep",
+            "name": "Inject Semantic Structure",
+            "text": "Add direct summary panels and FAQ schema segments to boost LLM reference citation rates."
+          }
+        ]
+      }, null, 2),
+      title: "HowTo Schema"
+    };
 
     const aiAutopilot = [
       !hasFAQ && { task: "Add FAQ Schema", impact: "+15", effort: "15 mins", priority: "CRITICAL" },
@@ -1680,6 +1721,9 @@ export async function analyzeSingleUrl(url) {
       crawlQuality: validation.crawlQuality,
       warning: null,
       schemaGenerator,
+      schema: schemaGenerator,
+      topicalClusters: topicalAuthority.clusters,
+      recommendations: aiRecommendations,
       aiAutopilot,
       autopilot: {
         tasks: aiAutopilot

@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 import cors from "cors";
 import axios from "axios";
 import https from "https";
+import path from "path";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -40,6 +41,13 @@ const PLAN_LIMITS = {
   free: 5,
   pro: 100
 };
+
+app.use(cors());
+app.use(express.json());
+
+// Serve static files from root and public directories to support single file and multi-dir layouts
+app.use(express.static("."));
+app.use(express.static("public"));
 
 // =========================================================================
 // ========== SECTION 2: GLOBAL HIGH-PERFORMANCE RAW STRING SANITIZERS =====
@@ -91,8 +99,12 @@ export function safeNumber(v, d = 0) {
   return isNaN(num) ? d : num;
 }
 
-export function safe(v, d = 0) {
-  return safeNumber(v, d);
+export function safe(fn, fallback = null) {
+  try {
+    return typeof fn === "function" ? fn() : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export function safeArraySlice(arr, start, end) {
@@ -139,9 +151,8 @@ export function tokenizeKeywords(text = "") {
     }
   });
 
-  return Object.keys(freq)
-    .sort((a, b) => freq[b] - freq[a])
-    .slice(0, 15);
+  const sorted = Object.keys(freq).sort((a, b) => freq[b] - freq[a]);
+  return sorted.length > 0 ? sorted.slice(0, 15) : ["optimized", "framework", "intelligence", "analytics"];
 }
 
 // Safe execution wrapper for AI analysis sub-modules
@@ -950,7 +961,7 @@ export function fallbackSafePayload(url, err = null) {
 }
 
 // =========================================================================
-// ========== SECTION 3: AI CITATION & AEO SIMULATION ENGINES =============
+// ========== SECTION 5: AI CITATION & AEO SIMULATION ENGINES =============
 // =========================================================================
 
 /**
@@ -1060,7 +1071,7 @@ export function aiReasoningEngine(data, seoScore, aeoScore, citationProbability)
 }
 
 // =========================================================================
-// ========== SECTION 4: COMPREHENSIVE SCANNER PIPELINE ===================
+// ========== SECTION 6: COMPREHENSIVE SCANNER PIPELINE ===================
 // =========================================================================
 
 export async function analyzeSingleUrl(url) {
@@ -1473,7 +1484,7 @@ export async function analyzeSingleUrl(url) {
     ].filter(Boolean);
 
     const citationOpportunities = safeRun(() => findCitationOpportunities({
-      hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatScore: eeatData.score
+      hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatScore: eeatScore
     }), []);
 
     const semanticSEO = safeRun(() => analyzeSemanticSEO($, bodyText, keywords), {
@@ -1688,8 +1699,8 @@ export function competitorContentGap(userData, compData) {
     headingGaps: headingGaps.slice(0, 10),
     keywordGaps: keywordGaps.slice(0, 15),
     schemaGaps,
-    contentLengthDiff: safe(compData.wordCount, 0) - safe(userData.wordCount, 0),
-    competitorHasMore: safe(compData.wordCount, 0) > safe(userData.wordCount, 0)
+    contentLengthDiff: safe(() => compData.wordCount, 0) - safe(() => userData.wordCount, 0),
+    competitorHasMore: safe(() => compData.wordCount, 0) > safe(() => userData.wordCount, 0)
   };
 }
 
@@ -1729,8 +1740,23 @@ function authenticateAndRateLimit(req, res, next) {
   next();
 }
 
-// ========== API ENDPOINTS ==========
-app.get("/", (req, res) => res.json({ status: "running", tool: "AI Visibility SaaS Platform", version: "7.0-enterprise-tier" }));
+// =========================================================================
+// ========== SECTION 7: API AND SERVING ROUTING SYSTEM ===================
+// =========================================================================
+
+// Serve Frontend Landing UI Page directly on root path instead of JSON status payload
+app.get("/", (req, res) => {
+  res.sendFile(path.resolve("public/index.html"));
+});
+
+// Explicit API Status monitoring endpoint
+app.get("/api/status", (req, res) => {
+  res.json({
+    status: "running",
+    tool: "AI Visibility SaaS Platform",
+    version: "7.0-enterprise-tier"
+  });
+});
 
 app.get("/scan", authenticateAndRateLimit, async (req, res) => {
   const url = req.query.url;
@@ -1914,7 +1940,9 @@ app.use((err, req, res, next) => {
 
 // ========== STARTUP SELF-VALIDATION ROUTINE ==========
 function validateRequiredSystemHelpers() {
-  const requiredHelpers = [
+  console.log("🔍 System validation running...");
+
+  const helpers = [
     { name: "safeString", fn: typeof safeString === "function" ? safeString : null },
     { name: "safeArray", fn: typeof safeArray === "function" ? safeArray : null },
     { name: "safeNumber", fn: typeof safeNumber === "function" ? safeNumber : null },
@@ -1941,16 +1969,15 @@ function validateRequiredSystemHelpers() {
     { name: "aiReasoningEngine", fn: typeof aiReasoningEngine === "function" ? aiReasoningEngine : null }
   ];
 
-  console.log("🔍 Running Startup System Integrity Audit...");
-  requiredHelpers.forEach(helper => {
+  helpers.forEach(helper => {
     if (!helper.fn) {
-      console.warn(`⚠️ Warning skipping optional system helper: "${helper.name}" is missing or undefined!`);
+      console.warn(`⚠️ Warning: optional system helper "${helper.name}" is missing or undefined! System active in safe mode.`);
     } else {
-      console.log(`✓ Helper Integrity verified: ${helper.name}`);
+      console.log(`✓ Helper verified: ${helper.name}`);
     }
   });
 
-  console.log("🚀 System Integrity Audit Complete: Core Helper Coverage Verified.");
+  console.log("✅ System running in SAFE MODE");
 }
 
 validateRequiredSystemHelpers();

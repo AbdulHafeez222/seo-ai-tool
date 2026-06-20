@@ -74,6 +74,24 @@ export function clamp(num, min = 0, max = 100) {
   return Math.min(max, Math.max(min, isNaN(val) ? 0 : val));
 }
 
+// ========== HIGH-PERFORMANCE KEYWORD ANALYSIS HELPERS ==========
+export function getKeywordDifficulty(keyword) {
+  const len = safeString(keyword).length;
+  if (len < 10) return "High";
+  if (len < 18) return "Medium";
+  return "Low";
+}
+
+export function getKeywordOpportunity(keyword, hasFAQ, hasSchema) {
+  let score = 0;
+  if (hasFAQ) score++;
+  if (hasSchema) score++;
+  if (safeString(keyword).split(' ').length > 2) score++;
+  if (score >= 2) return "High";
+  if (score === 1) return "Medium";
+  return "Low";
+}
+
 // ========== HIGH-PERFORMANCE KEYWORD TOKENIZER ==========
 export function tokenizeKeywords(text = "") {
   const clean = String(text)

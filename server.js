@@ -382,7 +382,7 @@ export function getBrandNameEnhanced(url, $, title, schemas) {
 export function tokenizeKeywords(text = "") {
   if (!text) return [];
   const tokens = text.match(/\b[a-zA-Z]{3,15}(?:\s+[a-zA-Z]{3,15}){0,1}\b/g) || [];
-  const stopWords = ['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'under', 'from', 'with', 'your', 'this', 'that', 'were', 'been', 'have', 'more', 'some', 'them', 'then', 'also', 'here', 'with', 'your', 'homepage', 'navigation', 'contact', 'search'];
+  const stopWords = ['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'under', 'from', 'with', 'your', 'this', 'that', 'were', 'been', 'have', 'more', 'some', 'them', 'then', 'also', 'here', 'homepage', 'navigation', 'contact', 'search'];
   
   const freq = {};
   tokens.forEach(tok => {
@@ -465,7 +465,7 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
   });
 
   const cityPatterns = [
-    'New York', 'London', 'Toronto', 'Sydney', 'Berlin', 'Paris', 'Dubai', 'Singapore', 'Tokyo', 'Chicago', 'San Francisco'
+    'New York', 'London', 'Toronto', 'Sydney', 'Berlin', 'Paris', 'Dubai', 'Singapore', 'Tokyo', 'Chicago', 'San Francisco', 'Karachi', 'Lahore', 'Islamabad'
   ];
   cityPatterns.forEach(city => {
     if (new RegExp(`\\b${city}\\b`, 'i').test(combinedText)) {
@@ -592,32 +592,41 @@ export function analyzeInternalLinks($, url, h2s) {
 }
 
 // ========== TOPICAL AUTHORITY ENGINE ==========
-export function calculateTopicalAuthority($, keywords, h2s, h3s) {
+export function calculateTopicalAuthority($, keywords, h2s, h3s, wordCount) {
   const allHeadings = [...safeArray(h2s), ...safeArray(h3s)].map(h => safeString(h).toLowerCase());
   const safeKeywords = safeArray(keywords);
   
   const clusters = [
-    { name: "Informational Core", queries: ["what", "how", "guide", "tutorial"] },
-    { name: "Commercial Intent", queries: ["best", "pricing", "reviews", "cost"] },
-    { name: "Authority Validation", queries: ["examples", "comparison", "benefits", "features"] }
+    { name: "Informational Core", queries: ["what", "how", "guide", "tutorial", "learn", "definition"] },
+    { name: "Commercial Intent", queries: ["best", "pricing", "reviews", "cost", "features", "compare"] },
+    { name: "Authority Validation", queries: ["examples", "comparison", "benefits", "case study", "portfolio"] }
   ];
 
   let coveredCount = 0;
   const missingTopics = [];
 
   clusters.forEach(cluster => {
-    const hits = cluster.queries.filter(q => allHeadings.some(h => h.includes(q)));
-    coveredCount += hits.length;
     cluster.queries.forEach(q => {
-      if (!allHeadings.some(h => h.includes(q))) {
-        missingTopics.push(`${cluster.name}: Heading with "${q}"`);
+      const hasQuery = allHeadings.some(h => h.includes(q));
+      if (hasQuery) {
+        coveredCount++;
+      } else {
+        missingTopics.push(`${cluster.name}: Heading containing "${q}"`);
       }
     });
   });
 
   const totalQueries = clusters.reduce((acc, c) => acc + c.queries.length, 0);
   const coveragePercent = Math.round((coveredCount / totalQueries) * 100);
-  const authorityScore = clamp(coveragePercent + (safeKeywords.length * 2));
+  
+  let depthFactor = "Shallow Structure";
+  if (wordCount > 2500) {
+    depthFactor = "SaaS Enterprise Tier (Deep)";
+  } else if (wordCount > 1000) {
+    depthFactor = "Moderate Coverage";
+  }
+
+  const authorityScore = clamp(coveragePercent + Math.min(40, safeKeywords.length * 4) + (wordCount > 1500 ? 15 : 5));
 
   return {
     authorityScore,
@@ -626,7 +635,9 @@ export function calculateTopicalAuthority($, keywords, h2s, h3s) {
       status: c.queries.some(q => allHeadings.some(h => h.includes(q))) ? "Active" : "Incomplete"
     })),
     coveragePercent,
-    missingTopics: missingTopics.slice(0, 5)
+    missingTopics: missingTopics.slice(0, 5),
+    depth: depthFactor,
+    topicsCovered: `${coveredCount}/${totalQueries}`
   };
 }
 
@@ -705,8 +716,11 @@ export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
   const contentSentence = safeBody.length > 50 ? safeBody.split('.').slice(0, 2).join('.') + '.' : '';
   const keyword = safeArray(keywords)[0] || 'the page';
 
+  const directAnswer = safeDesc || `This playbook breaks down all standard frameworks about ${keyword}.`;
+
   return {
-    directAnswer: safeDesc || `This playbook breaks down all standard frameworks about ${keyword}.`,
+    directAnswer: directAnswer,
+    directAnswerWordCount: directAnswer.split(/\s+/).filter(Boolean).length,
     featuredSnippet: `## ${safeH1 || 'Overview'}\n\n${contentSentence ? `Key insights include: ${contentSentence}` : `Essential overview of ${keyword}.`}`,
     aiOverviewAnswer: `According to live page analysis, ${safeH1 || 'this platform'} specializes in providing high-performance solutions for ${keyword}.`,
     quickFactsBlock: [
@@ -721,21 +735,27 @@ export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
 export function analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas) {
   const factors = [];
   const issues = [];
-  let score = 20;
+  
+  // High fidelity components (Max 25 each, sum is 100)
+  let experience = hasAuthor ? 25 : 5;
+  let expertise = hasAboutPage ? 25 : 5;
+  let authoritativeness = (hasLinkedIn || hasFacebook) ? 25 : 5;
+  let trustworthiness = (isHttps && hasPrivacyPolicy && hasContactPage) ? 25 : (isHttps ? 15 : 5);
 
-  if (hasAuthor) { score += 10; factors.push("Author Attribution Detected"); } else { issues.push("No specific author profile found"); }
-  if (hasAboutPage) { score += 15; factors.push("About Page Linked"); } else { issues.push("About section missing"); }
-  if (hasContactPage) { score += 15; factors.push("Contact Access Points Configured"); } else { issues.push("No clear contact channels"); }
-  if (hasPrivacyPolicy) { score += 10; factors.push("Privacy Policy Configured"); } else { issues.push("Missing privacy parameters"); }
-  if (hasLinkedIn) { score += 10; factors.push("Author/Brand LinkedIn Profile Found"); }
-  if (isHttps) { score += 10; factors.push("HTTPS SSL Security Configured"); }
-  if (hasLastModified) { score += 5; factors.push("Timestamps Mod Proof Verified"); }
-  if (schemas?.Organization?.present) { score += 15; factors.push("Organization structured LD data verified"); }
+  if (hasAuthor) factors.push("Author Attribution Detected"); else issues.push("No specific author profile found");
+  if (hasAboutPage) factors.push("About Page Linked"); else issues.push("About section missing");
+  if (hasContactPage) factors.push("Contact Access Points Configured"); else issues.push("No clear contact channels");
+  if (hasPrivacyPolicy) factors.push("Privacy Policy Configured"); else issues.push("Missing privacy parameters");
+  if (hasLinkedIn) factors.push("Author/Brand LinkedIn Profile Found");
+  if (isHttps) factors.push("HTTPS SSL Security Configured"); else issues.push("Not secure (HTTP)");
+  if (hasLastModified) factors.push("Timestamps Mod Proof Verified");
+  if (schemas?.Organization?.present) factors.push("Organization structured LD data verified");
 
+  const score = clamp(experience + expertise + authoritativeness + trustworthiness, 10, 100);
   const status = score >= 80 ? "SaaS Enterprise Tier" : score >= 60 ? "Secure Authority" : "Shallow Trust Profile";
 
   return {
-    score: clamp(score),
+    score,
     status,
     factors,
     issues,
@@ -744,10 +764,10 @@ export function analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasCon
     contactPage: hasContactPage ? "Active" : "Missing",
     socialProfiles: hasLinkedIn || hasFacebook ? "Detected" : "None Found",
     breakdown: {
-      experience: { score: hasAuthor ? 25 : 10, max: 25, factors: hasAuthor ? ["Author Profile Found"] : [] },
-      expertise: { score: hasAboutPage ? 25 : 10, max: 25, factors: hasAboutPage ? ["About page context verified"] : [] },
-      authoritativeness: { score: hasLinkedIn ? 25 : 12, max: 25, factors: hasLinkedIn ? ["External professional credentials linked"] : [] },
-      trustworthiness: { score: isHttps && hasPrivacyPolicy ? 25 : 15, max: 25, factors: isHttps ? ["SSL Security active"] : [] }
+      experience: { score: experience, max: 25, factors: hasAuthor ? ["Author Profile Found"] : [] },
+      expertise: { score: expertise, max: 25, factors: hasAboutPage ? ["About page context verified"] : [] },
+      authoritativeness: { score: authoritativeness, max: 25, factors: (hasLinkedIn || hasFacebook) ? ["External professional credentials linked"] : [] },
+      trustworthiness: { score: trustworthiness, max: 25, factors: isHttps ? ["SSL Security active"] : [] }
     }
   };
 }
@@ -761,19 +781,27 @@ export function analyzeLocalSEO($, bodyText) {
   const hasNAP = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(text) || text.toLowerCase().includes('address') || text.toLowerCase().includes('phone');
   const hasLocalBusiness = $('[itemtype*="LocalBusiness"]').length > 0;
   const hasMap = $('iframe[src*="google.com/maps"], iframe[src*="maps"]').length > 0;
-  const hasCity = /\b(Karachi|Lahore|Islamabad|London|New York|Dubai|Sydney|Toronto)\b/i.test(text);
+  
+  const cityPatterns = ['karachi', 'lahore', 'islamabad', 'london', 'new york', 'dubai', 'sydney', 'toronto', 'paris', 'berlin', 'tokyo'];
+  const lowercaseText = text.toLowerCase();
+  const hasCity = cityPatterns.some(city => lowercaseText.includes(city));
 
   const signals = { hasNAP, hasLocalBusiness, hasMap, hasCity };
-  const score = Object.values(signals).filter(Boolean).length;
+  const scoreCount = Object.values(signals).filter(Boolean).length;
+  const localScore = clamp((scoreCount / 4) * 100);
+
+  const recommendations = [];
+  if (!hasLocalBusiness) recommendations.push('Deploy LocalBusiness JSON-LD Schema markup immediately');
+  if (!hasNAP) recommendations.push('Publish name, address, and phone number (NAP) data clearly on homepage');
 
   return {
     hasNAP,
     hasLocalBusiness,
     hasMap,
     hasCity,
-    localScore: clamp((score / 4) * 100),
+    localScore,
     napConsistency: hasNAP ? 'Active' : 'Incomplete/Missing',
-    recommendations: !hasLocalBusiness ? ['Deploy LocalBusiness JSON-LD Schema markup immediately'] : []
+    recommendations
   };
 }
 
@@ -854,7 +882,7 @@ export function scanTrustSignals($, url) {
   return signals;
 }
 
-// ========== AI VISIBILITY TREND SYSTEM (TASK 3) ==========
+// ========== AI VISIBILITY TREND SYSTEM ==========
 export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
   const key = Buffer.from(url).toString('base64');
   if (!trendDB[key]) {
@@ -914,7 +942,7 @@ export function fallbackSafePayload(url, err = null) {
     externalLinks: 0,
     isHttps: url.startsWith("https"),
     keywords: [],
-    entities: [],
+    entities: { brands: [], locations: [], services: [] },
     aiEntities: { brands: [], locations: [], services: [], people: [], organizations: [], products: [], totalEntities: 0 },
     breakdown: {
       seo: 40,
@@ -939,10 +967,10 @@ export function fallbackSafePayload(url, err = null) {
     criticalIssues: ["Dynamic crawl timeout reached"],
     importantIssues: [],
     minorIssues: [],
-    topicalAuthority: { authorityScore: 20, clusters: [], coveragePercent: 0, missingTopics: [] },
+    topicalAuthority: { authorityScore: 20, clusters: [], coveragePercent: 0, missingTopics: [], depth: "N/A", topicsCovered: "0/9" },
     semanticSEO: { nlpScore: 30, topicCoverage: 0, semanticRelevance: 0, entityCoverage: 0, contentDepth: "Thin", semanticGaps: [], missingEntities: [], recommendations: [] },
     citationOpportunities: [],
-    aiSnippets: { directAnswer: "No content analyzed.", featuredSnippet: "", aiOverviewAnswer: "", quickFactsBlock: [] },
+    aiSnippets: { directAnswer: "No content analyzed.", directAnswerWordCount: 0, featuredSnippet: "", aiOverviewAnswer: "", quickFactsBlock: [] },
     trustSignals: { hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 10, totalSignals: 0, socialLinks: [] },
     localSEO: { hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 10, napConsistency: "Incomplete/Missing", recommendations: [] },
     visibilityTrend: { labels: ["Today"], scores: [35], seoScores: [40], aeoScores: [30], growthPercentage: 0 }
@@ -966,6 +994,7 @@ export async function analyzeSingleUrl(url) {
 
     try {
       htmlData = await safeFetch(url);
+      console.log("FETCH STATUS", htmlData.status);
       if (htmlData.isError) {
         fetchError = true;
         warning = "Website crawl restricted by server headers. Fallback mode activated.";
@@ -977,6 +1006,7 @@ export async function analyzeSingleUrl(url) {
 
     const loadTime = Date.now() - startTime;
     let html = htmlData.data || "";
+    console.log("HTML LENGTH", html?.length || 0);
 
     // Check if crawled HTML was blocked by Cloudflare/Anti-bot
     let blockReason = "Fully Accessible";
@@ -991,9 +1021,6 @@ export async function analyzeSingleUrl(url) {
       blockReason = htmlData.errorMsg || "Empty HTML response received";
     }
 
-    // Debug Logging Telemetry Requirements
-    console.log("FETCH STATUS", htmlData.status);
-    console.log("HTML LENGTH", html?.length);
     if (isCrawlBlocked) {
       console.log("BLOCK REASON", blockReason);
     }
@@ -1061,7 +1088,7 @@ export async function analyzeSingleUrl(url) {
         schemas: [],
         recommendedSchemas: [],
         keywords: [],
-        entities: [],
+        entities: { brands: [], locations: [], services: [] },
         readabilityScore: null,
         aiTrustScore: null,
         answerQualityScore: null,
@@ -1129,8 +1156,11 @@ export async function analyzeSingleUrl(url) {
 
     $ = cheerio.load(html);
 
-    // Assign rawBodyText after DOM loader is established
+    // Assign rawBodyText after DOM loader is established & filter extension toolbar noise
     rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
+    rawBodyText = rawBodyText.replace(/I\s*n\/a\s*L\s*0\s*LD\s*0\s*I\s*n\/a\s*whois\s*source/gi, "");
+    rawBodyText = rawBodyText.replace(/Summary\s*report\s*Diagnosis\s*Density/gi, "");
+    rawBodyText = rawBodyText.replace(/LD\s*0\s*I\s*n\/a/gi, "");
 
     $('script, style, nav, footer, header, noscript, svg').remove();
 
@@ -1142,6 +1172,7 @@ export async function analyzeSingleUrl(url) {
               safeString($("h1").first().text()).trim() || 
               `${formattedNicheTitle} Platform`;
     }
+    console.log("TITLE FOUND", title);
 
     let metaDescription = safeString($('meta[name="description"]').attr("content")).trim();
     if (!metaDescription || metaDescription.toLowerCase().includes("not found")) {
@@ -1150,6 +1181,7 @@ export async function analyzeSingleUrl(url) {
                         safeString($("p").first().text()).substring(0, 150).trim() || 
                         `Comprehensive services and architectural layouts tailored around ${estimatedNiche}.`;
     }
+    console.log("META FOUND", metaDescription);
 
     let h1 = safeString($("h1").first().text()).trim();
     if (!h1 || h1.toLowerCase().includes("not found")) {
@@ -1229,8 +1261,9 @@ export async function analyzeSingleUrl(url) {
     });
 
     const eeatData = safeRun(() => analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas), {
-      score: 30, level: "Fair", breakdown: { experience: { score: 5, max: 25, factors: [] }, expertise: { score: 10, max: 25, factors: [] }, authoritativeness: { score: 5, max: 25, factors: [] }, trustworthiness: { score: 10, max: 25, factors: [] } }
+      score: 30, status: "Shallow Trust Profile", breakdown: { experience: { score: 5, max: 25, factors: [] }, expertise: { score: 10, max: 25, factors: [] }, authoritativeness: { score: 5, max: 25, factors: [] }, trustworthiness: { score: 10, max: 25, factors: [] } }
     });
+    console.log("EEAT SCORE", eeatData.score);
 
     const aiTrustSignals = [];
     if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
@@ -1324,14 +1357,7 @@ export async function analyzeSingleUrl(url) {
     // ========== CRITICAL ENTITY ALLOCATION ENGINE ==========
     const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas);
     const { brands = [], locations = [], services = [], people = [], organizations = [], products = [], totalEntities = 0 } = entityData;
-    const entities = entityData.entities || [
-      ...brands,
-      ...services,
-      ...locations,
-      ...people,
-      ...organizations,
-      ...products
-    ];
+    console.log("ENTITIES FOUND", totalEntities);
 
     const brandName = brands[0] || getBrandNameEnhanced(url, $, title, schemas);
     const mainTopic = (h1 && h1 !== "Not Found") ? h1 : (safeArraySlice(title.split(" "), 0, 3).join(" ") || "this service");
@@ -1426,8 +1452,8 @@ export async function analyzeSingleUrl(url) {
       nlpScore: 40, topicCoverage: 20, semanticRelevance: 30, entityCoverage: 20, contentDepth: "Shallow", semanticGaps: [], missingEntities: [], recommendations: []
     });
 
-    const topicalAuthority = safeRun(() => calculateTopicalAuthority($, keywords, h2s, h3s), {
-      authorityScore: 30, clusters: [], coveragePercent: 10, missingTopics: []
+    const topicalAuthority = safeRun(() => calculateTopicalAuthority($, keywords, h2s, h3s, wordCount), {
+      authorityScore: 30, clusters: [], coveragePercent: 10, missingTopics: [], depth: "Moderate Coverage", topicsCovered: "0/15"
     });
 
     const localSEO = safeRun(() => analyzeLocalSEO($, bodyText), {
@@ -1439,14 +1465,13 @@ export async function analyzeSingleUrl(url) {
     });
 
     const aiSnippets = safeRun(() => generateAISnippets(h1, metaDescription, bodyText, keywords), {
-      directAnswer: metaDescription, featuredSnippet: title, aiOverviewAnswer: "", quickFactsBlock: []
+      directAnswer: metaDescription, directAnswerWordCount: 0, featuredSnippet: title, aiOverviewAnswer: "", quickFactsBlock: []
     });
 
     const visibilityTrend = safeRun(() => trackAIVisibilityTrend(url, overallAIVisibilityScore, seoScore, aeoScore), {
       labels: [], scores: [], seoScores: [], aeoScores: [], growthPercentage: 0
     });
 
-    console.log("SCAN COMPLETED");
     console.log("FINAL PAYLOAD READY");
 
     return {
@@ -1510,7 +1535,11 @@ export async function analyzeSingleUrl(url) {
       schemas: uniqueSchemas,
       recommendedSchemas,
       keywords: keywords || [],
-      entities: entities || [],
+      entities: {
+        brands: brands || [],
+        locations: locations || [],
+        services: services || []
+      },
       readabilityScore,
       aiTrustScore,
       answerQualityScore: answerQuality,
@@ -1638,7 +1667,7 @@ app.get("/scan", async (req, res) => {
       error: "safe fallback",
       score: 0,
       keywords: [],
-      entities: []
+      entities: { brands: [], locations: [], services: [] }
     });
   } finally {
     // ALWAYS clean lock map
@@ -1688,7 +1717,7 @@ app.get("/compare", async (req, res) => {
     const citationAdvantage = (site1.citationProbability || 0) - (site2.citationProbability || 0);
     const trustAdvantage = (site1.aiTrustScore || 0) - (site2.aiTrustScore || 0);
 
-    const leaderBrand = site1.overallAIVisibilityScore >= site2.overallAIVisibilityScore ? site1.title : site2.title;
+    const leaderBrand = site1.overallAIVisibilityScore >= site2.overallAIVisibilityScore ? (site1.title || "Your Site") : (site2.title || "Competitor Site");
 
     const competitorAdvantage = {
       seoAdvantage: { diff: Math.abs(seoAdvantage), leader: seoAdvantage > 0 ? "You" : (seoAdvantage < 0 ? "Competitor" : "Tie") },

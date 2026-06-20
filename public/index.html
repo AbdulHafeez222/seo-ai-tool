@@ -564,7 +564,7 @@ let scanInProgress = false;
 
 // ==== RESILIENT SAFE HELPERS ====
 function safeText(value, fallback = "Not Available") {
-  return (value === undefined || value === null || value === "" || String(value).trim() === "undefined" || String(value).trim() === "null")
+  return (value == null || String(value).trim() === "" || String(value).trim() === "undefined" || String(value).trim() === "null")
     ? fallback
     : String(value).trim();
 }
@@ -622,8 +622,9 @@ function unescapeHtml(text) {
 }
 
 function copyFAQs() {
-  if (!lastScanData?.autoFAQ) return;
-  const text = safeArray(lastScanData.autoFAQ).map((f, i) => `Q${i+1}: ${f.q}\nA: ${f.a}`).join('\n\n');
+  const faqs = lastScanData?.autoFAQ || lastScanData?.faqExpansion || [];
+  if (safeArray(faqs).length === 0) return;
+  const text = safeArray(faqs).map((f, i) => `Q${i+1}: ${f.q}\nA: ${f.a}`).join('\n\n');
   navigator.clipboard.writeText(text);
   alert('FAQs copied!');
 }
@@ -661,6 +662,7 @@ async function scan() {
     const data = await res.json();
     
     console.log("API RESPONSE", data);
+    console.log("ENTITIES", data?.entities);
     
     lastScanData = data;
     saveToHistory(data);
@@ -732,8 +734,9 @@ function renderAllResults(data) {
     `).join('') : `<p>No citation opportunities detected. Trust matrix optimization is maximum.</p>`);
   }
 
-  if (data.autoFAQ && safeArray(data.autoFAQ).length > 0) {
-    showCard('faqExpansionCard', 'faqExpansionContent', safeArray(data.autoFAQ).map((faq, i) => `
+  const faqs = data.autoFAQ || data.faqExpansion || [];
+  if (safeArray(faqs).length > 0) {
+    showCard('faqExpansionCard', 'faqExpansionContent', safeArray(faqs).map((faq, i) => `
       <div style="margin:10px 0; padding:10px; background:#222">
         <strong>Q${i+1}: ${escapeHtml(safeText(faq.q))}</strong><br>
         <span style="color:#aaa">A: ${escapeHtml(safeText(faq.a))}</span>
@@ -861,7 +864,7 @@ function renderAllResults(data) {
   `);
   showCard('peopleAlsoAskCard', 'peopleAlsoAskContent', `
     <p><strong>PAA Coverage Score:</strong> 80%</p>
-    <p><strong>Optimal Query:</strong> What is ${escapeHtml(safeText(brands[0] || 'your core asset'))}?</p>
+    <p><strong>Optimal Query:</strong> What is the core offering of this entity?</p>
   `);
 }
 
@@ -1025,11 +1028,15 @@ function renderImageSEO(data) {
 
 function renderEntities(data) {
   const entitiesObj = data.entities || {};
+  const brands = safeArray(entitiesObj.brands);
+  const locations = safeArray(entitiesObj.locations);
+  const services = safeArray(entitiesObj.services);
+
   showCard("entityCard", "entityResults", `
     <div class="grid-3">
-      <div><h4>🏢 Brands:</h4>${safeArray(entitiesObj.brands).map(b => `<span class="badge badge-purple" style="margin:2px;">${escapeHtml(b)}</span>`).join('') || 'None'}</div>
-      <div><h4>📍 Locations:</h4>${safeArray(entitiesObj.locations).map(l => `<span class="badge badge-green" style="margin:2px;">${escapeHtml(l)}</span>`).join('') || 'None'}</div>
-      <div><h4>💼 Services:</h4>${safeArray(entitiesObj.services).map(s => `<span class="badge badge-orange" style="margin:2px;">${escapeHtml(s)}</span>`).join('') || 'None'}</div>
+      <div><h4>🏢 Brands:</h4>${brands.map(b => `<span class="badge badge-purple" style="margin:2px;">${escapeHtml(b)}</span>`).join('') || 'None'}</div>
+      <div><h4>📍 Locations:</h4>${locations.map(l => `<span class="badge badge-green" style="margin:2px;">${escapeHtml(l)}</span>`).join('') || 'None'}</div>
+      <div><h4>💼 Services:</h4>${services.map(s => `<span class="badge badge-orange" style="margin:2px;">${escapeHtml(s)}</span>`).join('') || 'None'}</div>
     </div>
   `);
 }
@@ -1307,7 +1314,6 @@ async function contentBrief() {
   
   showLoading();
   try {
-    // Generate a contextual briefing pattern based on the target keyword
     const res = await fetch(`${API_BASE}/scan?url=${encodeURIComponent('https://www.google.com/search?q=' + encodeURIComponent(keyword))}`);
     let data = {};
     if (res.ok) {

@@ -479,7 +479,7 @@ pre {
     </div>
   </div>
 
-  <!-- NEW FEATURE: AI Reasoning Intelligence Engine output -->
+  <!-- TASK 2: 🤖 AI Reasoning Intelligence Engine output -->
   <div id="aiReasoningCard" class="card" style="display:none;">
     <h3>🤖 AI Reasoning Intelligence Engine</h3>
     <div id="aiReasoningContent"></div>
@@ -567,13 +567,15 @@ pre {
     <div id="gapContent"></div>
   </div>
 
+  <!-- TASK 3: AI Visibility Roadmap Panel -->
   <div id="roadmapCard" class="card" style="display:none;">
     <h3>🗺️ AI Visibility Roadmap</h3>
     <div id="roadmapSteps"></div>
   </div>
 
+  <!-- TASK 4: Competitor Keyword Theft Panel -->
   <div id="keywordTheftCard" class="card" style="display:none;">
-    <h3>💎 Competitor Keyword Theft</h3>
+    <h3>💎 Competitor Keyword Intelligence</h3>
     <div id="keywordTheftResults"></div>
   </div>
 
@@ -655,7 +657,7 @@ if (localStorage.getItem("theme") === "dark") {
   document.body.classList.add("dark");
 }
 
-// ==== TASK 7: FRONTEND API SAFETY LAYER ====
+// ==== TASK 9: SAFE DATA HANDLER (UNIVERSAL SAFE GETTER) ====
 function safeGet(obj, path, fallback = 0) {
   try {
     return path.split('.').reduce((a, b) => a !== undefined && a !== null ? a[b] : undefined, obj) ?? fallback;
@@ -844,17 +846,17 @@ function renderAllResults(data) {
   eeatChart = renderRadialChart("eeatChart", eeatScore, "E-E-A-T");
   citationChart = renderRadialChart("citationChart", citationScore, "Citation");
 
-  // ==== TASK 2.1: 🤖 AI Reasoning Intelligence Engine output mapping ====
+  // ==== TASK 2: 🤖 AI Reasoning Intelligence Engine output mapping ====
   const reasoning = safeGet(data, "reasoning", {});
   showCard("aiReasoningCard", "aiReasoningContent", `
     <div class="reasoning-panel">
       <div class="reasoning-box strength">
         <div class="reasoning-title" style="color:var(--accent-success)">✔ SEO Optimization Intelligence Insights</div>
-        <p>${escapeHtml(safeText(reasoning.seo, "Excellent structural integrity confirmed on target parameters."))}</p>
+        <p>${escapeHtml(safeText(reasoning.seo, "No reasoning data available"))}</p>
       </div>
       <div class="reasoning-box weakness">
         <div class="reasoning-title" style="color:var(--accent-danger)">❌ Answer Engine Optimization Vectors</div>
-        <p>${escapeHtml(safeText(reasoning.aeo, "Optimize natural Q&A formats to accelerate AI snippet parsing."))}</p>
+        <p>${escapeHtml(safeText(reasoning.aeo, "No reasoning data available"))}</p>
       </div>
     </div>
     <div class="ai-box" style="margin-top:16px;">
@@ -863,13 +865,13 @@ function renderAllResults(data) {
     </div>
   `);
 
-  // ==== TASK 5: AI SEARCH SIMULATION BINDING ====
+  // ==== TASK 7: AI SEARCH SIMULATION FIX ====
   if (data.aiSearchSimulation) {
     const sim = data.aiSearchSimulation;
     showCard("aiSimulationCard", "aiSimulationText", `
-      <div class="ai-box"><strong>ChatGPT Search Output:</strong><p style="margin-top:5px;">${escapeHtml(safeText(sim.chatgpt?.answer, "Not Available"))}</p></div>
-      <div class="ai-box"><strong>Gemini Structured Output:</strong><p style="margin-top:5px;">${escapeHtml(safeText(sim.gemini?.answer, "Not Available"))}</p></div>
-      <div class="ai-box"><strong>Perplexity Citations Output:</strong><p style="margin-top:5px;">${escapeHtml(safeText(sim.perplexity?.answer, "Not Available"))}</p></div>
+      <div class="ai-box"><strong>ChatGPT Search Output:</strong><p style="margin-top:5px;">${escapeHtml(safeText(sim.chatgpt?.answer, "No response available"))}</p></div>
+      <div class="ai-box"><strong>Gemini Structured Output:</strong><p style="margin-top:5px;">${escapeHtml(safeText(sim.gemini?.answer, "No response available"))}</p></div>
+      <div class="ai-box"><strong>Perplexity Citations Output:</strong><p style="margin-top:5px;">${escapeHtml(safeText(sim.perplexity?.answer, "No response available"))}</p></div>
     `);
   }
 
@@ -919,7 +921,7 @@ function renderAllResults(data) {
       <p><strong>Topic Relevance Coverage:</strong> ${safeNumber(s.topicCoverage)}%</p>
       <p><strong>Content Hierarchy:</strong> ${escapeHtml(safeText(s.contentDepth))}</p>
       <p><strong>Missing Entity Terms:</strong></p>
-      <div>${safeArray(s.semanticGaps).length > 0 ? safeArray(s.semanticGaps).map(gap => `<span class="badge badge-orange" style="margin:4px;">${escapeHtml(gap)}</span>`).join('') : 'None!'}</div>
+      <div>${safeArray(s.semanticGaps).length > 0 ? safeArray(s.semanticGaps).map(gap => `<span class="badge badge-orange" style="margin:2px;">${escapeHtml(gap)}</span>`).join('') : 'None!'}</div>
     `);
   }
 
@@ -1058,7 +1060,7 @@ function renderEEAT(data) {
   `);
 }
 
-// ==== TASK 2.2: 🗺️ AI Visibility Roadmap Panel output mapping ====
+// ==== TASK 3: 🗺️ AI Visibility Roadmap Panel output mapping ====
 async function generateRoadmap() {
   const urlEl = document.getElementById("url");
   if (!urlEl) return;
@@ -1071,12 +1073,13 @@ async function generateRoadmap() {
     const data = await res.json();
     hideLoading();
 
+    // Map AI roadmap current -> target score dynamically
     showCard("roadmapCard", "roadmapSteps", `
       <div style="text-align:center; margin-bottom:20px;">
-        <span style="font-size:32px; font-weight:800; color:var(--accent-primary);">${safeNumber(data.currentScore)}% → ${safeNumber(data.potentialScore)}% Potential</span>
+        <span style="font-size:32px; font-weight:800; color:var(--accent-primary);">${safeNumber(safeGet(data, "currentScore", 0))}% → ${safeNumber(safeGet(data, "potentialScore", 0))}% Potential</span>
         <p style="margin-top:6px; opacity:0.8;">Actionable SaaS Optimization Checklist</p>
       </div>
-      ${safeArray(data.roadmap).map(step => `
+      ${safeArray(safeGet(data, "roadmap", [])).map(step => `
         <div class="ai-box" style="border-left: 4px solid ${step.priority === 'CRITICAL' ? 'var(--accent-danger)' : 'var(--accent-warning)'}">
           <strong>Step ${step.step}: ${escapeHtml(step.task)}</strong>
           <span class="badge ${step.priority === 'CRITICAL' ? 'badge-red' : 'badge-orange'}" style="margin-left:8px;">${step.priority}</span>
@@ -1092,7 +1095,7 @@ async function generateRoadmap() {
   }
 }
 
-// ==== TASK 2.3: 💎 Competitor Keyword Theft Panel output mapping ====
+// ==== TASK 4: 💎 Competitor Keyword Theft Panel output mapping ====
 async function keywordTheft() {
   const urlEl = document.getElementById("url");
   const compEl = document.getElementById("competitorUrl");
@@ -1108,12 +1111,14 @@ async function keywordTheft() {
     const data = await res.json();
     hideLoading();
 
+    const missingKeywords = safeArray(safeGet(data, "keywordGaps", []));
+
     showCard("keywordTheftCard", "keywordTheftResults", `
       <p style="margin-bottom:12px;"><strong>High-Yield Opportunity Targets (Steal Metrics):</strong></p>
       <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px;">
-        ${safeArray(data.keywordGaps).map(k => `<span class="badge badge-purple" style="font-size:12px; padding:6px 12px;">${escapeHtml(k)}</span>`).join('') || '<span class="badge badge-green">No immediate theft opportunities identified.</span>'}
+        ${missingKeywords.length > 0 ? missingKeywords.map(k => `<span class="badge badge-purple" style="font-size:12px; padding:6px 12px;">${escapeHtml(k)}</span>`).join('') : '<span class="badge badge-green">No immediate theft opportunities identified.</span>'}
       </div>
-      <p style="margin-top:15px; font-size:13px; color:var(--text-muted);">Incorporate these parsed keywords organically inside H2 elements to bridge visibility parity.</p>
+      <p style="margin-top:15px; font-size:13px; color:var(--text-muted);">Incorporate these opportunity keywords organically inside content core elements to bridge visibility parity.</p>
     `);
   } catch(err) {
     hideLoading();
@@ -1121,15 +1126,15 @@ async function keywordTheft() {
   }
 }
 
-// ==== TASK 3: AI AUTOPILOT FIXED RENDER ====
+// ==== TASK 6: AI AUTOPILOT CHECKLIST RENDERING ====
 async function runAutopilot() {
   if (!lastScanData) return alert("Please run a standard scan audit first to populate data vector logs.");
   
   showLoading();
   try {
     hideLoading();
-    // Safely retrieve autopilot checklist items
-    const autopilotTasks = safeArray(lastScanData.aiAutopilot);
+    // Safely retrieve autopilot dynamic list cards
+    const autopilotTasks = safeArray(safeGet(lastScanData, "aiAutopilot", []));
     
     showCard("autopilotCard", "autopilotResults", `
       <p style="margin-bottom:16px;">AI Autopilot parsed high-contrast optimization targets recursively:</p>
@@ -1148,7 +1153,7 @@ async function runAutopilot() {
   }
 }
 
-// ==== TASK 4: GAP ANALYSIS FIXED RENDER ====
+// ==== TASK 5: GAP ANALYSIS FIXED RENDER ====
 async function gapAnalysis() {
   const urlEl = document.getElementById("url");
   const compEl = document.getElementById("competitorUrl");
@@ -1164,7 +1169,8 @@ async function gapAnalysis() {
     const data = await res.json();
     hideLoading();
 
-    const missingTopics = safeArray(data.headingGaps);
+    // Map missing topics safely with highlight fallback markers
+    const missingTopics = safeArray(safeGet(data, "headingGaps", []));
 
     showCard("gapCard", "gapContent", `
       <div class="grid-3" style="margin-bottom:20px;">
@@ -1184,9 +1190,9 @@ async function gapAnalysis() {
       
       <p><strong>Identified Crucial Topic Gaps (Click to highlight):</strong></p>
       <ul style="list-style-type:none; padding-left:0;">
-        ${missingTopics.length > 0 ? missingTopics.map(topic => `
-          <li onclick="this.style.color='var(--accent-success)'" style="cursor:pointer; padding:10px; background:var(--bg-body); border-radius:8px; margin-bottom:8px; border-left:3px solid var(--accent-danger); transition:0.2s;">
-            ❌ ${escapeHtml(topic)}
+        ${missingTopics.length > 0 ? missingTopics.map((topic, index) => `
+          <li onclick="this.style.color='var(--accent-success)'" style="cursor:pointer; padding:10px; background:var(--bg-body); border-radius:8px; margin-bottom:8px; border-left:3px solid var(--accent-danger); transition:0.2s; font-weight:${index < 3 ? 'bold' : 'normal'};">
+            ${index < 3 ? '🚨 [CRITICAL]' : '❌'} ${escapeHtml(topic)}
           </li>
         `).join('') : '<li>Perfect topical coverage! No gap discrepancies.</li>'}
       </ul>
@@ -1298,7 +1304,7 @@ async function contentBrief() {
   }
 }
 
-// ==== TASK 8: UI LOADING SKELETON LAYER ====
+// ==== UI LOADING SKELETON LAYER ====
 function showLoading() { 
   setStyle("loading", "display", "block"); 
   setStyle("skeletonLoader", "display", "block");
@@ -1318,7 +1324,7 @@ function hideAllCards() {
   });
 }
 
-// ==== TASK 6: SAVING SCANS TO localStorage HISTORY ====
+// ==== TASK 8: SAVING SCANS TO localStorage HISTORY (LAST 10 LIMIT) ====
 function saveToHistory(data) {
   try {
     let history = JSON.parse(localStorage.getItem('scanHistory') || '[]');
@@ -1329,7 +1335,7 @@ function saveToHistory(data) {
       aeoScore: data.aeoScore || 0,
       timestamp: new Date().toISOString()
     });
-    localStorage.setItem('scanHistory', JSON.stringify(history.slice(0, 10))); // Only keep last 10 scans
+    localStorage.setItem('scanHistory', JSON.stringify(history.slice(0, 10))); // Strictly limit to last 10 scans
   } catch(e) {}
 }
 
@@ -1361,7 +1367,7 @@ function copyToClipboard(text, btn) {
   });
 }
 
-// Task 8: Persist Dark Mode Choice
+// Persist Dark Mode Choice
 function toggleDarkMode() {
   document.body.classList.toggle("dark");
   if (document.body.classList.contains("dark")) {

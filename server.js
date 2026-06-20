@@ -283,54 +283,6 @@ async function safeFetch(url, options = {}) {
   return { data: "", status: lastStatus, isError: true, errorMsg: lastError?.message || "Crawl failure across all request layers." };
 }
 
-// ========== ROBUST PAGE VALIDATOR (NO FALSE POSITIVES) ==========
-export function validateHtmlContent(html, status = 200) {
-  if (!html || typeof html !== 'string') {
-    return { crawlBlocked: true, reason: "Empty HTML response received", crawlQuality: { score: 0, status: "Blocked" } };
-  }
-
-  if (isBlockedHTML(html, status)) {
-    return { 
-      crawlBlocked: true, 
-      reason: `Anti-bot protection page detected`, 
-      crawlQuality: { score: 10, status: "Blocked" } 
-    };
-  }
-
-  const $ = cheerio.load(html);
-  $('script, style, svg, noscript').remove();
-  const textContent = $('body').text().replace(/\s+/g, ' ').trim();
-  const wordCount = textContent.split(/\s+/).filter(Boolean).length;
-
-  if (wordCount < 10) {
-    if (html.includes('__NEXT_DATA__') || html.includes('root') || html.includes('app')) {
-      return {
-        crawlBlocked: true,
-        reason: "JavaScript SPA / Client-Side Rendering (CSR) detected without server rendered text",
-        crawlQuality: { score: 20, status: "JS Restricted" }
-      };
-    }
-    return {
-      crawlBlocked: true,
-      reason: "No readable textual content found",
-      crawlQuality: { score: 15, status: "Empty" }
-    };
-  }
-
-  let score = 95;
-  if (wordCount < 100) score -= 15;
-  if (html.includes('__NEXT_DATA__') || html.includes('nuxt')) score -= 5;
-  
-  return {
-    crawlBlocked: false,
-    reason: "Fully Accessible",
-    crawlQuality: {
-      score: clamp(score, 0, 100),
-      status: score >= 85 ? "Excellent" : "Fair"
-    }
-  };
-}
-
 // ========== ROBUST SCHEMA DETECTION ENGINE ==========
 export function detectAllSchemas($, html) {
   const schemas = {
@@ -1630,7 +1582,8 @@ function validateRequiredSystemHelpers() {
     { name: "safeNumber", fn: safeNumber },
     { name: "safeArraySlice", fn: safeArraySlice },
     { name: "clamp", fn: clamp },
-    { name: "safe", fn: safe },
+    { name: "safeRun", fn: safeRun },
+    { name: "tokenizeKeywords", fn: tokenizeKeywords },
     { name: "getBrandNameEnhanced", fn: getBrandNameEnhanced },
     { name: "getKeywordDifficulty", fn: getKeywordDifficulty },
     { name: "getKeywordOpportunity", fn: getKeywordOpportunity },

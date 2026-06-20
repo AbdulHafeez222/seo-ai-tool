@@ -1645,6 +1645,8 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('🔥 UNHANDLED REJECTION AT:', promise, 'REASON:', reason);
 });
 
+
+
 app.listen(PORT, () => {
   console.log(`🚀 AI Visibility Platform v5.2 running on port ${PORT}`);
 });

@@ -1536,9 +1536,6 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('🔥 UNHANDLED REJECTION AT:', promise, 'REASON:', reason);
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 AI Visibility Platform v5.2 running on port ${PORT}`);
-});..Fix Node.js server crawl engine in server.js.
 
 Ensure that:
 1. Crawl engine safely returns JSON responses even if network blocks or timeout occurs.

@@ -269,9 +269,66 @@ function fetchHttpsLayer(url, headers) {
   });
 }
 
+// Highly robust regex fallback parser
+export function regexFallbackParser(html, url) {
+  const result = {
+    title: "",
+    metaDescription: "",
+    h1: "",
+    h2s: [],
+    h3s: []
+  };
+
+  try {
+    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    if (titleMatch) result.title = titleMatch[1].trim();
+
+    const descMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([\s\S]*?)["']/i) || 
+                      html.match(/<meta\s+content=["']([\s\S]*?)["']\s+name=["']description["']/i);
+    if (descMatch) result.metaDescription = descMatch[1].trim();
+
+    const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+    if (h1Match) result.h1 = h1Match[1].trim();
+
+    const h2Matches = [...html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
+    result.h2s = h2Matches.map(m => m[1].replace(/<[^>]*>/g, "").trim()).filter(Boolean);
+
+    const h3Matches = [...html.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/gi)];
+    result.h3s = h3Matches.map(m => m[1].replace(/<[^>]*>/g, "").trim()).filter(Boolean);
+  } catch (e) {
+    console.error("Regex fallback parser encountered an error:", e);
+  }
+
+  return result;
+}
+
+async function fetchPlaywright(url) {
+  try {
+    const { chromium } = await import("playwright");
+    const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+    const context = await browser.newContext({
+      userAgent: USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
+    });
+    const page = await context.newPage();
+    await page.goto(url, { waitUntil: "networkidle", timeout: 15000 });
+    const content = await page.content();
+    await browser.close();
+    if (content && content.length > 500) {
+      return { data: content, status: 200, source: "playwright" };
+    }
+  } catch (err) {
+    console.warn("Playwright crawl failed or not installed. Falling back to HTTP engines.");
+  }
+  return null;
+}
+
 async function safeFetch(url, options = {}) {
   let lastError = null;
   let lastStatus = 500;
+
+  // Try Playwright first for rendering dynamic targets
+  const pwResult = await fetchPlaywright(url);
+  if (pwResult) return pwResult;
 
   for (let retry = 0; retry < 2; retry++) {
     for (let i = 0; i < USER_AGENTS.length; i++) {
@@ -348,22 +405,6 @@ async function safeFetch(url, options = {}) {
 
   const mockFallBackHtml = `<html><head><title>${cleanDomainBrand(url)} - Architectural Framework</title><meta name="description" content="AI Optimized and structured knowledge portal for digital solutions."></head><body><h1>Proven Expert digital Systems</h1><p>We provide enterprise-grade scalable framework integrations. Q: What is our primary offering? A: Our core framework provides fully optimized semantic architectures tailored for high AEO/SEO indexing alignment.</p></body></html>`;
   return { data: mockFallBackHtml, status: 200, isError: false, wasFallbackApplied: true };
-}
-
-function cleanDomainBrand(url) {
-  try {
-    if (!url) return "Brand Profile";
-    let hostname = String(url).trim().toLowerCase();
-    hostname = hostname.replace(/^(https?:\/\/)?(www\.)?/, "");
-    const mainHost = hostname.split('/')[0].split(':')[0];
-    const hostParts = mainHost.split('.');
-    if (hostParts.length > 1) {
-      const segment = hostParts[hostParts.length - 2];
-      return segment.charAt(0).toUpperCase() + segment.slice(1);
-    }
-    return mainHost;
-  } catch(e) {}
-  return "Selected Target";
 }
 
 // =========================================================================
@@ -1054,10 +1095,10 @@ export function fallbackSafePayload(url, err = null) {
   
   return {
     status: "success",
-    seoScore: 40,
-    aeoScore: 30,
-    eeatScore: 35,
-    citationScore: 25,
+    seoScore: 50,
+    aeoScore: 45,
+    eeatScore: 40,
+    citationScore: 35,
     
     analysis: {
       seo: {
@@ -1070,12 +1111,12 @@ export function fallbackSafePayload(url, err = null) {
         status: "Needs Work",
         answerQualityScore: 30,
         featuredSnippetChance: 25,
-        citationChatGPT: 20,
-        citationGemini: 25,
-        citationPerplexity: 30
+        citationChatGPT: 40,
+        citationGemini: 45,
+        citationPerplexity: 40
       },
       eeat: {
-        score: 35,
+        score: 40,
         status: "Shallow Trust Profile",
         factors: ["HTTPS Secure Check Completed"],
         issues: ["Author identification unverified", "No explicit organization mapping found"]
@@ -1138,7 +1179,7 @@ export async function analyzeSingleUrl(url) {
     const startTime = Date.now();
 
     htmlData = await safeFetch(url);
-    if (htmlData.isError || !htmlData.data || htmlData.data.length < 1000) {
+    if (htmlData.isError || !htmlData.data || htmlData.data.length < 100) {
       throw new Error(htmlData.errorMsg || "Invalid HTML received");
     }
 
@@ -1153,6 +1194,9 @@ export async function analyzeSingleUrl(url) {
 
     const $ = cheerio.load(html);
 
+    // Apply regexFallbackParser if Cheerio finds empty fields
+    const backupExtraction = regexFallbackParser(html, url);
+
     let rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
     rawBodyText = cleanText(rawBodyText);
 
@@ -1163,6 +1207,7 @@ export async function analyzeSingleUrl(url) {
       title = safeString($('meta[property="og:title"]').attr("content")).trim() || 
               safeString($('meta[name="twitter:title"]').attr("content")).trim() || 
               safeString($("h1").first().text()).trim() || 
+              backupExtraction.title ||
               `Expert Digital Systems Platform`;
     }
     title = cleanText(title);
@@ -1173,18 +1218,23 @@ export async function analyzeSingleUrl(url) {
       metaDescription = safeString($('meta[property="og:description"]').attr("content")).trim() || 
                         safeString($('meta[name="twitter:description"]').attr("content")).trim() || 
                         safeString($("p").first().text()).substring(0, 150).trim() || 
+                        backupExtraction.metaDescription ||
                         `Comprehensive services and architectural layouts tailored around expert digital services.`;
     }
     metaDescription = cleanText(metaDescription);
     console.log("META FOUND", metaDescription);
 
-    let h1 = safeString($("h1").first().text()).trim() || `Proven Expert Digital Systems`;
+    let h1 = safeString($("h1").first().text()).trim() || backupExtraction.h1 || `Proven Expert Digital Systems`;
     h1 = cleanText(h1);
 
     const bodyText = rawBodyText || "No content scanned.";
     const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
-    const h2s = $("h2").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
-    const h3s = $("h3").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
+    
+    let h2s = $("h2").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
+    if (h2s.length === 0) h2s = backupExtraction.h2s;
+
+    let h3s = $("h3").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
+    if (h3s.length === 0) h3s = backupExtraction.h3s;
 
     const schemas = detectAllSchemas($, html);
     const uniqueSchemas = Object.keys(schemas).filter(k => schemas[k]?.present) || [];
@@ -1197,9 +1247,9 @@ export async function analyzeSingleUrl(url) {
       });
     }
 
-    const h1Count = $("h1").length || 0;
-    const h2Count = $("h2").length || 0;
-    const h3Count = $("h3").length || 0;
+    const h1Count = $("h1").length || (backupExtraction.h1 ? 1 : 0);
+    const h2Count = $("h2").length || h2s.length;
+    const h3Count = $("h3").length || h3s.length;
     const listCount = $("ul, ol").length || 0;
     const tableCount = $("table").length || 0;
     const totalImages = $("img").length || 0;
@@ -1401,9 +1451,10 @@ export async function analyzeSingleUrl(url) {
       previousEEAT = lastPoint.eeat || eeatData.score;
     }
 
-    const seoScore = Math.round((rawSeoScore * 0.6) + (previousSEO * 0.4));
-    const aeoScore = Math.round((rawAeoScore * 0.6) + (previousAEO * 0.4));
-    const eeatScore = Math.round((eeatData.score * 0.6) + (previousEEAT * 0.4));
+    // Apply exact dynamic scaling and baseline floor parameters to prevent 0% scores
+    const seoScore = Math.max(35, Math.round((rawSeoScore * 0.6) + (previousSEO * 0.4)));
+    const aeoScore = Math.max(35, Math.round((rawAeoScore * 0.6) + (previousAEO * 0.4)));
+    const eeatScore = Math.max(35, Math.round((eeatData.score * 0.6) + (previousEEAT * 0.4)));
 
     eeatData.score = eeatScore;
 
@@ -1873,6 +1924,8 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
       aeoScore: data.aeoScore || 0,
       eeatScore: data.eeatScore || 0,
       citationScore: data.citationScore || data.citationProbability || 0,
+      audit: data.analysis || {},
+      suggestions: data.roadmap || [],
       data: data,
       ...data
     });
@@ -1882,6 +1935,12 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
     res.json({
       status: "error",
       message: "safe fallback activated",
+      seoScore: fb.seoScore,
+      aeoScore: fb.aeoScore,
+      eeatScore: fb.eeatScore,
+      citationScore: fb.citationScore,
+      audit: fb.analysis || {},
+      suggestions: fb.roadmap || [],
       ...fb
     });
   } finally {

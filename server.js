@@ -1282,34 +1282,86 @@ export function fallbackSafePayload(url, err = null) {
 }
 
 // =========================================================================
+// ========== SECTION 4.5: URL VALIDATION & CRAWL HARDENING ================
+// =========================================================================
+
+export function enforceSecureUrl(inputUrl) {
+  let cleaned = safeText(inputUrl).trim();
+  if (!cleaned) return null;
+  
+  // Resolve common markdown references or parenthesized links
+  cleaned = cleaned.replace(/[\[\]\(\)]/g, "").trim();
+  
+  // Resolve protocol-less domain inputs safely
+  if (!cleaned.match(/^https?:\/\//i)) {
+    cleaned = "https://" + cleaned;
+  }
+  
+  try {
+    const parsed = new URL(cleaned);
+    const hostname = parsed.hostname;
+    
+    // Simple verification regex for TLD validation & basic domain parameters
+    const hostParts = hostname.split('.');
+    if (hostParts.length < 2) return null;
+    const tld = hostParts[hostParts.length - 1];
+    if (tld.length < 2 || /\d/.test(tld)) return null; // Reject numeric or invalid short TLD parameters
+    
+    return parsed.href;
+  } catch (e) {
+    return null;
+  }
+}
+
+// =========================================================================
 // ========== SECTION 5: COMPREHENSIVE SCANNER PIPELINE ===================
 // =========================================================================
 
 export async function analyzeSingleUrl(url) {
-  console.log("SCAN STARTED - TARGET URL:", url);
+  // Validate and normalize raw parameter inputs safely
+  const rawUrl = url;
+  const normalizedUrl = enforceSecureUrl(url);
+  
+  console.log("RAW URL:", rawUrl);
+  console.log("NORMALIZED URL:", normalizedUrl);
+  
+  if (!normalizedUrl) {
+    return {
+      error: "Malformed target domain or invalid TLD",
+      crawlSuccess: false,
+      status: "error"
+    };
+  }
+
   try {
-    url = safeText(url).trim();
-    if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
-    url = url.replace(/\s+/g, '');
-
-    const cacheKey = normalizeUrl(url);
-    const cachedData = scanCache.get(cacheKey);
-    if (cachedData && (Date.now() - cachedData.cachedAt < CACHE_TTL_MS)) {
-      console.log("📦 Returning cached analysis report for:", url);
-      return cachedData.payload;
-    }
-
     let htmlData = { data: "", status: 200, isError: false };
     const startTime = Date.now();
 
-    htmlData = await safeFetch(url);
-    if (htmlData.isError || !htmlData.data || htmlData.data.length < 100) {
+    console.log("FINAL FETCH URL:", normalizedUrl);
+    htmlData = await safeFetch(normalizedUrl);
+    
+    const finalRedirectUrl = htmlData.redirectUrl || normalizedUrl;
+    console.log("REDIRECT URL:", finalRedirectUrl);
+
+    if (htmlData.isError || !htmlData.data) {
       throw new Error(htmlData.errorMsg || "Invalid HTML received");
+    }
+
+    const htmlLength = htmlData.data.length;
+    console.log("HTML LENGTH:", htmlLength);
+
+    // Hard content length check implementation to prevent placeholder page scans
+    if (htmlLength < 2000) {
+      console.warn("CRAWL SUSPENDED: Insufficient content length detected.");
+      return {
+        error: "Insufficient page content detected",
+        crawlSuccess: false,
+        status: "error"
+      };
     }
 
     const loadTime = Date.now() - startTime;
     let html = htmlData.data;
-    console.log("HTML LENGTH", html.length);
 
     const validation = validateHtmlContent(html, htmlData.status);
     if (validation.crawlBlocked) {
@@ -1319,7 +1371,7 @@ export async function analyzeSingleUrl(url) {
     const $ = cheerio.load(html);
 
     // Apply regexFallbackParser if Cheerio finds empty fields
-    const backupExtraction = regexFallbackParser(html, url);
+    const backupExtraction = regexFallbackParser(html, normalizedUrl);
 
     let rawBodyText = safeText($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
     rawBodyText = cleanText(rawBodyText);
@@ -1335,7 +1387,6 @@ export async function analyzeSingleUrl(url) {
               `Expert Digital Systems Platform`;
     }
     title = cleanText(title);
-    console.log("TITLE FOUND", title);
 
     let metaDescription = safeText($('meta[name="description"]').attr("content")).trim();
     if (!metaDescription || metaDescription.toLowerCase().includes("not found")) {
@@ -1346,7 +1397,6 @@ export async function analyzeSingleUrl(url) {
                         `Comprehensive services and architectural layouts tailored around expert digital services.`;
     }
     metaDescription = cleanText(metaDescription);
-    console.log("META FOUND", metaDescription);
 
     let h1 = safeText($("h1").first().text()).trim() || backupExtraction.h1 || `Proven Expert Digital Systems`;
     h1 = cleanText(h1);
@@ -1382,7 +1432,7 @@ export async function analyzeSingleUrl(url) {
     const tableCount = $("table").length || 0;
     const totalImages = $("img").length || 0;
     const imagesWithoutAlt = $("img").filter((i, el) => !$(el).attr("alt")).length || 0;
-    const isHttps = url.startsWith("https://");
+    const isHttps = normalizedUrl.startsWith("https://");
     const mobileViewport = $('meta[name="viewport"]').length > 0;
     const canonical = safeText($('link[rel="canonical"]').attr("href"));
     const hasCanonical = !!canonical;
@@ -1419,7 +1469,7 @@ export async function analyzeSingleUrl(url) {
 
     const keywords = tokenizeKeywords(bodyText);
 
-    const trustSignals = safeRun(() => scanTrustSignals($, url), {
+    const trustSignals = safeRun(() => scanTrustSignals($, normalizedUrl), {
       hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 20, totalSignals: 0, socialLinks: []
     });
 
@@ -1429,7 +1479,7 @@ export async function analyzeSingleUrl(url) {
     const hasTermsPage = trustSignals.hasTermsPage;
 
     // TASK 5: IMPROVE INTERNAL LINK ANALYSIS
-    const internalLinkData = safeRun(() => analyzeInternalLinks($, url, h2s), {
+    const internalLinkData = safeRun(() => analyzeInternalLinks($, normalizedUrl, h2s), {
       internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0,
       orphanPages: [], avgLinkDepth: 1, averageDepth: 1, authorityFlow: 10,
       weakLinking: true, suggestions: ["Add internal structure navigation"], score: 40,
@@ -1440,7 +1490,6 @@ export async function analyzeSingleUrl(url) {
     const eeatData = safeRun(() => analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas, hasTermsPage, trustSignals.socialLinks), {
       score: 30, status: "Shallow Trust Profile", breakdown: { experience: { score: 5, max: 25, factors: [] }, expertise: { score: 10, max: 25, factors: [] }, authoritativeness: { score: 5, max: 25, factors: [] }, trustworthiness: { score: 10, max: 25, factors: [] } }
     });
-    console.log("EEAT SCORE", eeatData.score);
 
     // TASK 7: IMPROVE LOCAL SEO ANALYSIS
     const localSEO = safeRun(() => analyzeLocalSEO($, bodyText, schemas, hasEmail, hasPhone), {
@@ -1507,9 +1556,9 @@ export async function analyzeSingleUrl(url) {
       (imgScore * 0.15)
     );
 
-    const externalLinksCount = $("a[href^='http']").not(`a[href^='${url}']`).length || 0;
+    const externalLinksCount = $("a[href^='http']").not(`a[href^='${normalizedUrl}']`).length || 0;
     
-    const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas);
+    const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, normalizedUrl, schemas);
     const entityCoverageScore = clamp(safeArray(entityData?.entities).length * 10);
 
     // TASK 4: UPGRADE AI CITATION ENGINE
@@ -1589,7 +1638,7 @@ export async function analyzeSingleUrl(url) {
     const featuredSnippetChance = Math.min(100, (hasDirectAnswer ? 40 : 0) + (hasFAQ ? 30 : 0) + (listCount > 0 ? 20 : 0) + (h2Count >= 3 ? 10 : 0));
     const answerQuality = answerClarity;
     
-    const b64Key = Buffer.from(url).toString('base64');
+    const b64Key = Buffer.from(normalizedUrl).toString('base64');
     let historicalEntry = trendDB[b64Key];
     let previousSEO = rawSeoScore;
     let previousAEO = rawAeoScore;
@@ -1627,9 +1676,7 @@ export async function analyzeSingleUrl(url) {
     const extractedProducts = Array.isArray(entityData?.products) ? entityData.products : [];
     const totalEntities = Number.isInteger(entityData?.totalEntities) ? entityData.totalEntities : 0;
 
-    console.log("ENTITIES FOUND", totalEntities);
-
-    const brandName = extractedBrands[0] || getBrandNameEnhanced(url, $, title, schemas);
+    const brandName = extractedBrands[0] || getBrandNameEnhanced(normalizedUrl, $, title, schemas);
     const mainTopic = (h1 && h1 !== "Not Found") ? h1 : (safeArraySlice(title.split(" "), 0, 3).join(" ") || "this service");
 
     const autoFAQ = [];
@@ -1772,7 +1819,7 @@ export async function analyzeSingleUrl(url) {
       directAnswer: metaDescription, directAnswerWordCount: 0, featuredSnippet: title, aiOverviewAnswer: "", quickFactsBlock: []
     });
 
-    const visibilityTrend = safeRun(() => trackAIVisibilityTrend(url, overallAIVisibilityScore, seoScore, aeoScore), {
+    const visibilityTrend = safeRun(() => trackAIVisibilityTrend(normalizedUrl, overallAIVisibilityScore, seoScore, aeoScore), {
       labels: [], scores: [], seoScores: [], aeoScores: [], growthPercentage: 0
     });
 
@@ -1782,8 +1829,6 @@ export async function analyzeSingleUrl(url) {
       citationLikelihood: "Medium source visibility potential.",
       missingEntities: []
     });
-
-    console.log("FINAL PAYLOAD READY");
 
     const payload = {
       status: "success",
@@ -1847,7 +1892,7 @@ export async function analyzeSingleUrl(url) {
       },
       
       meta: {
-        url,
+        url: normalizedUrl,
         wordCount,
         timestamp: new Date().toISOString()
       },
@@ -1994,7 +2039,7 @@ export async function analyzeSingleUrl(url) {
 
     return payload;
   } catch (err) {
-    return fallbackSafePayload(url, err);
+    return fallbackSafePayload(normalizedUrl, err);
   }
 }
 
@@ -2127,24 +2172,35 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
   const url = req.query.url;
   if (!url) return res.status(400).json({ status: "error", message: "URL required" });
 
-  const normalized = normalizeUrl(url);
+  const normalized = enforceSecureUrl(url);
+  if (!normalized) {
+    return res.status(400).json({
+      status: "error",
+      message: "Malformed target domain or invalid TLD"
+    });
+  }
 
-  if (activeScans.has(normalized)) {
-    const startTime = activeScans.get(normalized);
+  const cacheKey = normalizeUrl(normalized);
+
+  if (activeScans.has(cacheKey)) {
+    const startTime = activeScans.get(cacheKey);
     if (Date.now() - startTime < 60000) {
       return res.status(409).json({
         status: "already_scanning",
         message: "Scan already in progress"
       });
     } else {
-      activeScans.delete(normalized);
+      activeScans.delete(cacheKey);
     }
   }
 
-  activeScans.set(normalized, Date.now());
+  activeScans.set(cacheKey, Date.now());
 
   try {
-    const data = await analyzeSingleUrl(url);
+    const data = await analyzeSingleUrl(normalized);
+    if (data.status === "error") {
+      return res.status(400).json(data);
+    }
     if (data.success && req.user) {
       req.user.scansToday++;
     }
@@ -2161,7 +2217,7 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
     });
   } catch (err) {
     console.error("SCAN ENDPOINT ERROR:", err.message);
-    const fb = fallbackSafePayload(url, err);
+    const fb = fallbackSafePayload(normalized, err);
     res.json({
       status: "error",
       message: "safe fallback activated",
@@ -2174,7 +2230,7 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
       ...fb
     });
   } finally {
-    activeScans.delete(normalized);
+    activeScans.delete(cacheKey);
   }
 });
 
@@ -2183,9 +2239,16 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
     const { url, competitor } = req.query;
     if (!url || !competitor) return res.status(400).json({ error: "Both URLs required" });
 
+    const normalizedUrl = enforceSecureUrl(url);
+    const normalizedComp = enforceSecureUrl(competitor);
+
+    if (!normalizedUrl || !normalizedComp) {
+      return res.status(400).json({ error: "Invalid domain target parameters received" });
+    }
+
     const results = await Promise.allSettled([
-      analyzeSingleUrl(url),
-      analyzeSingleUrl(competitor)
+      analyzeSingleUrl(normalizedUrl),
+      analyzeSingleUrl(normalizedComp)
     ]);
 
     const site1 = results[0].status === "fulfilled" ? results[0].value : null;
@@ -2199,11 +2262,11 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
       });
     }
 
-    if (site1.stopProcessing || site2.stopProcessing) {
+    if (site1.status === "error" || site2.status === "error" || site1.stopProcessing || site2.stopProcessing) {
       return res.json({
         sites: [
-          { brand: "Blocked Site 1", url: url, aiVisibilityScore: null, seoScore: null },
-          { brand: "Blocked Site 2", url: competitor, aiVisibilityScore: null, seoScore: null }
+          { brand: "Blocked Site 1", url: normalizedUrl, aiVisibilityScore: null, seoScore: null },
+          { brand: "Blocked Site 2", url: normalizedComp, aiVisibilityScore: null, seoScore: null }
         ],
         winner: null,
         advantages: { seo: { diff: 0, leader: "Blocked" }, aeo: { diff: 0, leader: "Blocked" } },
@@ -2259,10 +2322,21 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
     const { url, competitor } = req.query;
     if (!url || !competitor) return res.status(400).json({ error: "Both URLs required" });
 
+    const normalizedUrl = enforceSecureUrl(url);
+    const normalizedComp = enforceSecureUrl(competitor);
+
+    if (!normalizedUrl || !normalizedComp) {
+      return res.status(400).json({ error: "Invalid domain parameters received" });
+    }
+
     const [userData, compData] = await Promise.all([
-      analyzeSingleUrl(url),
-      analyzeSingleUrl(competitor)
+      analyzeSingleUrl(normalizedUrl),
+      analyzeSingleUrl(normalizedComp)
     ]);
+
+    if (userData.status === "error" || compData.status === "error") {
+      return res.status(400).json({ error: "One or both pages failed validation" });
+    }
 
     const gapData = competitorContentGap(userData, compData);
     
@@ -2292,9 +2366,12 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: "URL required" });
     
-    const data = await analyzeSingleUrl(url);
+    const normalizedUrl = enforceSecureUrl(url);
+    if (!normalizedUrl) return res.status(400).json({ error: "Invalid URL format" });
 
-    if (data?.stopProcessing) {
+    const data = await analyzeSingleUrl(normalizedUrl);
+
+    if (data.status === "error" || data?.stopProcessing) {
       return res.json({ currentScore: null, potentialScore: null, roadmap: [], estimatedTime: "0 hours" });
     }
 

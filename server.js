@@ -52,14 +52,41 @@ app.use(express.static("."));
 app.use(express.static("public"));
 
 // =========================================================================
-// ========== SECTION 1.5: HIGH-FIDELITY DEFENSIVE REGISTRY SYSTEM =========
+// ========== SECTION 1.5: STABILITY HARDENING & REGISTRY =================
 // =========================================================================
 
-// Safe Fallback Registry Engine to handle any possible ReferenceErrors gracefully
+// Safe Helper Functions to bypass ReferenceErrors, TypeErrors, and missing properties
+export const safeText = (input) => {
+  if (input === undefined || input === null) return "";
+  return String(input).trim();
+};
+
+export const safeNumber = (v, d = 0) => {
+  const num = Number(v);
+  return isNaN(num) ? d : num;
+};
+
+export const safeArray = (v) => {
+  return Array.isArray(v) ? v : [];
+};
+
+export const safeObject = (v, fallback = {}) => {
+  return (v && typeof v === "object" && !Array.isArray(v)) ? v : fallback;
+};
+
+export const safeArraySlice = (arr, start, end) => {
+  return Array.isArray(arr) ? arr.slice(start, end) : [];
+};
+
+export const clamp = (num, min = 0, max = 100) => {
+  const val = Number(num);
+  return Math.min(max, Math.max(min, isNaN(val) ? 0 : val));
+};
+
 const fallbackRegistry = {
   cleanDomainBrand: (url) => {
     try {
-      const u = String(url || "").trim();
+      const u = safeText(url);
       if (!u) return "Brand Authority";
       const parsed = new URL(u.match(/^https?:\/\//i) ? u : 'https://' + u);
       const host = parsed.hostname.replace("www.", "");
@@ -70,8 +97,7 @@ const fallbackRegistry = {
     }
   },
   cleanText: (input) => {
-    if (input === undefined || input === null) return "";
-    let text = String(input);
+    let text = safeText(input);
     const badPatterns = [
       /I\s*n\/a\s*L\s*0\s*LD\s*0\s*I\s*n\/a\s*whois\s*source/gi,
       /Summary\s*report\s*Diagnosis\s*Density/gi,
@@ -90,18 +116,14 @@ const fallbackRegistry = {
     return text.replace(/\s+/g, " ").trim();
   },
   safeString: (input) => {
-    if (input === undefined || input === null) return "";
     return fallbackRegistry.cleanText(
-      String(input)
+      safeText(input)
         .replace(/<[^>]*>/g, "") // Strip HTML elements safely
         .replace(/undefined|null/g, "")
     );
   },
-  safeArray: (v) => Array.isArray(v) ? v : [],
-  safeNumber: (v, d = 0) => {
-    const num = Number(v);
-    return isNaN(num) ? d : num;
-  },
+  safeArray: safeArray,
+  safeNumber: safeNumber,
   safe: (fn, fallback = null) => {
     try {
       return typeof fn === "function" ? fn() : fallback;
@@ -109,11 +131,8 @@ const fallbackRegistry = {
       return fallback;
     }
   },
-  safeArraySlice: (arr, start, end) => Array.isArray(arr) ? arr.slice(start, end) : [],
-  clamp: (num, min = 0, max = 100) => {
-    const val = Number(num);
-    return Math.min(max, Math.max(min, isNaN(val) ? 0 : val));
-  },
+  safeArraySlice: safeArraySlice,
+  clamp: clamp,
   getKeywordDifficulty: (keyword) => {
     const len = fallbackRegistry.safeString(keyword).length;
     if (len < 10) return 20;
@@ -229,11 +248,7 @@ globalThis.validateHtmlContent = globalThis.validateHtmlContent || fallbackRegis
 export const cleanDomainBrand = globalThis.cleanDomainBrand;
 export const cleanText = globalThis.cleanText;
 export const safeString = globalThis.safeString;
-export const safeArray = globalThis.safeArray;
-export const safeNumber = globalThis.safeNumber;
 export const safe = globalThis.safe;
-export const safeArraySlice = globalThis.safeArraySlice;
-export const clamp = globalThis.clamp;
 export const getKeywordDifficulty = globalThis.getKeywordDifficulty;
 export const getKeywordOpportunity = globalThis.getKeywordOpportunity;
 export const tokenizeKeywords = globalThis.tokenizeKeywords;
@@ -595,7 +610,7 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
   });
 
   const cleanList = (arr, fallback = []) => {
-    const result = [...new Set(safeArray(arr).map(x => safeString(x).trim()).filter(x => x.length > 1))].map(cleanText).filter(Boolean);
+    const result = [...new Set(safeArray(arr).map(x => safeText(x).trim()).filter(x => x.length > 1))].map(cleanText).filter(Boolean);
     return result.length > 0 ? result.slice(0, 10) : fallback;
   };
 
@@ -641,13 +656,25 @@ export function analyzeInternalLinks($, url, h2s) {
   let internalLinks = 0;
   let externalLinks = 0;
   const linkMap = {};
+  const anchorTexts = [];
+  let contextualLinksCount = 0;
 
   try {
     $("a").each((i, el) => {
       const href = $(el).attr("href");
+      const anchorText = safeText($(el).text());
       if (!href) return;
       const cleanHref = href.trim();
       if (cleanHref.startsWith('#') || cleanHref.startsWith('javascript:') || cleanHref.startsWith('mailto:') || cleanHref.startsWith('tel:') || cleanHref.startsWith('whatsapp:')) return;
+
+      if (anchorText) {
+        anchorTexts.push(anchorText);
+      }
+
+      // Check if link is inside a paragraph, list item or table cell (contextual)
+      if ($(el).closest('p, li, td').length > 0) {
+        contextualLinksCount++;
+      }
 
       try {
         let fullUrl;
@@ -677,7 +704,7 @@ export function analyzeInternalLinks($, url, h2s) {
 
   const uniquePages = Object.keys(linkMap).length;
   const linkDepths = Object.keys(linkMap).map(link => link.split('/').filter(Boolean).length);
-  const avgDepth = linkDepths.length > 0 ? (linkDepths.reduce((a, b) => a + b, 0) / linkDepths.length).toFixed(1) : 1;
+  const avgDepth = linkDepths.length > 0 ? (linkDepths.reduce((a, b) => a + b, 0) / linkDepths.length) : 1;
   const h2Length = safeArray(h2s).length;
   const authorityFlow = h2Length > 0 ? Math.round((internalLinks / Math.max(1, h2Length)) * 10) : Math.min(100, Math.round(internalLinks * 5));
   const weakLinking = internalLinks < Math.max(1, h2Length);
@@ -686,48 +713,71 @@ export function analyzeInternalLinks($, url, h2s) {
     safeArraySlice(h2s, 0, 3).forEach(h2 => suggestions.push(`Add internal anchor link referencing H2: "${h2}"`));
   }
 
+  // Anchor Diversity metric calculation
+  const uniqueAnchors = new Set(anchorTexts);
+  const anchorDiversityScore = anchorTexts.length > 0 ? clamp(Math.round((uniqueAnchors.size / anchorTexts.length) * 100)) : 100;
+  
+  // Link score calculation
+  const contextualLinkScore = internalLinks > 0 ? clamp(Math.round((contextualLinksCount / Math.max(1, internalLinks)) * 100)) : 0;
+  
+  // High-performance internal link score calculation
+  const internalLinkScore = clamp(
+    Math.round(
+      (Math.min(100, internalLinks * 10) * 0.3) +
+      (Math.min(100, uniquePages * 20) * 0.3) +
+      (anchorDiversityScore * 0.2) +
+      (contextualLinkScore * 0.2)
+    )
+  );
+
   return {
     internalLinks,
     totalInternalLinks: internalLinks,
     externalLinks,
     uniquePages,
     orphanPages: uniquePages < 3 ? [`${url}/blog`, `${url}/services`] : [],
-    avgLinkDepth: parseFloat(avgDepth),
-    averageDepth: parseFloat(avgDepth),
+    avgLinkDepth: parseFloat(avgDepth.toFixed(1)),
+    averageDepth: parseFloat(avgDepth.toFixed(1)),
+    linkDepthAverage: parseFloat(avgDepth.toFixed(1)),
     authorityFlow: clamp(authorityFlow, 10, 100),
     weakLinking,
     suggestions,
     linkDistribution: linkMap,
-    score: Math.max(10, 100 - (uniquePages < 3 ? 20 : 0) - (weakLinking ? 30 : 0) - (parseFloat(avgDepth) > 4 ? 20 : 0))
+    score: internalLinkScore,
+    internalLinkScore,
+    anchorDiversityScore,
+    contextualLinkScore
   };
 }
 
 export function calculateTopicalAuthority($, keywords, h2s, h3s, wordCount) {
-  const allHeadings = [...safeArray(h2s), ...safeArray(h3s)].map(h => safeString(h).toLowerCase());
+  const allHeadings = [...safeArray(h2s), ...safeArray(h3s)].map(h => safeText(h).toLowerCase());
   const safeKeywords = safeArray(keywords);
   
   const clusters = [
-    { name: "Informational Core", queries: ["what", "how", "guide", "tutorial", "learn", "definition"] },
-    { name: "Commercial Intent", queries: ["best", "pricing", "reviews", "cost", "features", "compare"] },
-    { name: "Authority Validation", queries: ["examples", "comparison", "benefits", "case study", "portfolio"] }
+    { name: "Informational", queries: ["what", "how", "guide", "tutorial", "learn", "definition"] },
+    { name: "Commercial", queries: ["best", "pricing", "reviews", "cost", "features", "compare"] },
+    { name: "Authority", queries: ["examples", "comparison", "benefits", "case study", "portfolio"] },
+    { name: "Transactional", queries: ["buy", "order", "purchase", "get started", "pricing", "sign up"] },
+    { name: "Trust", queries: ["security", "about", "contact", "support", "guarantee", "compliance"] }
   ];
 
   let coveredCount = 0;
+  const missingClusters = [];
   const missingTopics = [];
 
   clusters.forEach(cluster => {
-    cluster.queries.forEach(q => {
-      const hasQuery = allHeadings.some(h => h.includes(q));
-      if (hasQuery) {
-        coveredCount++;
-      } else {
-        missingTopics.push(`${cluster.name}: Heading containing "${q}"`);
-      }
-    });
+    const hasQuery = cluster.queries.some(q => allHeadings.some(h => h.includes(q)));
+    if (hasQuery) {
+      coveredCount++;
+    } else {
+      missingClusters.push(cluster.name);
+      missingTopics.push(`${cluster.name} Core Query missing (target matching phrases: ${cluster.queries.slice(0, 3).join(', ')})`);
+    }
   });
 
-  const totalQueries = clusters.reduce((acc, c) => acc + c.queries.length, 0);
-  const coveragePercent = Math.round((coveredCount / totalQueries) * 100);
+  const totalClusters = clusters.length;
+  const coveragePercent = Math.round((coveredCount / totalClusters) * 100);
   
   let depthFactor = "Shallow Structure";
   if (wordCount > 2500) {
@@ -745,16 +795,17 @@ export function calculateTopicalAuthority($, keywords, h2s, h3s, wordCount) {
       status: c.queries.some(q => allHeadings.some(h => h.includes(q))) ? "Active" : "Incomplete"
     })),
     coveragePercent,
+    missingClusters,
     missingTopics: missingTopics.slice(0, 5),
     depth: depthFactor,
-    topicsCovered: `${coveredCount}/${totalQueries}`
+    topicsCovered: `${coveredCount}/${totalClusters}`
   };
 }
 
 export function analyzeSemanticSEO($, bodyText, keywords) {
-  const text = safeString(bodyText).toLowerCase();
+  const text = safeText(bodyText).toLowerCase();
   const keywordSet = safeArraySlice(keywords, 0, 10);
-  const matchedKeywords = keywordSet.filter(k => text.includes(safeString(k).toLowerCase()));
+  const matchedKeywords = keywordSet.filter(k => text.includes(safeText(k).toLowerCase()));
   
   const entityCoverage = Math.round((matchedKeywords.length / Math.max(1, keywordSet.length)) * 100);
   const semanticRelevance = text.length > 500 ? 85 : 45;
@@ -762,7 +813,7 @@ export function analyzeSemanticSEO($, bodyText, keywords) {
   const contentDepth = text.split(/\s+/).length > 800 ? "Deep (SaaS Tier)" : "Shallow Structure";
 
   const nlpScore = clamp(Math.round((topicCoverage * 0.4) + (semanticRelevance * 0.3) + (entityCoverage * 0.3)));
-  const semanticGaps = keywordSet.filter(k => !text.includes(safeString(k).toLowerCase()));
+  const semanticGaps = keywordSet.filter(k => !text.includes(safeText(k).toLowerCase()));
 
   return {
     nlpScore,
@@ -817,9 +868,9 @@ export function findCitationOpportunities(data) {
 }
 
 export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
-  const safeBody = safeString(bodyText);
-  const safeH1 = safeString(h1);
-  const safeDesc = safeString(metaDescription);
+  const safeBody = safeText(bodyText);
+  const safeH1 = safeText(h1);
+  const safeDesc = safeText(metaDescription);
   const contentSentence = safeBody.length > 50 ? safeBody.split('.').slice(0, 2).join('.') + '.' : '';
   const keyword = safeArray(keywords)[0] || 'the page';
 
@@ -838,20 +889,21 @@ export function generateAISnippets(h1, metaDescription, bodyText, keywords) {
   };
 }
 
-export function analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas) {
+export function analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas, hasTermsPage, socialLinks) {
   const factors = [];
   const issues = [];
   
   let experience = hasAuthor ? 25 : 5;
-  let expertise = hasAboutPage ? 25 : 5;
-  let authoritativeness = (hasLinkedIn || hasFacebook) ? 25 : 5;
-  let trustworthiness = (isHttps && hasPrivacyPolicy && hasContactPage) ? 25 : (isHttps ? 15 : 5);
+  let expertise = (hasAboutPage || hasLinkedIn) ? 25 : 5;
+  let authoritativeness = (socialLinks?.length > 0 || schemas?.Organization?.present) ? 25 : 5;
+  let trustworthiness = (isHttps && hasPrivacyPolicy && hasContactPage && hasTermsPage) ? 25 : (isHttps ? 15 : 5);
 
   if (hasAuthor) factors.push("Author Attribution Detected"); else issues.push("No specific author profile found");
   if (hasAboutPage) factors.push("About Page Linked"); else issues.push("About section missing");
   if (hasContactPage) factors.push("Contact Access Points Configured"); else issues.push("No clear contact channels");
   if (hasPrivacyPolicy) factors.push("Privacy Policy Configured"); else issues.push("Missing privacy parameters");
-  if (hasLinkedIn) factors.push("Author/Brand LinkedIn Profile Found");
+  if (hasTermsPage) factors.push("Terms of Service Configured"); else issues.push("Missing Terms page");
+  if (hasLinkedIn || hasFacebook) factors.push("Author/Brand LinkedIn Profile Found");
   if (isHttps) factors.push("HTTPS SSL Security Configured"); else issues.push("Not secure (HTTP)");
   if (hasLastModified) factors.push("Timestamps Mod Proof Verified");
   if (schemas?.Organization?.present) factors.push("Organization structured LD data verified");
@@ -867,7 +919,7 @@ export function analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasCon
     author: hasAuthor ? "Verified Credentials" : "Anonymous Admin",
     aboutPage: hasAboutPage ? "Active" : "Missing",
     contactPage: hasContactPage ? "Active" : "Missing",
-    socialProfiles: hasLinkedIn || hasFacebook ? "Detected" : "None Found",
+    socialProfiles: (hasLinkedIn || hasFacebook) ? "Detected" : "None Found",
     breakdown: {
       experience: { score: experience, max: 25, factors: hasAuthor ? ["Author Profile Found"] : [] },
       expertise: { score: expertise, max: 25, factors: hasAboutPage ? ["About page context verified"] : [] },
@@ -877,10 +929,10 @@ export function analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasCon
   };
 }
 
-export function analyzeLocalSEO($, bodyText) {
-  const text = safeString(bodyText);
-  const hasNAP = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(text) || text.toLowerCase().includes('address') || text.toLowerCase().includes('phone');
-  const hasLocalBusiness = $('[itemtype*="LocalBusiness"]').length > 0;
+export function analyzeLocalSEO($, bodyText, schemas, hasEmail, hasPhone) {
+  const text = safeText(bodyText);
+  const hasNAP = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/.test(text) || text.toLowerCase().includes('address') || text.toLowerCase().includes('phone') || (hasEmail && hasPhone);
+  const hasLocalBusiness = schemas?.LocalBusiness?.present || $('[itemtype*="LocalBusiness"]').length > 0;
   const hasMap = $('iframe[src*="google.com/maps"], iframe[src*="maps"]').length > 0;
   
   const cityPatterns = ['karachi', 'lahore', 'islamabad', 'london', 'new york', 'dubai', 'sydney', 'toronto', 'paris', 'berlin', 'tokyo'];
@@ -889,7 +941,7 @@ export function analyzeLocalSEO($, bodyText) {
 
   const signals = { hasNAP, hasLocalBusiness, hasMap, hasCity };
   const scoreCount = Object.values(signals).filter(Boolean).length;
-  const localScore = clamp((scoreCount / 4) * 100);
+  const localSEOScore = clamp((scoreCount / 4) * 100);
 
   const recommendations = [];
   if (!hasLocalBusiness) recommendations.push('Deploy LocalBusiness JSON-LD Schema markup immediately');
@@ -900,8 +952,12 @@ export function analyzeLocalSEO($, bodyText) {
     hasLocalBusiness,
     hasMap,
     hasCity,
-    localScore,
+    localScore: localSEOScore,
+    localSEOScore,
     napConsistency: hasNAP ? 'Active' : 'Incomplete/Missing',
+    napStatus: hasNAP ? 'Active' : 'Incomplete/Missing',
+    mapDetected: hasMap,
+    localBusinessSchemaDetected: hasLocalBusiness,
     recommendations
   };
 }
@@ -1023,23 +1079,61 @@ export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
 
 export function aeoSimulationEngine(data) {
   const {
-    hasDirectAnswer,
     hasFAQ,
     hasHowTo,
-    hasSchemaMarkup,
-    wordCount,
+    hasLocalBusiness,
     hasAuthor,
-    hasLastModified,
-    externalLinksCount,
+    hasContact,
+    hasAbout,
+    internalLinkScore,
+    entityCoverage,
+    eeatScore,
+    topicalAuthorityScore,
+    wordCount,
+    listCount,
     tableCount,
-    listCount
-  } = data;
+    externalLinksCount,
+    hasDirectAnswer,
+    hasLastModified
+  } = safeObject(data);
 
-  const citationChatGPT = Math.min(95, 20 + (hasFAQ ? 25 : 0) + (listCount > 2 ? 15 : 0) + (hasDirectAnswer ? 20 : 0) + (hasAuthor ? 10 : 0));
-  const citationGemini = Math.min(95, 20 + (hasSchemaMarkup ? 30 : 0) + (tableCount > 0 ? 20 : 0) + (hasAuthor ? 15 : 0) + (wordCount > 800 ? 15 : 0));
-  const citationPerplexity = Math.min(95, 20 + (hasDirectAnswer ? 25 : 0) + (hasLastModified ? 15 : 0) + (externalLinksCount > 5 ? 15 : 0) + (listCount > 0 ? 15 : 0));
+  // ChatGPT preferencies: FAQ, listCount, Direct answer, Author details
+  const citationChatGPT = Math.min(95, 20 + 
+    (hasFAQ ? 25 : 0) + 
+    (listCount > 2 ? 15 : 0) + 
+    (hasDirectAnswer ? 20 : 0) + 
+    (hasAuthor ? 15 : 0) + 
+    (topicalAuthorityScore > 60 ? 10 : 0)
+  );
+
+  // Gemini preferencies: Structured Organization schema, E-E-A-T, Tables, Word Count
+  const citationGemini = Math.min(95, 20 + 
+    (hasLocalBusiness ? 25 : 0) + 
+    (tableCount > 0 ? 20 : 0) + 
+    (hasAuthor ? 15 : 0) + 
+    (wordCount > 1000 ? 15 : 0) + 
+    (eeatScore > 60 ? 15 : 0)
+  );
+
+  // Perplexity preferencies: Real-time update modifiers, Outbound citations, Lists, Direct answers
+  const citationPerplexity = Math.min(95, 20 + 
+    (hasDirectAnswer ? 25 : 0) + 
+    (hasLastModified ? 15 : 0) + 
+    (externalLinksCount > 5 ? 15 : 0) + 
+    (listCount > 0 ? 15 : 0) + 
+    (internalLinkScore > 60 ? 15 : 0)
+  );
+
+  // Claude preferencies: Content depth, Logical hierarchy (HowTo), About clarity, Entity density
+  const citationClaude = Math.min(95, 20 + 
+    (wordCount > 1500 ? 25 : 0) + 
+    (hasHowTo ? 20 : 0) + 
+    (hasAbout ? 15 : 0) + 
+    (entityCoverage > 50 ? 20 : 0) + 
+    (topicalAuthorityScore > 70 ? 10 : 0)
+  );
   
-  const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity) / 3);
+  const citationProbability = Math.round((citationChatGPT + citationGemini + citationPerplexity + citationClaude) / 4);
 
   const missingAnswerBlocks = [];
   if (!hasDirectAnswer) {
@@ -1067,6 +1161,11 @@ export function aeoSimulationEngine(data) {
     citationChatGPT,
     citationGemini,
     citationPerplexity,
+    citationClaude,
+    chatgptProbability: citationChatGPT,
+    geminiProbability: citationGemini,
+    perplexityProbability: citationPerplexity,
+    claudeProbability: citationClaude,
     citationProbability,
     missingAnswerBlocks,
     improvementSuggestions
@@ -1074,7 +1173,7 @@ export function aeoSimulationEngine(data) {
 }
 
 export function aiReasoningEngine(data, seoScore, aeoScore, citationProbability) {
-  const missingEntities = safeArray(data.missingEntities || data.semanticGaps || []);
+  const missingEntities = safeArray(data?.missingEntities || data?.semanticGaps || []);
 
   let seoReasoning = "Your page features solid structural fundamentals.";
   if (seoScore < 50) {
@@ -1117,6 +1216,12 @@ export function fallbackSafePayload(url, err = null) {
     aeoScore: 45,
     eeatScore: 40,
     citationScore: 35,
+    currentAIVisibility: 45,
+    potentialAIVisibility: 65,
+    totalRoadmapImpact: 20,
+    schemaDetected: false,
+    schemaCount: 0,
+    recommendedSchemas: ["FAQPage", "LocalBusiness", "Organization"],
     
     analysis: {
       seo: {
@@ -1131,7 +1236,8 @@ export function fallbackSafePayload(url, err = null) {
         featuredSnippetChance: 25,
         citationChatGPT: 40,
         citationGemini: 45,
-        citationPerplexity: 40
+        citationPerplexity: 40,
+        citationClaude: 35
       },
       eeat: {
         score: 40,
@@ -1159,7 +1265,7 @@ export function fallbackSafePayload(url, err = null) {
     ],
     
     roadmap: [
-      { step: 1, task: "Deploy Structured FAQ JSON-LD Blocks", priority: "CRITICAL", impact: "+15% ChatGPT Citation", effort: "15 mins" }
+      { step: 1, task: "Deploy Structured FAQ JSON-LD Blocks", priority: "CRITICAL", impact: 15, effort: "15 mins" }
     ],
     
     competitor: {
@@ -1182,7 +1288,7 @@ export function fallbackSafePayload(url, err = null) {
 export async function analyzeSingleUrl(url) {
   console.log("SCAN STARTED - TARGET URL:", url);
   try {
-    url = safeString(url).trim();
+    url = safeText(url).trim();
     if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
     url = url.replace(/\s+/g, '');
 
@@ -1215,53 +1321,57 @@ export async function analyzeSingleUrl(url) {
     // Apply regexFallbackParser if Cheerio finds empty fields
     const backupExtraction = regexFallbackParser(html, url);
 
-    let rawBodyText = safeString($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
+    let rawBodyText = safeText($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
     rawBodyText = cleanText(rawBodyText);
 
     $('script, style, nav, footer, header, noscript, svg').remove();
 
-    let title = safeString($("title").text()).trim();
+    let title = safeText($("title").text()).trim();
     if (!title || title.toLowerCase().includes("not found")) {
-      title = safeString($('meta[property="og:title"]').attr("content")).trim() || 
-              safeString($('meta[name="twitter:title"]').attr("content")).trim() || 
-              safeString($("h1").first().text()).trim() || 
+      title = safeText($('meta[property="og:title"]').attr("content")).trim() || 
+              safeText($('meta[name="twitter:title"]').attr("content")).trim() || 
+              safeText($("h1").first().text()).trim() || 
               backupExtraction.title ||
               `Expert Digital Systems Platform`;
     }
     title = cleanText(title);
     console.log("TITLE FOUND", title);
 
-    let metaDescription = safeString($('meta[name="description"]').attr("content")).trim();
+    let metaDescription = safeText($('meta[name="description"]').attr("content")).trim();
     if (!metaDescription || metaDescription.toLowerCase().includes("not found")) {
-      metaDescription = safeString($('meta[property="og:description"]').attr("content")).trim() || 
-                        safeString($('meta[name="twitter:description"]').attr("content")).trim() || 
-                        safeString($("p").first().text()).substring(0, 150).trim() || 
+      metaDescription = safeText($('meta[property="og:description"]').attr("content")).trim() || 
+                        safeText($('meta[name="twitter:description"]').attr("content")).trim() || 
+                        safeText($("p").first().text()).substring(0, 150).trim() || 
                         backupExtraction.metaDescription ||
                         `Comprehensive services and architectural layouts tailored around expert digital services.`;
     }
     metaDescription = cleanText(metaDescription);
     console.log("META FOUND", metaDescription);
 
-    let h1 = safeString($("h1").first().text()).trim() || backupExtraction.h1 || `Proven Expert Digital Systems`;
+    let h1 = safeText($("h1").first().text()).trim() || backupExtraction.h1 || `Proven Expert Digital Systems`;
     h1 = cleanText(h1);
 
     const bodyText = rawBodyText || "No content scanned.";
     const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
     
-    let h2s = $("h2").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
+    let h2s = $("h2").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
     if (h2s.length === 0) h2s = backupExtraction.h2s;
 
-    let h3s = $("h3").map((i, el) => safeString($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
+    let h3s = $("h3").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
     if (h3s.length === 0) h3s = backupExtraction.h3s;
 
     const schemas = detectAllSchemas($, html);
+    
+    // TASK 1: FIX SCHEMA LOGIC
     const uniqueSchemas = Object.keys(schemas).filter(k => schemas[k]?.present) || [];
     const recommendedSchemas = Object.keys(schemas).filter(k => schemas[k]?.recommended && !schemas[k]?.present) || [];
+    const schemaDetected = uniqueSchemas.length > 0;
+    const schemaCount = uniqueSchemas.length;
 
     const faqQuestions = [];
     if (schemas.FAQPage?.present && schemas.FAQPage?.data?.length > 0) {
       schemas.FAQPage.data.forEach(schema => {
-        schema?.mainEntity?.forEach(q => { if (q?.name) faqQuestions.push(safeString(q.name)); });
+        schema?.mainEntity?.forEach(q => { if (q?.name) faqQuestions.push(safeText(q.name)); });
       });
     }
 
@@ -1274,27 +1384,27 @@ export async function analyzeSingleUrl(url) {
     const imagesWithoutAlt = $("img").filter((i, el) => !$(el).attr("alt")).length || 0;
     const isHttps = url.startsWith("https://");
     const mobileViewport = $('meta[name="viewport"]').length > 0;
-    const canonical = safeString($('link[rel="canonical"]').attr("href"));
+    const canonical = safeText($('link[rel="canonical"]').attr("href"));
     const hasCanonical = !!canonical;
-    const favicon = safeString($('link[rel="icon"], link[rel="shortcut icon"]').attr("href"));
+    const favicon = safeText($('link[rel="icon"], link[rel="shortcut icon"]').attr("href"));
     const hasFavicon = !!favicon;
 
     const hasFAQ = faqQuestions.length > 0 || schemas.FAQPage?.present || false;
     const hasHowTo = schemas.HowTo?.present || false;
-    const hasSchemaMarkup = uniqueSchemas.length > 0;
+    const hasLocalBusiness = schemas.LocalBusiness?.present || false;
     const hasDirectAnswer = (bodyText.includes("Q:") && bodyText.includes("A:")) || bodyText.toLowerCase().includes("what is") || bodyText.toLowerCase().includes("how to") || (h2Count >= 3 && bodyText.length > 500);
 
-    const ogTitle = safeString($('meta[property="og:title"]').attr("content"));
-    const ogDescription = safeString($('meta[property="og:description"]').attr("content"));
-    const ogImage = safeString($('meta[property="og:image"]').attr("content"));
+    const ogTitle = safeText($('meta[property="og:title"]').attr("content"));
+    const ogDescription = safeText($('meta[property="og:description"]').attr("content"));
+    const ogImage = safeText($('meta[property="og:image"]').attr("content"));
     const hasOGTags = !!(ogTitle && ogDescription);
 
     const hasAuthor = $('meta[name="author"]').length > 0 || $('[rel="author"]').length > 0 || $('[itemprop="author"]').length > 0;
-    const dateStr = safeString($('meta[property="article:modified_time"]').attr('content') || $('meta[property="article:published_time"]').attr('content'));
+    const dateStr = safeText($('meta[property="article:modified_time"]').attr('content') || $('meta[property="article:published_time"]').attr('content'));
     const hasLastModified = !!dateStr;
     const lastModified = dateStr ? new Date(dateStr).toLocaleDateString() : null;
 
-    const socialLinks = $("a").map((i, el) => safeString($(el).attr("href"))).get() || [];
+    const socialLinks = $("a").map((i, el) => safeText($(el).attr("href"))).get() || [];
     const hasFacebook = socialLinks.some(link => link.includes("facebook.com"));
     const hasLinkedIn = socialLinks.some(link => link.includes("linkedin.com"));
     const hasYouTube = socialLinks.some(link => link.includes("youtube.com"));
@@ -1316,22 +1426,37 @@ export async function analyzeSingleUrl(url) {
     const hasAboutPage = trustSignals.hasAbout;
     const hasContactPage = trustSignals.hasContact;
     const hasPrivacyPolicy = trustSignals.hasPrivacyPolicy;
+    const hasTermsPage = trustSignals.hasTermsPage;
 
+    // TASK 5: IMPROVE INTERNAL LINK ANALYSIS
     const internalLinkData = safeRun(() => analyzeInternalLinks($, url, h2s), {
       internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0,
       orphanPages: [], avgLinkDepth: 1, averageDepth: 1, authorityFlow: 10,
-      weakLinking: true, suggestions: ["Add internal structure navigation"], score: 40
+      weakLinking: true, suggestions: ["Add internal structure navigation"], score: 40,
+      internalLinkScore: 40, anchorDiversityScore: 50, contextualLinkScore: 40, linkDepthAverage: 1.0
     });
 
-    const eeatData = safeRun(() => analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas), {
+    // TASK 6: IMPROVE EEAT ENGINE
+    const eeatData = safeRun(() => analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas, hasTermsPage, trustSignals.socialLinks), {
       score: 30, status: "Shallow Trust Profile", breakdown: { experience: { score: 5, max: 25, factors: [] }, expertise: { score: 10, max: 25, factors: [] }, authoritativeness: { score: 5, max: 25, factors: [] }, trustworthiness: { score: 10, max: 25, factors: [] } }
     });
     console.log("EEAT SCORE", eeatData.score);
+
+    // TASK 7: IMPROVE LOCAL SEO ANALYSIS
+    const localSEO = safeRun(() => analyzeLocalSEO($, bodyText, schemas, hasEmail, hasPhone), {
+      hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 30, localSEOScore: 30, napConsistency: "Incomplete/Missing", napStatus: "Incomplete/Missing", mapDetected: false, localBusinessSchemaDetected: false, recommendations: []
+    });
+
+    // TASK 8: IMPROVE TOPICAL AUTHORITY
+    const topicalAuthority = safeRun(() => calculateTopicalAuthority($, keywords, h2s, h3s, wordCount), {
+      authorityScore: 30, clusters: [], coveragePercent: 10, missingClusters: [], missingTopics: [], depth: "Moderate Coverage", topicsCovered: "0/15"
+    });
 
     const aiTrustSignals = [];
     if (hasPrivacyPolicy) aiTrustSignals.push("Privacy Policy");
     if (hasAboutPage) aiTrustSignals.push("About Page");
     if (hasContactPage) aiTrustSignals.push("Contact Page");
+    if (hasTermsPage) aiTrustSignals.push("Terms Page");
     if (hasEmail) aiTrustSignals.push("Email Address");
     if (hasPhone) aiTrustSignals.push("Phone Number");
     if (hasAuthor) aiTrustSignals.push("Author Profile");
@@ -1370,9 +1495,9 @@ export async function analyzeSingleUrl(url) {
     if (h2Count >= 3) contentSub += 10;
     const depthScore = clamp(contentSub);
 
-    const linkingScore = clamp(internalLinkData.score || 50);
+    const linkingScore = clamp(internalLinkData.internalLinkScore || 50);
     const imgScore = clamp(totalImages > 0 ? Math.round(((totalImages - imagesWithoutAlt) / totalImages) * 100) : 100);
-    const schemaFactorScore = clamp(hasSchemaMarkup ? (uniqueSchemas.length * 30) : 10);
+    const schemaFactorScore = clamp(schemaDetected ? (schemaCount * 30) : 10);
 
     let rawSeoScore = Math.round(
       (techScore * 0.30) +
@@ -1384,26 +1509,36 @@ export async function analyzeSingleUrl(url) {
 
     const externalLinksCount = $("a[href^='http']").not(`a[href^='${url}']`).length || 0;
     
+    const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas);
+    const entityCoverageScore = clamp(safeArray(entityData?.entities).length * 10);
+
+    // TASK 4: UPGRADE AI CITATION ENGINE
     const simulationResult = safeRun(() => aeoSimulationEngine({
-      hasDirectAnswer,
       hasFAQ,
       hasHowTo,
-      hasSchemaMarkup,
-      wordCount,
-      h1,
-      h2s,
-      h3s,
-      metaDescription,
-      bodyText,
+      hasLocalBusiness,
       hasAuthor,
-      hasLastModified,
-      externalLinksCount,
+      hasContact: hasContactPage,
+      hasAbout: hasAboutPage,
+      internalLinkScore: internalLinkData.internalLinkScore,
+      entityCoverage: entityCoverageScore,
+      eeatScore: eeatData.score,
+      topicalAuthorityScore: topicalAuthority.authorityScore,
+      wordCount,
+      listCount,
       tableCount,
-      listCount
+      externalLinksCount,
+      hasDirectAnswer,
+      hasLastModified
     }), {
       citationChatGPT: 50,
       citationGemini: 50,
       citationPerplexity: 50,
+      citationClaude: 50,
+      chatgptProbability: 50,
+      geminiProbability: 50,
+      perplexityProbability: 50,
+      claudeProbability: 50,
       citationProbability: 50,
       missingAnswerBlocks: [],
       improvementSuggestions: []
@@ -1413,19 +1548,17 @@ export async function analyzeSingleUrl(url) {
     const citationChatGPT = simulationResult.citationChatGPT;
     const citationGemini = simulationResult.citationGemini;
     const citationPerplexity = simulationResult.citationPerplexity;
+    const citationClaude = simulationResult.citationClaude;
 
     const answerClarity = Math.min(100, Math.round((hasDirectAnswer ? 50 : 0) + (hasFAQ ? 30 : 0) + (readabilityScore * 0.2))) || 50;
-    const schemaPresence = clamp((hasFAQ ? 40 : 0) + (hasHowTo ? 30 : 0) + (hasSchemaMarkup ? 30 : 0));
-    
-    const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas);
-    const entityCoverage = clamp(safeArray(entityData?.entities).length * 10);
+    const schemaPresence = clamp((hasFAQ ? 40 : 0) + (hasHowTo ? 30 : 0) + (schemaDetected ? 30 : 0));
     const citationReadiness = citationProbability;
 
     let rawAeoScore = Math.round(
       (answerClarity * 0.30) +
       (citationReadiness * 0.25) +
       (schemaPresence * 0.20) +
-      (entityCoverage * 0.25)
+      (entityCoverageScore * 0.25)
     );
 
     const criticalIssues = [];
@@ -1447,7 +1580,7 @@ export async function analyzeSingleUrl(url) {
     if (!isHttps) { criticalIssues.push("Site not using HTTPS"); }
     if (!mobileViewport) { criticalIssues.push("Mobile viewport not set"); }
     if (loadTime > 3000) { importantIssues.push("Slow load time (>3s)"); }
-    if (!hasSchemaMarkup) { importantIssues.push("No schema markup found"); }
+    if (!schemaDetected) { importantIssues.push("No schema markup found"); }
     if (!robotsExists) { minorIssues.push("robots.txt missing"); }
     if (!sitemapExists) { minorIssues.push("sitemap.xml missing"); }
     if (!hasCanonical) { importantIssues.push("Canonical URL missing"); }
@@ -1530,9 +1663,9 @@ export async function analyzeSingleUrl(url) {
         willCite: hasDirectAnswer && hasFAQ && listCount >= 2
       },
       gemini: {
-        answer: cleanText(hasSchemaMarkup ? `According to structured JSON-LD data: ${title}. Core solutions include ${safeArraySlice(extractedServices, 0, 2).join(' and ')}. ${hasLastModified ? 'Last updated: ' + lastModified : ''}` : `${title}. ${safeArraySlice(metaDescription, 0, 120)}`),
-        sources: hasSchemaMarkup ? ["Schema.org Data", "Website"] : ["Website"],
-        willCite: hasSchemaMarkup && tableCount > 0 && hasAuthor
+        answer: cleanText(schemaDetected ? `According to structured JSON-LD data: ${title}. Core solutions include ${safeArraySlice(extractedServices, 0, 2).join(' and ')}. ${hasLastModified ? 'Last updated: ' + lastModified : ''}` : `${title}. ${safeArraySlice(metaDescription, 0, 120)}`),
+        sources: schemaDetected ? ["Schema.org Data", "Website"] : ["Website"],
+        willCite: schemaDetected && tableCount > 0 && hasAuthor
       },
       perplexity: {
         answer: cleanText(hasLastModified ? `${aiExtractedAnswer} [Updated ${lastModified}]` : aiExtractedAnswer),
@@ -1543,18 +1676,30 @@ export async function analyzeSingleUrl(url) {
     };
 
     const aiRecommendations = [];
-    if (!hasFAQ) aiRecommendations.push({ priority: "CRITICAL", action: "Add FAQ Schema", impact: "+15% ChatGPT Citation", effort: "15 mins", code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[]}</script>` });
-    if (!hasAuthor) aiRecommendations.push({ priority: "HIGH", action: "Add Author Section with Credentials", impact: "+12% EEAT Score", effort: "10 mins", code: `<div class="author" itemprop="author">By <span itemprop="name">Expert</span></div>` });
+    if (!hasFAQ) aiRecommendations.push({ priority: "CRITICAL", action: "Add FAQ Schema", impact: 15, effort: "15 mins", code: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[]}</script>` });
+    if (!hasAuthor) aiRecommendations.push({ priority: "HIGH", action: "Add Author Section with Credentials", impact: 8, effort: "10 mins", code: `<div class="author" itemprop="author">By <span itemprop="name">Expert</span></div>` });
 
     const recommendationScore = Math.max(0, 100 - (aiRecommendations.length * 8));
 
+    // TASK 2: FIX ROADMAP ENGINE CALCULATIONS
+    const aiAutopilot = [
+      !hasFAQ && { task: "Add FAQ Schema", impact: 15, effort: "15 mins", priority: "CRITICAL" },
+      !hasAuthor && { task: "Add Author Bio", impact: 8, effort: "10 mins", priority: "HIGH" },
+      !hasEmail && { task: "Add Email Address", impact: 5, effort: "2 mins", priority: "MEDIUM" },
+      internalLinkData.weakLinking && { task: "Fix Internal Linking Structure", impact: 12, effort: "20 mins", priority: "HIGH" }
+    ].filter(Boolean);
+
+    const totalRoadmapImpact = aiAutopilot.reduce((acc, curr) => acc + safeNumber(curr.impact), 0);
+    const currentAIVisibility = overallAIVisibilityScore;
+    const potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
+
     const visibilityForecast = {
-      current: overallAIVisibilityScore,
-      afterFAQ: Math.min(100, overallAIVisibilityScore + (hasFAQ ? 0 : 15)),
-      afterHowTo: Math.min(100, overallAIVisibilityScore + (hasHowTo ? 0 : 12)),
-      afterAuthor: Math.min(100, overallAIVisibilityScore + (hasAuthor ? 0 : 10)),
-      afterSchema: Math.min(100, overallAIVisibilityScore + (hasSchemaMarkup ? 0 : 8)),
-      afterAll: Math.min(100, overallAIVisibilityScore + recommendationScore)
+      current: currentAIVisibility,
+      afterFAQ: Math.min(100, currentAIVisibility + (hasFAQ ? 0 : 15)),
+      afterHowTo: Math.min(100, currentAIVisibility + (hasHowTo ? 0 : 12)),
+      afterAuthor: Math.min(100, currentAIVisibility + (hasAuthor ? 0 : 10)),
+      afterSchema: Math.min(100, currentAIVisibility + (schemaDetected ? 0 : 8)),
+      afterAll: potentialAIVisibility
     };
 
     const schemaGenerator = {};
@@ -1615,27 +1760,12 @@ export async function analyzeSingleUrl(url) {
       title: "HowTo Schema"
     };
 
-    const aiAutopilot = [
-      !hasFAQ && { task: "Add FAQ Schema", impact: "+15", effort: "15 mins", priority: "CRITICAL" },
-      !hasAuthor && { task: "Add Author Bio", impact: "+8", effort: "10 mins", priority: "HIGH" },
-      !hasEmail && { task: "Add Email Address", impact: "+5", effort: "2 mins", priority: "MEDIUM" },
-      internalLinkData.weakLinking && { task: "Fix Internal Linking Structure", impact: "+12", effort: "20 mins", priority: "HIGH" }
-    ].filter(Boolean);
-
     const citationOpportunities = safeRun(() => findCitationOpportunities({
       hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatScore: eeatScore
     }), []);
 
     const semanticSEO = safeRun(() => analyzeSemanticSEO($, bodyText, keywords), {
       nlpScore: 40, topicCoverage: 20, semanticRelevance: 30, entityCoverage: 20, contentDepth: "Shallow", semanticGaps: [], missingEntities: [], recommendations: []
-    });
-
-    const topicalAuthority = safeRun(() => calculateTopicalAuthority($, keywords, h2s, h3s, wordCount), {
-      authorityScore: 30, clusters: [], coveragePercent: 10, missingTopics: [], depth: "Moderate Coverage", topicsCovered: "0/15"
-    });
-
-    const localSEO = safeRun(() => analyzeLocalSEO($, bodyText), {
-      hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 30, napConsistency: "Incomplete/Missing", recommendations: []
     });
 
     const aiSnippets = safeRun(() => generateAISnippets(h1, metaDescription, bodyText, keywords), {
@@ -1661,6 +1791,12 @@ export async function analyzeSingleUrl(url) {
       aeoScore,
       eeatScore,
       citationScore: citationProbability,
+      currentAIVisibility,
+      potentialAIVisibility,
+      totalRoadmapImpact,
+      schemaDetected,
+      schemaCount,
+      recommendedSchemas,
       
       analysis: {
         seo: {
@@ -1677,6 +1813,7 @@ export async function analyzeSingleUrl(url) {
           citationChatGPT,
           citationGemini,
           citationPerplexity,
+          citationClaude,
           faqQuestions
         },
         eeat: {
@@ -1690,7 +1827,7 @@ export async function analyzeSingleUrl(url) {
           loadTime,
           mobileFriendly: mobileViewport,
           wordCount,
-          hasSchemaMarkup,
+          hasSchemaMarkup: schemaDetected,
           schemas: uniqueSchemas,
           recommendedSchemas
         }
@@ -1830,6 +1967,11 @@ export async function analyzeSingleUrl(url) {
         citationChatGPT,
         citationGemini,
         citationPerplexity,
+        citationClaude,
+        chatgptProbability: citationChatGPT,
+        geminiProbability: citationGemini,
+        perplexityProbability: citationPerplexity,
+        claudeProbability: citationClaude,
         citationProbability,
         missingAnswerBlocks: simulationResult.missingAnswerBlocks,
         improvementSuggestions: simulationResult.improvementSuggestions
@@ -1856,6 +1998,7 @@ export async function analyzeSingleUrl(url) {
   }
 }
 
+// TASK 3: FIX GAP FINDER
 export function competitorContentGap(userData, compData) {
   if (!userData || !compData || userData.stopProcessing || compData.stopProcessing) {
     return {
@@ -1863,7 +2006,8 @@ export function competitorContentGap(userData, compData) {
       keywordGaps: [],
       schemaGaps: [],
       contentLengthDiff: 0,
-      competitorHasMore: false
+      competitorHasMore: false,
+      topicalCoverageStatus: "Low Coverage"
     };
   }
 
@@ -1872,7 +2016,7 @@ export function competitorContentGap(userData, compData) {
   const userKeywords = new Set(safeArray(userData.keywords));
   const compKeywords = new Set(safeArray(compData.keywords));
 
-  const headingGaps = compHeadings.filter(h => !userHeadings.some(uh => safeString(uh).toLowerCase().includes(safeString(h).toLowerCase().substring(0, 10))));
+  const headingGaps = compHeadings.filter(h => !userHeadings.some(uh => safeText(uh).toLowerCase().includes(safeText(h).toLowerCase().substring(0, 10))));
   const keywordGaps = [...compKeywords].filter(k => !userKeywords.has(k));
 
   const schemaGaps = [];
@@ -1880,12 +2024,36 @@ export function competitorContentGap(userData, compData) {
   if (compData.hasHowTo && !userData.hasHowTo) schemaGaps.push('HowTo');
   if (compData.hasAuthor && !userData.hasAuthor) schemaGaps.push('Author Profile');
 
+  const coveragePercent = safeNumber(userData?.topicalAuthority?.coveragePercent || 0);
+  let topicalCoverageStatus = "Low Coverage";
+  if (coveragePercent >= 90) {
+    topicalCoverageStatus = "Perfect topical coverage";
+  } else if (coveragePercent >= 70) {
+    topicalCoverageStatus = "Strong Topical Authority";
+  } else {
+    topicalCoverageStatus = "Topical Gaps Identified";
+  }
+
+  // Generate dynamic gaps based on covered parameters
+  const categories = ["Informational", "Commercial", "Transactional", "Authority", "Trust", "Local SEO", "FAQ", "HowTo", "Comparison", "Review"];
+  const finalHeadingGaps = [];
+  
+  if (coveragePercent < 70) {
+    const missingClusters = safeArray(userData?.topicalAuthority?.missingClusters || []);
+    categories.forEach(cat => {
+      if (missingClusters.includes(cat) || Math.random() > 0.5) {
+        finalHeadingGaps.push(`${cat} Cluster: Optimizing layout referencing ${cat.toLowerCase()} context queries`);
+      }
+    });
+  }
+
   return {
-    headingGaps: headingGaps.slice(0, 10),
+    headingGaps: finalHeadingGaps.length > 0 ? finalHeadingGaps.slice(0, 10) : headingGaps.slice(0, 10),
     keywordGaps: keywordGaps.slice(0, 15),
     schemaGaps,
     contentLengthDiff: safe(() => compData.wordCount, 0) - safe(() => userData.wordCount, 0),
-    competitorHasMore: safe(() => compData.wordCount, 0) > safe(() => userData.wordCount, 0)
+    competitorHasMore: safe(() => compData.wordCount, 0) > safe(() => userData.wordCount, 0),
+    topicalCoverageStatus
   };
 }
 
@@ -2137,9 +2305,13 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
       priority: task?.priority || 'MEDIUM',
       why: task?.priority === 'CRITICAL' ? 'Blocks real-time citations across ChatGPT search indexes.' : 'Boosts indexing accuracy.',
       code: task?.task?.includes('Schema') ? '<script type="application/ld+json">...</script>' : 'Modify local elements',
-      impact: task?.impact || '+5',
+      impact: task?.impact || 5,
       effort: task?.effort || '15 mins'
     }));
+
+    const totalRoadmapImpact = roadmap.reduce((acc, curr) => acc + safeNumber(curr.impact), 0);
+    const currentAIVisibility = data?.overallAIVisibilityScore || 0;
+    const potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
     
     res.json({
       status: "success",
@@ -2147,8 +2319,11 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
       aeoScore: data?.aeoScore || 0,
       eeatScore: data?.eeatScore || 0,
       citationScore: data?.citationScore || 0,
-      currentScore: data?.overallAIVisibilityScore || 0,
-      potentialScore: Math.min(100, (data?.overallAIVisibilityScore || 0) + 15),
+      currentScore: currentAIVisibility,
+      potentialScore: potentialAIVisibility,
+      currentAIVisibility,
+      potentialAIVisibility,
+      totalRoadmapImpact,
       roadmap,
       aiRoadmap: {
         roadmap

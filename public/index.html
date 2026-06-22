@@ -783,7 +783,9 @@ details summary { cursor: pointer; font-weight: 600; padding: 10px 0; color: var
 </div>
 
 <script>
-const API_BASE = window.location.origin;
+// SINGLE GLOBAL SOURCE OF TRUTH FOR API CONFIGURATION (REPLACES DUPLICATE API_BASE)
+window.API_BASE = window.location.origin;
+
 let seoChart = null, aeoChart = null, eeatChart = null, citationChart = null;
 let comparisonChart = null, radarChart = null, trendChart = null;
 let lastScanData = null;
@@ -990,7 +992,7 @@ async function scan() {
   }, 6000);
 
   try {
-    const res = await fetch(`${API_BASE}/scan?url=${encodeURIComponent(url)}`);
+    const res = await fetch(`${window.API_BASE}/scan?url=${encodeURIComponent(url)}`);
     if (!res.ok) {
       throw new Error(`Crawl server responded with status: ${res.status}`);
     }
@@ -1642,7 +1644,7 @@ async function generateRoadmap() {
 
   showLoading("Generating Visibility Roadmap...", "Constructing chronological workflow and estimating optimization weights");
   try {
-    const res = await fetch(`${API_BASE}/roadmap?url=${encodeURIComponent(url)}`);
+    const res = await fetch(`${window.API_BASE}/roadmap?url=${encodeURIComponent(url)}`);
     const responseData = await res.json();
     const data = responseData.data || responseData;
     hideLoading();
@@ -1701,7 +1703,7 @@ async function keywordTheft() {
 
   showLoading("Parsing Keyword Intelligence...", "Analyzing competitor semantic anchor texts and keyword clusters");
   try {
-    const res = await fetch(`${API_BASE}/content-gap?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
+    const res = await fetch(`${window.API_BASE}/content-gap?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     const responseData = await res.json();
     const data = responseData.data || responseData;
     hideLoading();
@@ -1743,7 +1745,7 @@ async function gapAnalysis() {
 
   showLoading("Finding Semantic Gaps...", "Cross-referencing domain taxonomies and comparing topical coverage percent");
   try {
-    const res = await fetch(`${API_BASE}/content-gap?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
+    const res = await fetch(`${window.API_BASE}/content-gap?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     const responseData = await res.json();
     const data = responseData.data || responseData;
     hideLoading();
@@ -1804,7 +1806,7 @@ async function compareCompetitor() {
 
   showLoading("Benchmarking Domains...", "Analyzing competitor SEO architectures and citation likelihood indexes");
   try {
-    const res = await fetch(`${API_BASE}/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
+    const res = await fetch(`${window.API_BASE}/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     const responseData = await res.json();
     const data = responseData.data || responseData;
     hideLoading();

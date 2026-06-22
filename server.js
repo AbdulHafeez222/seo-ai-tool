@@ -1349,72 +1349,47 @@ export async function analyzeSingleUrl(url) {
   
   // Validate and normalize raw parameter inputs safely
   const rawUrl = url;
-  let normalizedUrl;
+  let normalizedUrl = null;
   
   try {
     console.log("[DIAGNOSTIC] URL normalization - START: rawUrl =", rawUrl);
     normalizedUrl = enforceSecureUrl(url);
     console.log("[DIAGNOSTIC] URL normalization - END: normalizedUrl =", normalizedUrl);
     console.log("STEP 1 COMPLETE: URL normalization");
-  } catch (err) {
-    console.error("FAILED STEP URL normalization:", err);
-    throw err;
-  }
 
-  const cacheKey = normalizeUrl(normalizedUrl || url);
-  
-  console.log("RAW URL:", rawUrl);
-  console.log("NORMALIZED URL:", normalizedUrl);
-  
-  if (!normalizedUrl) {
-    return {
-      error: "Malformed target domain or invalid TLD",
-      crawlSuccess: false,
-      status: "error"
-    };
-  }
+    const cacheKey = normalizeUrl(normalizedUrl || url);
+    
+    console.log("RAW URL:", rawUrl);
+    console.log("NORMALIZED URL:", normalizedUrl);
+    
+    if (!normalizedUrl) {
+      return {
+        error: "Malformed target domain or invalid TLD",
+        crawlSuccess: false,
+        status: "error"
+      };
+    }
 
-  let html;
-  let crawlResult;
-  let startTime;
-  let loadTime;
-
-  try {
-    startTime = Date.now();
+    const startTime = Date.now();
     console.log("[DIAGNOSTIC] Fetch page / HTML Extraction - START: normalizedUrl =", normalizedUrl);
-    crawlResult = await smartCrawl(normalizedUrl);
-    loadTime = Date.now() - startTime;
-    html = crawlResult.html;
+    const crawlResult = await smartCrawl(normalizedUrl);
+    const loadTime = Date.now() - startTime;
+    let html = crawlResult.html;
     console.log("[DIAGNOSTIC] Fetch page / HTML Extraction - END: html length =", html?.length);
     console.log("STEP 2 COMPLETE: Fetch page and HTML extraction");
-  } catch (err) {
-    console.error("FAILED STEP Fetch page / HTML extraction:", err);
-    throw err;
-  }
 
-  let $, backupExtraction, title, metaDescription, h1, bodyText, wordCount, h2s, h3s;
-  let schemas, uniqueSchemas, recommendedSchemas, schemaDetected, schemaCount;
-  let h1Count, h2Count, h3Count, listCount, tableCount, totalImages, imagesWithoutAlt;
-  let isHttps, mobileViewport, canonical, hasCanonical, favicon, hasFavicon;
-  let hasFAQ, hasHowTo, hasLocalBusiness, hasDirectAnswer, faqQuestions;
-  let ogTitle, ogDescription, ogImage, hasOGTags;
-  let hasAuthor, lastModified, hasLastModified;
-  let hasFacebook, hasLinkedIn, hasYouTube, hasTwitter;
-  let email, phone, hasEmail, hasPhone, keywords;
-
-  try {
     console.log("[DIAGNOSTIC] Content parsing - START");
-    $ = cheerio.load(html);
+    const $ = cheerio.load(html);
 
     // Apply regexFallbackParser if Cheerio finds empty fields
-    backupExtraction = regexFallbackParser(html, normalizedUrl);
+    const backupExtraction = regexFallbackParser(html, normalizedUrl);
 
     let rawBodyText = safeText($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
     rawBodyText = cleanText(rawBodyText);
 
     $('script, style, nav, footer, header, noscript, svg').remove();
 
-    title = safeText($("title").text()).trim();
+    let title = safeText($("title").text()).trim();
     if (!title || title.toLowerCase().includes("not found")) {
       title = safeText($('meta[property="og:title"]').attr("content")).trim() || 
               safeText($('meta[name="twitter:title"]').attr("content")).trim() || 
@@ -1424,7 +1399,7 @@ export async function analyzeSingleUrl(url) {
     }
     title = cleanText(title);
 
-    metaDescription = safeText($('meta[name="description"]').attr("content")).trim();
+    let metaDescription = safeText($('meta[name="description"]').attr("content")).trim();
     if (!metaDescription || metaDescription.toLowerCase().includes("not found")) {
       metaDescription = safeText($('meta[property="og:description"]').attr("content")).trim() || 
                         safeText($('meta[name="twitter:description"]').attr("content")).trim() || 
@@ -1434,98 +1409,85 @@ export async function analyzeSingleUrl(url) {
     }
     metaDescription = cleanText(metaDescription);
 
-    h1 = safeText($("h1").first().text()).trim() || backupExtraction.h1 || `Proven Expert Digital Systems`;
+    let h1 = safeText($("h1").first().text()).trim() || backupExtraction.h1 || `Proven Expert Digital Systems`;
     h1 = cleanText(h1);
 
-    bodyText = rawBodyText || "No content scanned.";
-    wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
+    const bodyText = rawBodyText || "No content scanned.";
+    const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
     
-    h2s = $("h2").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
+    let h2s = $("h2").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
     if (h2s.length === 0) h2s = backupExtraction.h2s;
 
-    h3s = $("h3").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
+    let h3s = $("h3").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
     if (h3s.length === 0) h3s = backupExtraction.h3s;
 
-    schemas = detectAllSchemas($, html);
-    uniqueSchemas = Object.keys(schemas).filter(k => schemas[k]?.present) || [];
-    recommendedSchemas = Object.keys(schemas).filter(k => schemas[k]?.recommended && !schemas[k]?.present) || [];
-    schemaDetected = uniqueSchemas.length > 0;
-    schemaCount = uniqueSchemas.length;
+    const schemas = detectAllSchemas($, html);
+    
+    const uniqueSchemas = Object.keys(schemas).filter(k => schemas[k]?.present) || [];
+    const recommendedSchemas = Object.keys(schemas).filter(k => schemas[k]?.recommended && !schemas[k]?.present) || [];
+    const schemaDetected = uniqueSchemas.length > 0;
+    const schemaCount = uniqueSchemas.length;
 
-    faqQuestions = [];
+    const faqQuestions = [];
     if (schemas.FAQPage?.present && schemas.FAQPage?.data?.length > 0) {
       schemas.FAQPage.data.forEach(schema => {
         schema?.mainEntity?.forEach(q => { if (q?.name) faqQuestions.push(safeText(q.name)); });
       });
     }
 
-    h1Count = $("h1").length || (backupExtraction.h1 ? 1 : 0);
-    h2Count = $("h2").length || h2s.length;
-    h3Count = $("h3").length || h3s.length;
-    listCount = $("ul, ol").length || 0;
-    tableCount = $("table").length || 0;
-    totalImages = $("img").length || 0;
-    imagesWithoutAlt = $("img").filter((i, el) => !$(el).attr("alt")).length || 0;
-    isHttps = normalizedUrl.startsWith("https://");
-    mobileViewport = $('meta[name="viewport"]').length > 0;
-    canonical = safeText($('link[rel="canonical"]').attr("href"));
-    hasCanonical = !!canonical;
-    favicon = safeText($('link[rel="icon"], link[rel="shortcut icon"]').attr("href"));
-    hasFavicon = !!favicon;
+    const h1Count = $("h1").length || (backupExtraction.h1 ? 1 : 0);
+    const h2Count = $("h2").length || h2s.length;
+    const h3Count = $("h3").length || h3s.length;
+    const listCount = $("ul, ol").length || 0;
+    const tableCount = $("table").length || 0;
+    const totalImages = $("img").length || 0;
+    const imagesWithoutAlt = $("img").filter((i, el) => !$(el).attr("alt")).length || 0;
+    const isHttps = normalizedUrl.startsWith("https://");
+    const mobileViewport = $('meta[name="viewport"]').length > 0;
+    const canonical = safeText($('link[rel="canonical"]').attr("href"));
+    const hasCanonical = !!canonical;
+    const favicon = safeText($('link[rel="icon"], link[rel="shortcut icon"]').attr("href"));
+    const hasFavicon = !!favicon;
 
-    hasFAQ = faqQuestions.length > 0 || schemas.FAQPage?.present || false;
-    hasHowTo = schemas.HowTo?.present || false;
-    hasLocalBusiness = schemas.LocalBusiness?.present || false;
-    hasDirectAnswer = (bodyText.includes("Q:") && bodyText.includes("A:")) || bodyText.toLowerCase().includes("what is") || bodyText.toLowerCase().includes("how to") || (h2Count >= 3 && bodyText.length > 500);
+    const hasFAQ = faqQuestions.length > 0 || schemas.FAQPage?.present || false;
+    const hasHowTo = schemas.HowTo?.present || false;
+    const hasLocalBusiness = schemas.LocalBusiness?.present || false;
+    const hasDirectAnswer = (bodyText.includes("Q:") && bodyText.includes("A:")) || bodyText.toLowerCase().includes("what is") || bodyText.toLowerCase().includes("how to") || (h2Count >= 3 && bodyText.length > 500);
 
-    ogTitle = safeText($('meta[property="og:title"]').attr("content"));
-    ogDescription = safeText($('meta[property="og:description"]').attr("content"));
-    ogImage = safeText($('meta[property="og:image"]').attr("content"));
-    hasOGTags = !!(ogTitle && ogDescription);
+    const ogTitle = safeText($('meta[property="og:title"]').attr("content"));
+    const ogDescription = safeText($('meta[property="og:description"]').attr("content"));
+    const ogImage = safeText($('meta[property="og:image"]').attr("content"));
+    const hasOGTags = !!(ogTitle && ogDescription);
 
-    hasAuthor = $('meta[name="author"]').length > 0 || $('[rel="author"]').length > 0 || $('[itemprop="author"]').length > 0;
+    const hasAuthor = $('meta[name="author"]').length > 0 || $('[rel="author"]').length > 0 || $('[itemprop="author"]').length > 0;
     const dateStr = safeText($('meta[property="article:modified_time"]').attr('content') || $('meta[property="article:published_time"]').attr('content'));
-    hasLastModified = !!dateStr;
-    lastModified = dateStr ? new Date(dateStr).toLocaleDateString() : null;
+    const hasLastModified = !!dateStr;
+    const lastModified = dateStr ? new Date(dateStr).toLocaleDateString() : null;
 
     const socialLinks = $("a").map((i, el) => safeText($(el).attr("href"))).get() || [];
-    hasFacebook = socialLinks.some(link => link.includes("facebook.com"));
-    hasLinkedIn = socialLinks.some(link => link.includes("linkedin.com"));
-    hasYouTube = socialLinks.some(link => link.includes("youtube.com"));
-    hasTwitter = socialLinks.some(link => link.includes("twitter.com") || link.includes("x.com"));
+    const hasFacebook = socialLinks.some(link => link.includes("facebook.com"));
+    const hasLinkedIn = socialLinks.some(link => link.includes("linkedin.com"));
+    const hasYouTube = socialLinks.some(link => link.includes("youtube.com"));
+    const hasTwitter = socialLinks.some(link => link.includes("twitter.com") || link.includes("x.com"));
 
     const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
     const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
-    email = emailMatch ? emailMatch[0] : null;
-    phone = phoneMatch ? phoneMatch[0] : null;
-    hasEmail = !!email;
-    hasPhone = !!phone;
+    const email = emailMatch ? emailMatch[0] : null;
+    const phone = phoneMatch ? phoneMatch[0] : null;
+    const hasEmail = !!email;
+    const hasPhone = !!phone;
 
-    keywords = tokenizeKeywords(bodyText);
+    const keywords = tokenizeKeywords(bodyText);
 
     console.log("[DIAGNOSTIC] Content parsing - END: parsed metadata successfully");
     console.log("STEP 3 COMPLETE: Content parsing");
-  } catch (err) {
-    console.error("FAILED STEP Content parsing:", err);
-    throw err;
-  }
 
-  let entityData, entityCoverageScore;
-  try {
     console.log("[DIAGNOSTIC] Entity extraction - START");
-    entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, normalizedUrl, schemas);
-    entityCoverageScore = clamp(safeArray(entityData?.entities).length * 10);
+    const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, normalizedUrl, schemas);
+    const entityCoverageScore = clamp(safeArray(entityData?.entities).length * 10);
     console.log("[DIAGNOSTIC] Entity extraction - END: entities count =", entityData?.entities?.length);
     console.log("STEP 4 COMPLETE: Entity extraction");
-  } catch (err) {
-    console.error("FAILED STEP Entity extraction:", err);
-    throw err;
-  }
 
-  let seoScore, aeoScore, eeatScore, citationProbability, currentAIVisibility, potentialAIVisibility, totalRoadmapImpact;
-  let payload;
-
-  try {
     console.log("[DIAGNOSTIC] AI Visibility Calculation / Score Generation - START");
     const crawlQuality = crawlResult.type === "STRONG_PAGE" ? "High Quality" : (crawlResult.type === "NORMAL_PAGE" ? "Moderate Content" : "Low Content / Stub");
     const crawlBlocked = crawlResult.type === "BLOCKED";
@@ -1656,7 +1618,7 @@ export async function analyzeSingleUrl(url) {
       improvementSuggestions: []
     });
 
-    citationProbability = simulationResult.citationProbability;
+    const citationProbability = simulationResult.citationProbability;
     const citationChatGPT = simulationResult.citationChatGPT;
     const citationGemini = simulationResult.citationGemini;
     const citationPerplexity = simulationResult.citationPerplexity;
@@ -1714,9 +1676,9 @@ export async function analyzeSingleUrl(url) {
       previousEEAT = lastPoint.eeat || eeatData.score;
     }
 
-    seoScore = Math.max(35, Math.round((rawSeoScore * 0.6) + (previousSEO * 0.4)));
-    aeoScore = Math.max(35, Math.round((rawAeoScore * 0.6) + (previousAEO * 0.4)));
-    eeatScore = Math.max(35, Math.round((eeatData.score * 0.6) + (previousEEAT * 0.4)));
+    const seoScore = Math.max(35, Math.round((rawSeoScore * 0.6) + (previousSEO * 0.4)));
+    const aeoScore = Math.max(35, Math.round((rawAeoScore * 0.6) + (previousAEO * 0.4)));
+    const eeatScore = Math.max(35, Math.round((eeatData.score * 0.6) + (previousEEAT * 0.4)));
 
     eeatData.score = eeatScore;
 
@@ -1797,9 +1759,9 @@ export async function analyzeSingleUrl(url) {
       internalLinkData.weakLinking && { task: "Fix Internal Linking Structure", impact: 12, effort: "20 mins", priority: "HIGH" }
     ].filter(Boolean);
 
-    totalRoadmapImpact = aiAutopilot.reduce((acc, curr) => acc + safeNumber(curr.impact), 0);
-    currentAIVisibility = overallAIVisibilityScore;
-    potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
+    const totalRoadmapImpact = aiAutopilot.reduce((acc, curr) => acc + safeNumber(curr.impact), 0);
+    const currentAIVisibility = overallAIVisibilityScore;
+    const potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
 
     const visibilityForecast = {
       current: currentAIVisibility,
@@ -2100,12 +2062,12 @@ export async function analyzeSingleUrl(url) {
     console.log("[DIAGNOSTIC] AI Visibility Calculation / Score Generation / Response Creation - END: payload created");
     console.log("STEP 5 COMPLETE: AI Visibility calculation");
     console.log("STEP 6 COMPLETE: Response creation");
+
+    return payload;
   } catch (err) {
     console.error("FAILED STEP AI Visibility calculation / Score generation:", err);
     throw err;
   }
-
-  return payload;
 } catch (err) {
   console.error("FAILED STEP inside overall analyzeSingleUrl:", err);
   return fallbackSafePayload(normalizedUrl || url, err);

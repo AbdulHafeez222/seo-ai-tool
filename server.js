@@ -169,7 +169,6 @@ const fallbackRegistry = {
     try {
       return fn();
     } catch (e) {
-      console.error("[SAFE RUN BLOCK BYPASS]", e.message);
       return fallback;
     }
   },
@@ -280,7 +279,6 @@ async function getBrowserInstance() {
     });
     return globalBrowser;
   } catch (err) {
-    console.warn("Playwright engine failed to initialize:", err.message);
     return null;
   }
 }
@@ -301,7 +299,6 @@ export async function withRetry(fn, retries = 2, delay = 1000) {
       return await fn();
     } catch (err) {
       if (i === retries) throw err;
-      console.warn(`[RETRY ENGINE] Strategy attempt ${i + 1}/${retries} failed: ${err.message}. Retrying in ${delay}ms...`);
       await new Promise(resolve => setTimeout(resolve, delay));
       delay *= 2;
     }
@@ -312,6 +309,16 @@ export async function withRetry(fn, retries = 2, delay = 1000) {
 export function classifyPage(html = "", status = 200) {
   if (!html || typeof html !== "string") return "BLOCKED";
   
+  // Rule: Treat HTML > 5000 chars as valid always
+  if (html.length >= 5000) {
+    return "STRONG_PAGE";
+  }
+
+  // Rule: If HTTP success and HTML > 1000 chars → always accept page
+  if (status === 200 && html.length >= 1000) {
+    return "NORMAL_PAGE";
+  }
+
   const lowerHtml = html.toLowerCase();
   const isBlockedStatus = status >= 400;
   
@@ -372,33 +379,43 @@ async function fetchAxios(url, options = {}) {
 
 // Playwright Dynamic Scraper Fallback
 async function fetchPlaywright(url) {
-  const browser = await getBrowserInstance();
-  if (!browser) {
-    throw new Error("Playwright is not available globally.");
-  }
-  const context = await browser.newContext({
-    userAgent: USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
-  });
-  const page = await context.newPage();
+  let browser;
   try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-    const content = await page.content();
-    const finalUrl = page.url() || url;
-    return { html: content, status: 200, finalUrl };
-  } finally {
-    await page.close();
-    await context.close();
+    browser = await getBrowserInstance();
+  } catch (e) {
+    // Gracefully skip if playwright is missing or fails to initialize
+    return null;
+  }
+  if (!browser) {
+    return null;
+  }
+  try {
+    const context = await browser.newContext({
+      userAgent: USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
+    });
+    const page = await context.newPage();
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+      const content = await page.content();
+      const finalUrl = page.url() || url;
+      return { html: content, status: 200, finalUrl };
+    } finally {
+      await page.close();
+      await context.close();
+    }
+  } catch (err) {
+    return null;
   }
 }
 
 // Unified Smart Crawl Controller
 export async function smartCrawl(url) {
   let result = null;
-  console.log(`[DIAGNOSTIC] starting smartCrawl for URL: ${url}`);
+  console.log(`[CRAWL] Starting scan: ${url}`);
   try {
     result = await withRetry(() => fetchAxios(url), 1);
   } catch (err) {
-    console.warn(`[SMART CRAWLER] HTTP Fetch failed, fallback layer ready: ${err.message}`);
+    // Handled inside pipeline wrapper
   }
 
   let html = result?.html || "";
@@ -409,7 +426,6 @@ export async function smartCrawl(url) {
 
   // Fallback to Playwright if Axios gets blocked or thin page context
   if (type === "BLOCKED" || type === "JS_OR_THIN_PAGE") {
-    console.log(`[SMART CRAWLER] URL detected as ${type}. Invoking Playwright browser rendering pipeline...`);
     try {
       const pwResult = await withRetry(() => fetchPlaywright(url), 1);
       if (pwResult && pwResult.html && pwResult.html.length >= 300) {
@@ -419,7 +435,7 @@ export async function smartCrawl(url) {
         type = classifyPage(html, status);
       }
     } catch (pwErr) {
-      console.error(`[SMART CRAWLER] Playwright rendering process failed:`, pwErr.message);
+      // Gracefully continue
     }
   }
 
@@ -430,7 +446,11 @@ export async function smartCrawl(url) {
     type = "NORMAL_PAGE";
   }
 
-  console.log(`[DIAGNOSTIC] smartCrawl completed for URL: ${url}, status: ${status}, type: ${type}`);
+  if (status === 200) {
+    console.log(`[CRAWL] Fetch success: ${url}`);
+  } else {
+    console.log(`[CRAWL] Fetch failed: ${url} (status: ${status})`);
+  }
   return { html, finalUrl, type, status };
 }
 
@@ -453,9 +473,7 @@ export function regexFallbackParser(html, url) {
     if (descMatch) result.metaDescription = descMatch[1].trim();
 
     const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-    if (h1Match) {
-  result.h1 = h1Match[1].trim();
-}
+    if (h1Match) result.h1 = h1Match[1].trim();
 
     const h2Matches = [...html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
     result.h2s = h2Matches.map(m => m[1].replace(/<[^>]*>/g, "").trim()).filter(Boolean);
@@ -463,7 +481,7 @@ export function regexFallbackParser(html, url) {
     const h3Matches = [...html.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/gi)];
     result.h3s = h3Matches.map(m => m[1].replace(/<[^>]*>/g, "").trim()).filter(Boolean);
   } catch (e) {
-    console.error("Regex fallback parser encountered an error:", e);
+    // Silently handle fallback
   }
 
   return result;
@@ -1347,27 +1365,18 @@ export function enforceSecureUrl(inputUrl) {
 // =========================================================================
 
 export async function analyzeSingleUrl(url) {
-  console.log("[DIAGNOSTIC] analyzeSingleUrl starting with URL:", url);
-  
   // Validate and normalize raw parameter inputs safely
   const rawUrl = url;
   let normalizedUrl;
   
   try {
     try {
-      console.log("[DIAGNOSTIC] URL normalization - START: rawUrl =", rawUrl);
       normalizedUrl = enforceSecureUrl(url);
-      console.log("[DIAGNOSTIC] URL normalization - END: normalizedUrl =", normalizedUrl);
-      console.log("STEP 1 COMPLETE: URL normalization");
     } catch (err) {
-      console.error("FAILED STEP URL normalization:", err);
       throw err;
     }
 
     const cacheKey = normalizeUrl(normalizedUrl || url);
-    
-    console.log("RAW URL:", rawUrl);
-    console.log("NORMALIZED URL:", normalizedUrl);
     
     if (!normalizedUrl) {
       return {
@@ -1384,14 +1393,10 @@ export async function analyzeSingleUrl(url) {
 
     try {
       startTime = Date.now();
-      console.log("[DIAGNOSTIC] Fetch page / HTML Extraction - START: normalizedUrl =", normalizedUrl);
       crawlResult = await smartCrawl(normalizedUrl);
       loadTime = Date.now() - startTime;
       html = crawlResult.html;
-      console.log("[DIAGNOSTIC] Fetch page / HTML Extraction - END: html length =", html?.length);
-      console.log("STEP 2 COMPLETE: Fetch page and HTML extraction");
     } catch (err) {
-      console.error("FAILED STEP Fetch page / HTML extraction:", err);
       throw err;
     }
 
@@ -1406,7 +1411,6 @@ export async function analyzeSingleUrl(url) {
     let email, phone, hasEmail, hasPhone, keywords;
 
     try {
-      console.log("[DIAGNOSTIC] Content parsing - START");
       $ = cheerio.load(html);
 
       // Apply regexFallbackParser if Cheerio finds empty fields
@@ -1505,23 +1509,15 @@ export async function analyzeSingleUrl(url) {
       hasPhone = !!phone;
 
       keywords = tokenizeKeywords(bodyText);
-
-      console.log("[DIAGNOSTIC] Content parsing - END: parsed metadata successfully");
-      console.log("STEP 3 COMPLETE: Content parsing");
     } catch (err) {
-      console.error("FAILED STEP Content parsing:", err);
       throw err;
     }
 
     let entityData, entityCoverageScore;
     try {
-      console.log("[DIAGNOSTIC] Entity extraction - START");
       entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, normalizedUrl, schemas);
       entityCoverageScore = clamp(safeArray(entityData?.entities).length * 10);
-      console.log("[DIAGNOSTIC] Entity extraction - END: entities count =", entityData?.entities?.length);
-      console.log("STEP 4 COMPLETE: Entity extraction");
     } catch (err) {
-      console.error("FAILED STEP Entity extraction:", err);
       throw err;
     }
 
@@ -1529,7 +1525,6 @@ export async function analyzeSingleUrl(url) {
     let payload;
 
     try {
-      console.log("[DIAGNOSTIC] AI Visibility Calculation / Score Generation - START");
       const crawlQuality = crawlResult.type === "STRONG_PAGE" ? "High Quality" : (crawlResult.type === "NORMAL_PAGE" ? "Moderate Content" : "Low Content / Stub");
       const crawlBlocked = crawlResult.type === "BLOCKED";
 
@@ -1892,7 +1887,6 @@ export async function analyzeSingleUrl(url) {
         missingEntities: []
       });
 
-      console.log("[DIAGNOSTIC] Response creation - START");
       payload = {
         status: "success",
         seoScore,
@@ -2100,24 +2094,19 @@ export async function analyzeSingleUrl(url) {
       });
       if (scanHistory.length > 50) scanHistory.pop();
 
-      console.log("[DIAGNOSTIC] AI Visibility Calculation / Score Generation / Response Creation - END: payload created");
-      console.log("STEP 5 COMPLETE: AI Visibility calculation");
-      console.log("STEP 6 COMPLETE: Response creation");
     } catch (err) {
-      console.error("FAILED STEP AI Visibility calculation / Score generation:", err);
       throw err;
     }
 
+    console.log(`[SCAN] Complete: ${normalizedUrl} (Status: ${payload?.status})`);
     return payload;
   } catch (err) {
-    console.error("FAILED STEP inside overall analyzeSingleUrl:", err);
     return fallbackSafePayload(normalizedUrl || url, err);
   }
 }
 
 // TASK 3: FIX GAP FINDER
 export function competitorContentGap(userData, compData) {
-  console.log("[DIAGNOSTIC] starting competitorContentGap mapping");
   try {
     if (!userData || !compData || userData.stopProcessing || compData.stopProcessing) {
       return {
@@ -2166,7 +2155,6 @@ export function competitorContentGap(userData, compData) {
       });
     }
 
-    console.log("[DIAGNOSTIC] competitorContentGap mapped successfully");
     return {
       headingGaps: finalHeadingGaps.length > 0 ? finalHeadingGaps.slice(0, 10) : headingGaps.slice(0, 10),
       keywordGaps: keywordGaps.slice(0, 15),
@@ -2176,7 +2164,6 @@ export function competitorContentGap(userData, compData) {
       topicalCoverageStatus
     };
   } catch (err) {
-    console.error("FAILED STEP inside competitorContentGap:", err);
     throw err;
   }
 }
@@ -2295,7 +2282,6 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
       ...data
     });
   } catch (err) {
-    console.error("SCAN ENDPOINT ERROR:", err.message);
     const fb = fallbackSafePayload(normalized, err);
     res.json({
       status: "error",
@@ -2314,19 +2300,15 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
 });
 
 app.get("/compare", authenticateAndRateLimit, async (req, res) => {
-  console.log("[DIAGNOSTIC] GET /compare request initiated");
   try {
     const { url, competitor } = req.query;
     if (!url || !competitor) return res.status(400).json({ error: "Both URLs required" });
 
     let normalizedUrl, normalizedComp;
     try {
-      console.log("[DIAGNOSTIC] URL normalization for comparison - START");
       normalizedUrl = enforceSecureUrl(url);
       normalizedComp = enforceSecureUrl(competitor);
-      console.log("[DIAGNOSTIC] URL normalization for comparison - END");
     } catch (err) {
-      console.error("FAILED STEP comparison URL normalization:", err);
       throw err;
     }
 
@@ -2336,14 +2318,11 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
 
     let results;
     try {
-      console.log("[DIAGNOSTIC] Fetch pages / analysis processes for comparison - START");
       results = await Promise.allSettled([
         analyzeSingleUrl(normalizedUrl),
         analyzeSingleUrl(normalizedComp)
       ]);
-      console.log("[DIAGNOSTIC] Fetch pages / analysis processes for comparison - END");
     } catch (err) {
-      console.error("FAILED STEP comparison crawling/analysis:", err);
       throw err;
     }
 
@@ -2377,7 +2356,6 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
 
     let competitorAdvantage, leaderBrand;
     try {
-      console.log("[DIAGNOSTIC] competitor analysis (advantages calculation) - START");
       const seoAdvantage = (site1?.score || 0) - (site2?.score || 0);
       const aeoAdvantage = (site1?.aeoScore || 0) - (site2?.aeoScore || 0);
       const eeatAdvantage = (site1?.breakdown?.eeatScore || 0) - (site2?.breakdown?.eeatScore || 0);
@@ -2394,13 +2372,10 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
         trustAdvantage: { diff: Math.abs(trustAdvantage), leader: trustAdvantage > 0 ? "You" : (trustAdvantage < 0 ? "Competitor" : "Tie") },
         finalWinner: leaderBrand
       };
-      console.log("[DIAGNOSTIC] competitor analysis (advantages calculation) - END");
     } catch (err) {
-      console.error("FAILED STEP competitor analysis calculation:", err);
       throw err;
     }
 
-    console.log("[DIAGNOSTIC] Response creation for /compare - START");
     res.json({
       status: "success",
       seoScore: site1?.overallAIVisibilityScore || 0,
@@ -2416,27 +2391,21 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
       winner: site1?.overallAIVisibilityScore >= site2?.overallAIVisibilityScore ? site1 : site2,
       winnerReason: `${leaderBrand} commands clear performance leads overall.`
     });
-    console.log("[DIAGNOSTIC] Response creation for /compare - END");
   } catch (err) {
-    console.error("COMPARE ERROR:", err);
     res.status(500).json({ status: "error", message: err.message });
   }
 });
 
 app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
-  console.log("[DIAGNOSTIC] GET /content-gap request initiated");
   try {
     const { url, competitor } = req.query;
     if (!url || !competitor) return res.status(400).json({ error: "Both URLs required" });
 
     let normalizedUrl, normalizedComp;
     try {
-      console.log("[DIAGNOSTIC] URL normalization for content-gap - START");
       normalizedUrl = enforceSecureUrl(url);
       normalizedComp = enforceSecureUrl(competitor);
-      console.log("[DIAGNOSTIC] URL normalization for content-gap - END");
     } catch (err) {
-      console.error("FAILED STEP content-gap URL normalization:", err);
       throw err;
     }
 
@@ -2446,14 +2415,11 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
 
     let userData, compData;
     try {
-      console.log("[DIAGNOSTIC] Crawl and Analysis processes for content-gap - START");
       [userData, compData] = await Promise.all([
         analyzeSingleUrl(normalizedUrl),
         analyzeSingleUrl(normalizedComp)
       ]);
-      console.log("[DIAGNOSTIC] Crawl and Analysis processes for content-gap - END");
     } catch (err) {
-      console.error("FAILED STEP content-gap crawling/analysis:", err);
       throw err;
     }
 
@@ -2463,15 +2429,11 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
 
     let gapData;
     try {
-      console.log("[DIAGNOSTIC] Competitor analysis (gap finder calculations) - START");
       gapData = competitorContentGap(userData, compData);
-      console.log("[DIAGNOSTIC] Competitor analysis (gap finder calculations) - END");
     } catch (err) {
-      console.error("FAILED STEP content-gap finder calculation:", err);
       throw err;
     }
     
-    console.log("[DIAGNOSTIC] Response creation for /content-gap - START");
     res.json({
       status: "success",
       seoScore: userData?.seoScore || 0,
@@ -2488,25 +2450,20 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
         missingTopics: gapData?.headingGaps || []
       }
     });
-    console.log("[DIAGNOSTIC] Response creation for /content-gap - END");
   } catch (err) {
     res.status(500).json({ status: "error", message: err.message });
   }
 });
 
 app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
-  console.log("[DIAGNOSTIC] GET /roadmap request initiated");
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: "URL required" });
     
     let normalizedUrl;
     try {
-      console.log("[DIAGNOSTIC] URL normalization for roadmap - START");
       normalizedUrl = enforceSecureUrl(url);
-      console.log("[DIAGNOSTIC] URL normalization for roadmap - END");
     } catch (err) {
-      console.error("FAILED STEP roadmap URL normalization:", err);
       throw err;
     }
 
@@ -2514,11 +2471,8 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
 
     let data;
     try {
-      console.log("[DIAGNOSTIC] Fetch page / Analysis process for roadmap - START");
       data = await analyzeSingleUrl(normalizedUrl);
-      console.log("[DIAGNOSTIC] Fetch page / Analysis process for roadmap - END");
     } catch (err) {
-      console.error("FAILED STEP roadmap analysis:", err);
       throw err;
     }
 
@@ -2528,7 +2482,6 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
 
     let autopilotTasks, roadmap, totalRoadmapImpact, currentAIVisibility, potentialAIVisibility;
     try {
-      console.log("[DIAGNOSTIC] roadmap / autopilot calculation - START");
       autopilotTasks = data?.aiAutopilot || [];
       roadmap = autopilotTasks.map((task, i) => ({
         step: i + 1, 
@@ -2543,13 +2496,10 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
       totalRoadmapImpact = roadmap.reduce((acc, curr) => acc + safeNumber(curr.impact), 0);
       currentAIVisibility = data?.overallAIVisibilityScore || 0;
       potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
-      console.log("[DIAGNOSTIC] roadmap / autopilot calculation - END");
     } catch (err) {
-      console.error("FAILED STEP roadmap calculations:", err);
       throw err;
     }
     
-    console.log("[DIAGNOSTIC] Response creation for /roadmap - START");
     res.json({
       status: "success",
       seoScore: data?.seoScore || 0,
@@ -2567,7 +2517,6 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
       },
       estimatedTime: `${Math.ceil(roadmap.length * 0.5)} hours`
     });
-    console.log("[DIAGNOSTIC] Response creation for /roadmap - END");
   } catch (err) {
     res.status(500).json({ status: "error", message: err.message });
   }

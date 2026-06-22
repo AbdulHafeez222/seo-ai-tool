@@ -453,7 +453,9 @@ export function regexFallbackParser(html, url) {
     if (descMatch) result.metaDescription = descMatch[1].trim();
 
     const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-    if h1Match result.h1 = h1Match[1].trim();
+    if (h1Match) {
+  result.h1 = h1Match[1].trim();
+}
 
     const h2Matches = [...html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
     result.h2s = h2Matches.map(m => m[1].replace(/<[^>]*>/g, "").trim()).filter(Boolean);

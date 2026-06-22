@@ -394,6 +394,7 @@ async function fetchPlaywright(url) {
 // Unified Smart Crawl Controller
 export async function smartCrawl(url) {
   let result = null;
+  console.log(`[DIAGNOSTIC] starting smartCrawl for URL: ${url}`);
   try {
     result = await withRetry(() => fetchAxios(url), 1);
   } catch (err) {
@@ -429,6 +430,7 @@ export async function smartCrawl(url) {
     type = "NORMAL_PAGE";
   }
 
+  console.log(`[DIAGNOSTIC] smartCrawl completed for URL: ${url}, status: ${status}, type: ${type}`);
   return { html, finalUrl, type, status };
 }
 
@@ -1343,9 +1345,22 @@ export function enforceSecureUrl(inputUrl) {
 // =========================================================================
 
 export async function analyzeSingleUrl(url) {
+  console.log("[DIAGNOSTIC] analyzeSingleUrl starting with URL:", url);
+  
   // Validate and normalize raw parameter inputs safely
   const rawUrl = url;
-  const normalizedUrl = enforceSecureUrl(url);
+  let normalizedUrl;
+  
+  try {
+    console.log("[DIAGNOSTIC] URL normalization - START: rawUrl =", rawUrl);
+    normalizedUrl = enforceSecureUrl(url);
+    console.log("[DIAGNOSTIC] URL normalization - END: normalizedUrl =", normalizedUrl);
+    console.log("STEP 1 COMPLETE: URL normalization");
+  } catch (err) {
+    console.error("FAILED STEP URL normalization:", err);
+    throw err;
+  }
+
   const cacheKey = normalizeUrl(normalizedUrl || url);
   
   console.log("RAW URL:", rawUrl);
@@ -1359,18 +1374,159 @@ export async function analyzeSingleUrl(url) {
     };
   }
 
+  let html;
+  let crawlResult;
+  let startTime;
+  let loadTime;
+
   try {
-    const startTime = Date.now();
+    startTime = Date.now();
+    console.log("[DIAGNOSTIC] Fetch page / HTML Extraction - START: normalizedUrl =", normalizedUrl);
+    crawlResult = await smartCrawl(normalizedUrl);
+    loadTime = Date.now() - startTime;
+    html = crawlResult.html;
+    console.log("[DIAGNOSTIC] Fetch page / HTML Extraction - END: html length =", html?.length);
+    console.log("STEP 2 COMPLETE: Fetch page and HTML extraction");
+  } catch (err) {
+    console.error("FAILED STEP Fetch page / HTML extraction:", err);
+    throw err;
+  }
 
-    console.log("FINAL FETCH URL:", normalizedUrl);
-    const crawlResult = await smartCrawl(normalizedUrl);
+  let $, backupExtraction, title, metaDescription, h1, bodyText, wordCount, h2s, h3s;
+  let schemas, uniqueSchemas, recommendedSchemas, schemaDetected, schemaCount;
+  let h1Count, h2Count, h3Count, listCount, tableCount, totalImages, imagesWithoutAlt;
+  let isHttps, mobileViewport, canonical, hasCanonical, favicon, hasFavicon;
+  let hasFAQ, hasHowTo, hasLocalBusiness, hasDirectAnswer, faqQuestions;
+  let ogTitle, ogDescription, ogImage, hasOGTags;
+  let hasAuthor, lastModified, hasLastModified;
+  let hasFacebook, hasLinkedIn, hasYouTube, hasTwitter;
+  let email, phone, hasEmail, hasPhone, keywords;
+
+  try {
+    console.log("[DIAGNOSTIC] Content parsing - START");
+    $ = cheerio.load(html);
+
+    // Apply regexFallbackParser if Cheerio finds empty fields
+    backupExtraction = regexFallbackParser(html, normalizedUrl);
+
+    let rawBodyText = safeText($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
+    rawBodyText = cleanText(rawBodyText);
+
+    $('script, style, nav, footer, header, noscript, svg').remove();
+
+    title = safeText($("title").text()).trim();
+    if (!title || title.toLowerCase().includes("not found")) {
+      title = safeText($('meta[property="og:title"]').attr("content")).trim() || 
+              safeText($('meta[name="twitter:title"]').attr("content")).trim() || 
+              safeText($("h1").first().text()).trim() || 
+              backupExtraction.title ||
+              `Expert Digital Systems Platform`;
+    }
+    title = cleanText(title);
+
+    metaDescription = safeText($('meta[name="description"]').attr("content")).trim();
+    if (!metaDescription || metaDescription.toLowerCase().includes("not found")) {
+      metaDescription = safeText($('meta[property="og:description"]').attr("content")).trim() || 
+                        safeText($('meta[name="twitter:description"]').attr("content")).trim() || 
+                        safeText($("p").first().text()).substring(0, 150).trim() || 
+                        backupExtraction.metaDescription ||
+                        `Comprehensive services and architectural layouts tailored around expert digital services.`;
+    }
+    metaDescription = cleanText(metaDescription);
+
+    h1 = safeText($("h1").first().text()).trim() || backupExtraction.h1 || `Proven Expert Digital Systems`;
+    h1 = cleanText(h1);
+
+    bodyText = rawBodyText || "No content scanned.";
+    wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
     
-    const finalRedirectUrl = crawlResult.finalUrl || normalizedUrl;
-    console.log("REDIRECT URL:", finalRedirectUrl);
+    h2s = $("h2").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
+    if (h2s.length === 0) h2s = backupExtraction.h2s;
 
-    const loadTime = Date.now() - startTime;
-    let html = crawlResult.html;
+    h3s = $("h3").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
+    if (h3s.length === 0) h3s = backupExtraction.h3s;
 
+    schemas = detectAllSchemas($, html);
+    uniqueSchemas = Object.keys(schemas).filter(k => schemas[k]?.present) || [];
+    recommendedSchemas = Object.keys(schemas).filter(k => schemas[k]?.recommended && !schemas[k]?.present) || [];
+    schemaDetected = uniqueSchemas.length > 0;
+    schemaCount = uniqueSchemas.length;
+
+    faqQuestions = [];
+    if (schemas.FAQPage?.present && schemas.FAQPage?.data?.length > 0) {
+      schemas.FAQPage.data.forEach(schema => {
+        schema?.mainEntity?.forEach(q => { if (q?.name) faqQuestions.push(safeText(q.name)); });
+      });
+    }
+
+    h1Count = $("h1").length || (backupExtraction.h1 ? 1 : 0);
+    h2Count = $("h2").length || h2s.length;
+    h3Count = $("h3").length || h3s.length;
+    listCount = $("ul, ol").length || 0;
+    tableCount = $("table").length || 0;
+    totalImages = $("img").length || 0;
+    imagesWithoutAlt = $("img").filter((i, el) => !$(el).attr("alt")).length || 0;
+    isHttps = normalizedUrl.startsWith("https://");
+    mobileViewport = $('meta[name="viewport"]').length > 0;
+    canonical = safeText($('link[rel="canonical"]').attr("href"));
+    hasCanonical = !!canonical;
+    favicon = safeText($('link[rel="icon"], link[rel="shortcut icon"]').attr("href"));
+    hasFavicon = !!favicon;
+
+    hasFAQ = faqQuestions.length > 0 || schemas.FAQPage?.present || false;
+    hasHowTo = schemas.HowTo?.present || false;
+    hasLocalBusiness = schemas.LocalBusiness?.present || false;
+    hasDirectAnswer = (bodyText.includes("Q:") && bodyText.includes("A:")) || bodyText.toLowerCase().includes("what is") || bodyText.toLowerCase().includes("how to") || (h2Count >= 3 && bodyText.length > 500);
+
+    ogTitle = safeText($('meta[property="og:title"]').attr("content"));
+    ogDescription = safeText($('meta[property="og:description"]').attr("content"));
+    ogImage = safeText($('meta[property="og:image"]').attr("content"));
+    hasOGTags = !!(ogTitle && ogDescription);
+
+    hasAuthor = $('meta[name="author"]').length > 0 || $('[rel="author"]').length > 0 || $('[itemprop="author"]').length > 0;
+    const dateStr = safeText($('meta[property="article:modified_time"]').attr('content') || $('meta[property="article:published_time"]').attr('content'));
+    hasLastModified = !!dateStr;
+    lastModified = dateStr ? new Date(dateStr).toLocaleDateString() : null;
+
+    const socialLinks = $("a").map((i, el) => safeText($(el).attr("href"))).get() || [];
+    hasFacebook = socialLinks.some(link => link.includes("facebook.com"));
+    hasLinkedIn = socialLinks.some(link => link.includes("linkedin.com"));
+    hasYouTube = socialLinks.some(link => link.includes("youtube.com"));
+    hasTwitter = socialLinks.some(link => link.includes("twitter.com") || link.includes("x.com"));
+
+    const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
+    email = emailMatch ? emailMatch[0] : null;
+    phone = phoneMatch ? phoneMatch[0] : null;
+    hasEmail = !!email;
+    hasPhone = !!phone;
+
+    keywords = tokenizeKeywords(bodyText);
+
+    console.log("[DIAGNOSTIC] Content parsing - END: parsed metadata successfully");
+    console.log("STEP 3 COMPLETE: Content parsing");
+  } catch (err) {
+    console.error("FAILED STEP Content parsing:", err);
+    throw err;
+  }
+
+  let entityData, entityCoverageScore;
+  try {
+    console.log("[DIAGNOSTIC] Entity extraction - START");
+    entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, normalizedUrl, schemas);
+    entityCoverageScore = clamp(safeArray(entityData?.entities).length * 10);
+    console.log("[DIAGNOSTIC] Entity extraction - END: entities count =", entityData?.entities?.length);
+    console.log("STEP 4 COMPLETE: Entity extraction");
+  } catch (err) {
+    console.error("FAILED STEP Entity extraction:", err);
+    throw err;
+  }
+
+  let seoScore, aeoScore, eeatScore, citationProbability, currentAIVisibility, potentialAIVisibility, totalRoadmapImpact;
+  let payload;
+
+  try {
+    console.log("[DIAGNOSTIC] AI Visibility Calculation / Score Generation - START");
     const crawlQuality = crawlResult.type === "STRONG_PAGE" ? "High Quality" : (crawlResult.type === "NORMAL_PAGE" ? "Moderate Content" : "Low Content / Stub");
     const crawlBlocked = crawlResult.type === "BLOCKED";
 
@@ -1384,107 +1540,6 @@ export async function analyzeSingleUrl(url) {
       throw new Error(validation.reason || "Crawl restricted by validation");
     }
 
-    const $ = cheerio.load(html);
-
-    // Apply regexFallbackParser if Cheerio finds empty fields
-    const backupExtraction = regexFallbackParser(html, normalizedUrl);
-
-    let rawBodyText = safeText($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
-    rawBodyText = cleanText(rawBodyText);
-
-    $('script, style, nav, footer, header, noscript, svg').remove();
-
-    let title = safeText($("title").text()).trim();
-    if (!title || title.toLowerCase().includes("not found")) {
-      title = safeText($('meta[property="og:title"]').attr("content")).trim() || 
-              safeText($('meta[name="twitter:title"]').attr("content")).trim() || 
-              safeText($("h1").first().text()).trim() || 
-              backupExtraction.title ||
-              `Expert Digital Systems Platform`;
-    }
-    title = cleanText(title);
-
-    let metaDescription = safeText($('meta[name="description"]').attr("content")).trim();
-    if (!metaDescription || metaDescription.toLowerCase().includes("not found")) {
-      metaDescription = safeText($('meta[property="og:description"]').attr("content")).trim() || 
-                        safeText($('meta[name="twitter:description"]').attr("content")).trim() || 
-                        safeText($("p").first().text()).substring(0, 150).trim() || 
-                        backupExtraction.metaDescription ||
-                        `Comprehensive services and architectural layouts tailored around expert digital services.`;
-    }
-    metaDescription = cleanText(metaDescription);
-
-    let h1 = safeText($("h1").first().text()).trim() || backupExtraction.h1 || `Proven Expert Digital Systems`;
-    h1 = cleanText(h1);
-
-    const bodyText = rawBodyText || "No content scanned.";
-    const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
-    
-    let h2s = $("h2").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
-    if (h2s.length === 0) h2s = backupExtraction.h2s;
-
-    let h3s = $("h3").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
-    if (h3s.length === 0) h3s = backupExtraction.h3s;
-
-    const schemas = detectAllSchemas($, html);
-    
-    // TASK 1: FIX SCHEMA LOGIC
-    const uniqueSchemas = Object.keys(schemas).filter(k => schemas[k]?.present) || [];
-    const recommendedSchemas = Object.keys(schemas).filter(k => schemas[k]?.recommended && !schemas[k]?.present) || [];
-    const schemaDetected = uniqueSchemas.length > 0;
-    const schemaCount = uniqueSchemas.length;
-
-    const faqQuestions = [];
-    if (schemas.FAQPage?.present && schemas.FAQPage?.data?.length > 0) {
-      schemas.FAQPage.data.forEach(schema => {
-        schema?.mainEntity?.forEach(q => { if (q?.name) faqQuestions.push(safeText(q.name)); });
-      });
-    }
-
-    const h1Count = $("h1").length || (backupExtraction.h1 ? 1 : 0);
-    const h2Count = $("h2").length || h2s.length;
-    const h3Count = $("h3").length || h3s.length;
-    const listCount = $("ul, ol").length || 0;
-    const tableCount = $("table").length || 0;
-    const totalImages = $("img").length || 0;
-    const imagesWithoutAlt = $("img").filter((i, el) => !$(el).attr("alt")).length || 0;
-    const isHttps = normalizedUrl.startsWith("https://");
-    const mobileViewport = $('meta[name="viewport"]').length > 0;
-    const canonical = safeText($('link[rel="canonical"]').attr("href"));
-    const hasCanonical = !!canonical;
-    const favicon = safeText($('link[rel="icon"], link[rel="shortcut icon"]').attr("href"));
-    const hasFavicon = !!favicon;
-
-    const hasFAQ = faqQuestions.length > 0 || schemas.FAQPage?.present || false;
-    const hasHowTo = schemas.HowTo?.present || false;
-    const hasLocalBusiness = schemas.LocalBusiness?.present || false;
-    const hasDirectAnswer = (bodyText.includes("Q:") && bodyText.includes("A:")) || bodyText.toLowerCase().includes("what is") || bodyText.toLowerCase().includes("how to") || (h2Count >= 3 && bodyText.length > 500);
-
-    const ogTitle = safeText($('meta[property="og:title"]').attr("content"));
-    const ogDescription = safeText($('meta[property="og:description"]').attr("content"));
-    const ogImage = safeText($('meta[property="og:image"]').attr("content"));
-    const hasOGTags = !!(ogTitle && ogDescription);
-
-    const hasAuthor = $('meta[name="author"]').length > 0 || $('[rel="author"]').length > 0 || $('[itemprop="author"]').length > 0;
-    const dateStr = safeText($('meta[property="article:modified_time"]').attr('content') || $('meta[property="article:published_time"]').attr('content'));
-    const hasLastModified = !!dateStr;
-    const lastModified = dateStr ? new Date(dateStr).toLocaleDateString() : null;
-
-    const socialLinks = $("a").map((i, el) => safeText($(el).attr("href"))).get() || [];
-    const hasFacebook = socialLinks.some(link => link.includes("facebook.com"));
-    const hasLinkedIn = socialLinks.some(link => link.includes("linkedin.com"));
-    const hasYouTube = socialLinks.some(link => link.includes("youtube.com"));
-    const hasTwitter = socialLinks.some(link => link.includes("twitter.com") || link.includes("x.com"));
-
-    const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-    const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
-    const email = emailMatch ? emailMatch[0] : null;
-    const phone = phoneMatch ? phoneMatch[0] : null;
-    const hasEmail = !!email;
-    const hasPhone = !!phone;
-
-    const keywords = tokenizeKeywords(bodyText);
-
     const trustSignals = safeRun(() => scanTrustSignals($, normalizedUrl), {
       hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 20, totalSignals: 0, socialLinks: []
     });
@@ -1494,7 +1549,6 @@ export async function analyzeSingleUrl(url) {
     const hasPrivacyPolicy = trustSignals.hasPrivacyPolicy;
     const hasTermsPage = trustSignals.hasTermsPage;
 
-    // TASK 5: IMPROVE INTERNAL LINK ANALYSIS
     const internalLinkData = safeRun(() => analyzeInternalLinks($, normalizedUrl, h2s), {
       internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0,
       orphanPages: [], avgLinkDepth: 1, averageDepth: 1, authorityFlow: 10,
@@ -1502,17 +1556,14 @@ export async function analyzeSingleUrl(url) {
       internalLinkScore: 40, anchorDiversityScore: 50, contextualLinkScore: 40, linkDepthAverage: 1.0
     });
 
-    // TASK 6: IMPROVE EEAT ENGINE
     const eeatData = safeRun(() => analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas, hasTermsPage, trustSignals.socialLinks), {
       score: 30, status: "Shallow Trust Profile", breakdown: { experience: { score: 5, max: 25, factors: [] }, expertise: { score: 10, max: 25, factors: [] }, authoritativeness: { score: 5, max: 25, factors: [] }, trustworthiness: { score: 10, max: 25, factors: [] } }
     });
 
-    // TASK 7: IMPROVE LOCAL SEO ANALYSIS
     const localSEO = safeRun(() => analyzeLocalSEO($, bodyText, schemas, hasEmail, hasPhone), {
       hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 30, localSEOScore: 30, napConsistency: "Incomplete/Missing", napStatus: "Incomplete/Missing", mapDetected: false, localBusinessSchemaDetected: false, recommendations: []
     });
 
-    // TASK 8: IMPROVE TOPICAL AUTHORITY
     const topicalAuthority = safeRun(() => calculateTopicalAuthority($, keywords, h2s, h3s, wordCount), {
       authorityScore: 30, clusters: [], coveragePercent: 10, missingClusters: [], missingTopics: [], depth: "Moderate Coverage", topicsCovered: "0/15"
     });
@@ -1573,11 +1624,7 @@ export async function analyzeSingleUrl(url) {
     );
 
     const externalLinksCount = $("a[href^='http']").not(`a[href^='${normalizedUrl}']`).length || 0;
-    
-    const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, normalizedUrl, schemas);
-    const entityCoverageScore = clamp(safeArray(entityData?.entities).length * 10);
 
-    // TASK 4: UPGRADE AI CITATION ENGINE
     const simulationResult = safeRun(() => aeoSimulationEngine({
       hasFAQ,
       hasHowTo,
@@ -1609,7 +1656,7 @@ export async function analyzeSingleUrl(url) {
       improvementSuggestions: []
     });
 
-    const citationProbability = simulationResult.citationProbability;
+    citationProbability = simulationResult.citationProbability;
     const citationChatGPT = simulationResult.citationChatGPT;
     const citationGemini = simulationResult.citationGemini;
     const citationPerplexity = simulationResult.citationPerplexity;
@@ -1667,10 +1714,9 @@ export async function analyzeSingleUrl(url) {
       previousEEAT = lastPoint.eeat || eeatData.score;
     }
 
-    // Apply exact dynamic scaling and baseline floor parameters to prevent 0% scores
-    const seoScore = Math.max(35, Math.round((rawSeoScore * 0.6) + (previousSEO * 0.4)));
-    const aeoScore = Math.max(35, Math.round((rawAeoScore * 0.6) + (previousAEO * 0.4)));
-    const eeatScore = Math.max(35, Math.round((eeatData.score * 0.6) + (previousEEAT * 0.4)));
+    seoScore = Math.max(35, Math.round((rawSeoScore * 0.6) + (previousSEO * 0.4)));
+    aeoScore = Math.max(35, Math.round((rawAeoScore * 0.6) + (previousAEO * 0.4)));
+    eeatScore = Math.max(35, Math.round((eeatData.score * 0.6) + (previousEEAT * 0.4)));
 
     eeatData.score = eeatScore;
 
@@ -1744,7 +1790,6 @@ export async function analyzeSingleUrl(url) {
 
     const recommendationScore = Math.max(0, 100 - (aiRecommendations.length * 8));
 
-    // TASK 2: FIX ROADMAP ENGINE CALCULATIONS
     const aiAutopilot = [
       !hasFAQ && { task: "Add FAQ Schema", impact: 15, effort: "15 mins", priority: "CRITICAL" },
       !hasAuthor && { task: "Add Author Bio", impact: 8, effort: "10 mins", priority: "HIGH" },
@@ -1752,9 +1797,9 @@ export async function analyzeSingleUrl(url) {
       internalLinkData.weakLinking && { task: "Fix Internal Linking Structure", impact: 12, effort: "20 mins", priority: "HIGH" }
     ].filter(Boolean);
 
-    const totalRoadmapImpact = aiAutopilot.reduce((acc, curr) => acc + safeNumber(curr.impact), 0);
-    const currentAIVisibility = overallAIVisibilityScore;
-    const potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
+    totalRoadmapImpact = aiAutopilot.reduce((acc, curr) => acc + safeNumber(curr.impact), 0);
+    currentAIVisibility = overallAIVisibilityScore;
+    potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
 
     const visibilityForecast = {
       current: currentAIVisibility,
@@ -1766,8 +1811,6 @@ export async function analyzeSingleUrl(url) {
     };
 
     const schemaGenerator = {};
-    
-    // GUARANTEED SCHEMA BLOCKS FOR INGESTION ENGINE
     schemaGenerator.FAQPage = {
       recommended: true,
       code: JSON.stringify({
@@ -1846,7 +1889,8 @@ export async function analyzeSingleUrl(url) {
       missingEntities: []
     });
 
-    const payload = {
+    console.log("[DIAGNOSTIC] Response creation - START");
+    payload = {
       status: "success",
       seoScore,
       aeoScore,
@@ -2053,69 +2097,85 @@ export async function analyzeSingleUrl(url) {
     });
     if (scanHistory.length > 50) scanHistory.pop();
 
-    return payload;
+    console.log("[DIAGNOSTIC] AI Visibility Calculation / Score Generation / Response Creation - END: payload created");
+    console.log("STEP 5 COMPLETE: AI Visibility calculation");
+    console.log("STEP 6 COMPLETE: Response creation");
   } catch (err) {
-    return fallbackSafePayload(normalizedUrl, err);
+    console.error("FAILED STEP AI Visibility calculation / Score generation:", err);
+    throw err;
   }
+
+  return payload;
+} catch (err) {
+  console.error("FAILED STEP inside overall analyzeSingleUrl:", err);
+  return fallbackSafePayload(normalizedUrl || url, err);
+}
 }
 
 // TASK 3: FIX GAP FINDER
 export function competitorContentGap(userData, compData) {
-  if (!userData || !compData || userData.stopProcessing || compData.stopProcessing) {
+  console.log("[DIAGNOSTIC] starting competitorContentGap mapping");
+  try {
+    if (!userData || !compData || userData.stopProcessing || compData.stopProcessing) {
+      return {
+        headingGaps: [],
+        keywordGaps: [],
+        schemaGaps: [],
+        contentLengthDiff: 0,
+        competitorHasMore: false,
+        topicalCoverageStatus: "Low Coverage"
+      };
+    }
+
+    const userHeadings = [...safeArray(userData.h2s), ...safeArray(userData.h3s)];
+    const compHeadings = [...safeArray(compData.h2s), ...safeArray(compData.h3s)];
+    const userKeywords = new Set(safeArray(userData.keywords));
+    const compKeywords = new Set(safeArray(compData.keywords));
+
+    const headingGaps = compHeadings.filter(h => !userHeadings.some(uh => safeText(uh).toLowerCase().includes(safeText(h).toLowerCase().substring(0, 10))));
+    const keywordGaps = [...compKeywords].filter(k => !userKeywords.has(k));
+
+    const schemaGaps = [];
+    if (compData.hasFAQ && !userData.hasFAQ) schemaGaps.push('FAQPage');
+    if (compData.hasHowTo && !userData.hasHowTo) schemaGaps.push('HowTo');
+    if (compData.hasAuthor && !userData.hasAuthor) schemaGaps.push('Author Profile');
+
+    const coveragePercent = safeNumber(userData?.topicalAuthority?.coveragePercent || 0);
+    let topicalCoverageStatus = "Low Coverage";
+    if (coveragePercent >= 90) {
+      topicalCoverageStatus = "Perfect topical coverage";
+    } else if (coveragePercent >= 70) {
+      topicalCoverageStatus = "Strong Topical Authority";
+    } else {
+      topicalCoverageStatus = "Topical Gaps Identified";
+    }
+
+    // Generate dynamic gaps based on covered parameters
+    const categories = ["Informational", "Commercial", "Transactional", "Authority", "Trust", "Local SEO", "FAQ", "HowTo", "Comparison", "Review"];
+    const finalHeadingGaps = [];
+    
+    if (coveragePercent < 70) {
+      const missingClusters = safeArray(userData?.topicalAuthority?.missingClusters || []);
+      categories.forEach(cat => {
+        if (missingClusters.includes(cat) || Math.random() > 0.5) {
+          finalHeadingGaps.push(`${cat} Cluster: Optimizing layout referencing ${cat.toLowerCase()} context queries`);
+        }
+      });
+    }
+
+    console.log("[DIAGNOSTIC] competitorContentGap mapped successfully");
     return {
-      headingGaps: [],
-      keywordGaps: [],
-      schemaGaps: [],
-      contentLengthDiff: 0,
-      competitorHasMore: false,
-      topicalCoverageStatus: "Low Coverage"
+      headingGaps: finalHeadingGaps.length > 0 ? finalHeadingGaps.slice(0, 10) : headingGaps.slice(0, 10),
+      keywordGaps: keywordGaps.slice(0, 15),
+      schemaGaps,
+      contentLengthDiff: safe(() => compData.wordCount, 0) - safe(() => userData.wordCount, 0),
+      competitorHasMore: safe(() => compData.wordCount, 0) > safe(() => userData.wordCount, 0),
+      topicalCoverageStatus
     };
+  } catch (err) {
+    console.error("FAILED STEP inside competitorContentGap:", err);
+    throw err;
   }
-
-  const userHeadings = [...safeArray(userData.h2s), ...safeArray(userData.h3s)];
-  const compHeadings = [...safeArray(compData.h2s), ...safeArray(compData.h3s)];
-  const userKeywords = new Set(safeArray(userData.keywords));
-  const compKeywords = new Set(safeArray(compData.keywords));
-
-  const headingGaps = compHeadings.filter(h => !userHeadings.some(uh => safeText(uh).toLowerCase().includes(safeText(h).toLowerCase().substring(0, 10))));
-  const keywordGaps = [...compKeywords].filter(k => !userKeywords.has(k));
-
-  const schemaGaps = [];
-  if (compData.hasFAQ && !userData.hasFAQ) schemaGaps.push('FAQPage');
-  if (compData.hasHowTo && !userData.hasHowTo) schemaGaps.push('HowTo');
-  if (compData.hasAuthor && !userData.hasAuthor) schemaGaps.push('Author Profile');
-
-  const coveragePercent = safeNumber(userData?.topicalAuthority?.coveragePercent || 0);
-  let topicalCoverageStatus = "Low Coverage";
-  if (coveragePercent >= 90) {
-    topicalCoverageStatus = "Perfect topical coverage";
-  } else if (coveragePercent >= 70) {
-    topicalCoverageStatus = "Strong Topical Authority";
-  } else {
-    topicalCoverageStatus = "Topical Gaps Identified";
-  }
-
-  // Generate dynamic gaps based on covered parameters
-  const categories = ["Informational", "Commercial", "Transactional", "Authority", "Trust", "Local SEO", "FAQ", "HowTo", "Comparison", "Review"];
-  const finalHeadingGaps = [];
-  
-  if (coveragePercent < 70) {
-    const missingClusters = safeArray(userData?.topicalAuthority?.missingClusters || []);
-    categories.forEach(cat => {
-      if (missingClusters.includes(cat) || Math.random() > 0.5) {
-        finalHeadingGaps.push(`${cat} Cluster: Optimizing layout referencing ${cat.toLowerCase()} context queries`);
-      }
-    });
-  }
-
-  return {
-    headingGaps: finalHeadingGaps.length > 0 ? finalHeadingGaps.slice(0, 10) : headingGaps.slice(0, 10),
-    keywordGaps: keywordGaps.slice(0, 15),
-    schemaGaps,
-    contentLengthDiff: safe(() => compData.wordCount, 0) - safe(() => userData.wordCount, 0),
-    competitorHasMore: safe(() => compData.wordCount, 0) > safe(() => userData.wordCount, 0),
-    topicalCoverageStatus
-  };
 }
 
 // =========================================================================
@@ -2251,21 +2311,38 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
 });
 
 app.get("/compare", authenticateAndRateLimit, async (req, res) => {
+  console.log("[DIAGNOSTIC] GET /compare request initiated");
   try {
     const { url, competitor } = req.query;
     if (!url || !competitor) return res.status(400).json({ error: "Both URLs required" });
 
-    const normalizedUrl = enforceSecureUrl(url);
-    const normalizedComp = enforceSecureUrl(competitor);
+    let normalizedUrl, normalizedComp;
+    try {
+      console.log("[DIAGNOSTIC] URL normalization for comparison - START");
+      normalizedUrl = enforceSecureUrl(url);
+      normalizedComp = enforceSecureUrl(competitor);
+      console.log("[DIAGNOSTIC] URL normalization for comparison - END");
+    } catch (err) {
+      console.error("FAILED STEP comparison URL normalization:", err);
+      throw err;
+    }
 
     if (!normalizedUrl || !normalizedComp) {
       return res.status(400).json({ error: "Invalid domain target parameters received" });
     }
 
-    const results = await Promise.allSettled([
-      analyzeSingleUrl(normalizedUrl),
-      analyzeSingleUrl(normalizedComp)
-    ]);
+    let results;
+    try {
+      console.log("[DIAGNOSTIC] Fetch pages / analysis processes for comparison - START");
+      results = await Promise.allSettled([
+        analyzeSingleUrl(normalizedUrl),
+        analyzeSingleUrl(normalizedComp)
+      ]);
+      console.log("[DIAGNOSTIC] Fetch pages / analysis processes for comparison - END");
+    } catch (err) {
+      console.error("FAILED STEP comparison crawling/analysis:", err);
+      throw err;
+    }
 
     const site1 = results[0].status === "fulfilled" ? results[0].value : null;
     const site2 = results[1].status === "fulfilled" ? results[1].value : null;
@@ -2295,23 +2372,32 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
       req.user.scansToday = Math.min(PLAN_LIMITS[req.user.plan], req.user.scansToday + 2);
     }
 
-    const seoAdvantage = (site1?.score || 0) - (site2?.score || 0);
-    const aeoAdvantage = (site1?.aeoScore || 0) - (site2?.aeoScore || 0);
-    const eeatAdvantage = (site1?.breakdown?.eeatScore || 0) - (site2?.breakdown?.eeatScore || 0);
-    const citationAdvantage = (site1?.citationProbability || 0) - (site2?.citationProbability || 0);
-    const trustAdvantage = (site1?.aiTrustScore || 0) - (site2?.aiTrustScore || 0);
+    let competitorAdvantage, leaderBrand;
+    try {
+      console.log("[DIAGNOSTIC] competitor analysis (advantages calculation) - START");
+      const seoAdvantage = (site1?.score || 0) - (site2?.score || 0);
+      const aeoAdvantage = (site1?.aeoScore || 0) - (site2?.aeoScore || 0);
+      const eeatAdvantage = (site1?.breakdown?.eeatScore || 0) - (site2?.breakdown?.eeatScore || 0);
+      const citationAdvantage = (site1?.citationProbability || 0) - (site2?.citationProbability || 0);
+      const trustAdvantage = (site1?.aiTrustScore || 0) - (site2?.aiTrustScore || 0);
 
-    const leaderBrand = site1?.overallAIVisibilityScore >= site2?.overallAIVisibilityScore ? (site1?.title || "Your Site") : (site2?.title || "Competitor Site");
+      leaderBrand = site1?.overallAIVisibilityScore >= site2?.overallAIVisibilityScore ? (site1?.title || "Your Site") : (site2?.title || "Competitor Site");
 
-    const competitorAdvantage = {
-      seoAdvantage: { diff: Math.abs(seoAdvantage), leader: seoAdvantage > 0 ? "You" : (seoAdvantage < 0 ? "Competitor" : "Tie") },
-      aeoAdvantage: { diff: Math.abs(aeoAdvantage), leader: aeoAdvantage > 0 ? "You" : (aeoAdvantage < 0 ? "Competitor" : "Tie") },
-      eeatAdvantage: { diff: Math.abs(eeatAdvantage), leader: eeatAdvantage > 0 ? "You" : (eeatAdvantage < 0 ? "Competitor" : "Tie") },
-      citationAdvantage: { diff: Math.abs(citationAdvantage), leader: citationAdvantage > 0 ? "You" : (citationAdvantage < 0 ? "Competitor" : "Tie") },
-      trustAdvantage: { diff: Math.abs(trustAdvantage), leader: trustAdvantage > 0 ? "You" : (trustAdvantage < 0 ? "Competitor" : "Tie") },
-      finalWinner: leaderBrand
-    };
+      competitorAdvantage = {
+        seoAdvantage: { diff: Math.abs(seoAdvantage), leader: seoAdvantage > 0 ? "You" : (seoAdvantage < 0 ? "Competitor" : "Tie") },
+        aeoAdvantage: { diff: Math.abs(aeoAdvantage), leader: aeoAdvantage > 0 ? "You" : (aeoAdvantage < 0 ? "Competitor" : "Tie") },
+        eeatAdvantage: { diff: Math.abs(eeatAdvantage), leader: eeatAdvantage > 0 ? "You" : (eeatAdvantage < 0 ? "Competitor" : "Tie") },
+        citationAdvantage: { diff: Math.abs(citationAdvantage), leader: citationAdvantage > 0 ? "You" : (citationAdvantage < 0 ? "Competitor" : "Tie") },
+        trustAdvantage: { diff: Math.abs(trustAdvantage), leader: trustAdvantage > 0 ? "You" : (trustAdvantage < 0 ? "Competitor" : "Tie") },
+        finalWinner: leaderBrand
+      };
+      console.log("[DIAGNOSTIC] competitor analysis (advantages calculation) - END");
+    } catch (err) {
+      console.error("FAILED STEP competitor analysis calculation:", err);
+      throw err;
+    }
 
+    console.log("[DIAGNOSTIC] Response creation for /compare - START");
     res.json({
       status: "success",
       seoScore: site1?.overallAIVisibilityScore || 0,
@@ -2327,6 +2413,7 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
       winner: site1?.overallAIVisibilityScore >= site2?.overallAIVisibilityScore ? site1 : site2,
       winnerReason: `${leaderBrand} commands clear performance leads overall.`
     });
+    console.log("[DIAGNOSTIC] Response creation for /compare - END");
   } catch (err) {
     console.error("COMPARE ERROR:", err);
     res.status(500).json({ status: "error", message: err.message });
@@ -2334,28 +2421,54 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
 });
 
 app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
+  console.log("[DIAGNOSTIC] GET /content-gap request initiated");
   try {
     const { url, competitor } = req.query;
     if (!url || !competitor) return res.status(400).json({ error: "Both URLs required" });
 
-    const normalizedUrl = enforceSecureUrl(url);
-    const normalizedComp = enforceSecureUrl(competitor);
+    let normalizedUrl, normalizedComp;
+    try {
+      console.log("[DIAGNOSTIC] URL normalization for content-gap - START");
+      normalizedUrl = enforceSecureUrl(url);
+      normalizedComp = enforceSecureUrl(competitor);
+      console.log("[DIAGNOSTIC] URL normalization for content-gap - END");
+    } catch (err) {
+      console.error("FAILED STEP content-gap URL normalization:", err);
+      throw err;
+    }
 
     if (!normalizedUrl || !normalizedComp) {
       return res.status(400).json({ error: "Invalid domain parameters received" });
     }
 
-    const [userData, compData] = await Promise.all([
-      analyzeSingleUrl(normalizedUrl),
-      analyzeSingleUrl(normalizedComp)
-    ]);
+    let userData, compData;
+    try {
+      console.log("[DIAGNOSTIC] Crawl and Analysis processes for content-gap - START");
+      [userData, compData] = await Promise.all([
+        analyzeSingleUrl(normalizedUrl),
+        analyzeSingleUrl(normalizedComp)
+      ]);
+      console.log("[DIAGNOSTIC] Crawl and Analysis processes for content-gap - END");
+    } catch (err) {
+      console.error("FAILED STEP content-gap crawling/analysis:", err);
+      throw err;
+    }
 
     if (userData.status === "error" || compData.status === "error") {
       return res.status(400).json({ error: "One or both pages failed validation" });
     }
 
-    const gapData = competitorContentGap(userData, compData);
+    let gapData;
+    try {
+      console.log("[DIAGNOSTIC] Competitor analysis (gap finder calculations) - START");
+      gapData = competitorContentGap(userData, compData);
+      console.log("[DIAGNOSTIC] Competitor analysis (gap finder calculations) - END");
+    } catch (err) {
+      console.error("FAILED STEP content-gap finder calculation:", err);
+      throw err;
+    }
     
+    console.log("[DIAGNOSTIC] Response creation for /content-gap - START");
     res.json({
       status: "success",
       seoScore: userData?.seoScore || 0,
@@ -2372,40 +2485,68 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
         missingTopics: gapData?.headingGaps || []
       }
     });
+    console.log("[DIAGNOSTIC] Response creation for /content-gap - END");
   } catch (err) {
     res.status(500).json({ status: "error", message: err.message });
   }
 });
 
 app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
+  console.log("[DIAGNOSTIC] GET /roadmap request initiated");
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: "URL required" });
     
-    const normalizedUrl = enforceSecureUrl(url);
+    let normalizedUrl;
+    try {
+      console.log("[DIAGNOSTIC] URL normalization for roadmap - START");
+      normalizedUrl = enforceSecureUrl(url);
+      console.log("[DIAGNOSTIC] URL normalization for roadmap - END");
+    } catch (err) {
+      console.error("FAILED STEP roadmap URL normalization:", err);
+      throw err;
+    }
+
     if (!normalizedUrl) return res.status(400).json({ error: "Invalid URL format" });
 
-    const data = await analyzeSingleUrl(normalizedUrl);
+    let data;
+    try {
+      console.log("[DIAGNOSTIC] Fetch page / Analysis process for roadmap - START");
+      data = await analyzeSingleUrl(normalizedUrl);
+      console.log("[DIAGNOSTIC] Fetch page / Analysis process for roadmap - END");
+    } catch (err) {
+      console.error("FAILED STEP roadmap analysis:", err);
+      throw err;
+    }
 
     if (data.status === "error" || data?.stopProcessing) {
       return res.json({ currentScore: null, potentialScore: null, roadmap: [], estimatedTime: "0 hours" });
     }
 
-    const autopilotTasks = data?.aiAutopilot || [];
-    const roadmap = autopilotTasks.map((task, i) => ({
-      step: i + 1, 
-      task: task?.task || 'Optimize Framework', 
-      priority: task?.priority || 'MEDIUM',
-      why: task?.priority === 'CRITICAL' ? 'Blocks real-time citations across ChatGPT search indexes.' : 'Boosts indexing accuracy.',
-      code: task?.task?.includes('Schema') ? '<script type="application/ld+json">...</script>' : 'Modify local elements',
-      impact: task?.impact || 5,
-      effort: task?.effort || '15 mins'
-    }));
+    let autopilotTasks, roadmap, totalRoadmapImpact, currentAIVisibility, potentialAIVisibility;
+    try {
+      console.log("[DIAGNOSTIC] roadmap / autopilot calculation - START");
+      autopilotTasks = data?.aiAutopilot || [];
+      roadmap = autopilotTasks.map((task, i) => ({
+        step: i + 1, 
+        task: task?.task || 'Optimize Framework', 
+        priority: task?.priority || 'MEDIUM',
+        why: task?.priority === 'CRITICAL' ? 'Blocks real-time citations across ChatGPT search indexes.' : 'Boosts indexing accuracy.',
+        code: task?.task?.includes('Schema') ? '<script type="application/ld+json">...</script>' : 'Modify local elements',
+        impact: task?.impact || 5,
+        effort: task?.effort || '15 mins'
+      }));
 
-    const totalRoadmapImpact = roadmap.reduce((acc, curr) => acc + safeNumber(curr.impact), 0);
-    const currentAIVisibility = data?.overallAIVisibilityScore || 0;
-    const potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
+      totalRoadmapImpact = roadmap.reduce((acc, curr) => acc + safeNumber(curr.impact), 0);
+      currentAIVisibility = data?.overallAIVisibilityScore || 0;
+      potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
+      console.log("[DIAGNOSTIC] roadmap / autopilot calculation - END");
+    } catch (err) {
+      console.error("FAILED STEP roadmap calculations:", err);
+      throw err;
+    }
     
+    console.log("[DIAGNOSTIC] Response creation for /roadmap - START");
     res.json({
       status: "success",
       seoScore: data?.seoScore || 0,
@@ -2423,6 +2564,7 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
       },
       estimatedTime: `${Math.ceil(roadmap.length * 0.5)} hours`
     });
+    console.log("[DIAGNOSTIC] Response creation for /roadmap - END");
   } catch (err) {
     res.status(500).json({ status: "error", message: err.message });
   }

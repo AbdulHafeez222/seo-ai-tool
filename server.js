@@ -192,7 +192,9 @@ const fallbackRegistry = {
       "cf-browser-verification",
       "__cf_chl_opt",
       "error code 1020",
-      "verify you are human"
+      "verify you are human",
+      "access denied",
+      "sucuri"
     ];
 
     if (strictBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
@@ -207,7 +209,8 @@ const fallbackRegistry = {
         "anti-bot",
         "ray id",
         "challenge-form",
-        "turnstile"
+        "turnstile",
+        "captcha"
       ];
       if (shortBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
         return true;
@@ -307,43 +310,36 @@ export async function withRetry(fn, retries = 2, delay = 1000) {
 
 // Page Classifier System
 export function classifyPage(html = "", status = 200) {
-  if (!html || typeof html !== "string") return "BLOCKED";
+  if (!html || typeof html !== "string") return "BLOCKED_PAGE";
   
-  // Rule: Treat HTML > 5000 chars as valid always
-  if (html.length >= 5000) {
-    return "STRONG_PAGE";
-  }
-
-  // Rule: If HTTP success and HTML > 1000 chars → always accept page
-  if (status === 200 && html.length >= 1000) {
-    return "NORMAL_PAGE";
-  }
-
   const lowerHtml = html.toLowerCase();
-  const isBlockedStatus = status >= 400;
   
+  // Specific checks for blocked triggers
+  const blockedStatuses = [401, 403, 429, 503];
+  if (blockedStatuses.includes(status)) {
+    return "BLOCKED_PAGE";
+  }
+
   const blockedPhrases = [
     "captcha", "cloudflare", "access denied", "verify you are human", "attention required",
     "cf-browser-verification", "__cf_chl_opt", "error code 1020", "ddos protection",
-    "anti-bot", "ray id", "challenge-form", "turnstile"
+    "anti-bot", "ray id", "challenge-form", "turnstile", "forbidden", "sucuri"
   ];
   
   const containsBlockedPhrase = blockedPhrases.some(phrase => lowerHtml.includes(phrase));
-  const isVeryShort = html.length < 300;
-
-  if (isBlockedStatus || containsBlockedPhrase || isVeryShort) {
-    return "BLOCKED";
+  if (containsBlockedPhrase) {
+    return "BLOCKED_PAGE";
   }
 
+  // Check for Thin or JS required patterns
   if (html.length < 2000) {
-    return "JS_OR_THIN_PAGE";
+    if (lowerHtml.includes("javascript is required") || lowerHtml.includes("enable javascript") || lowerHtml.includes("<div id=\"app\"") || lowerHtml.includes("<div id=\"root\"")) {
+      return "JS_RENDER_REQUIRED";
+    }
+    return "THIN_CONTENT";
   }
 
-  if (html.length < 8000) {
-    return "NORMAL_PAGE";
-  }
-
-  return "STRONG_PAGE";
+  return "VALID_CONTENT";
 }
 
 // Axios Smart Fetch
@@ -383,7 +379,6 @@ async function fetchPlaywright(url) {
   try {
     browser = await getBrowserInstance();
   } catch (e) {
-    // Gracefully skip if playwright is missing or fails to initialize
     return null;
   }
   if (!browser) {
@@ -411,6 +406,7 @@ async function fetchPlaywright(url) {
 // Unified Smart Crawl Controller
 export async function smartCrawl(url) {
   let result = null;
+  let crawlMethod = "Axios";
   console.log(`[CRAWL] Starting scan: ${url}`);
   try {
     result = await withRetry(() => fetchAxios(url), 1);
@@ -424,34 +420,32 @@ export async function smartCrawl(url) {
   
   let type = classifyPage(html, status);
 
-  // Fallback to Playwright if Axios gets blocked or thin page context
-  if (type === "BLOCKED" || type === "JS_OR_THIN_PAGE") {
+  // Fallback to Playwright if Axios gets blocked or JS execution is required
+  if (type === "BLOCKED_PAGE" || type === "JS_RENDER_REQUIRED") {
     try {
+      console.log(`[CRAWL] Axios crawl blocked or JS rendering needed. Executing Playwright fallback...`);
       const pwResult = await withRetry(() => fetchPlaywright(url), 1);
       if (pwResult && pwResult.html && pwResult.html.length >= 300) {
-        html = pwResult.html;
-        status = pwResult.status;
-        finalUrl = pwResult.finalUrl;
-        type = classifyPage(html, status);
+        let pwType = classifyPage(pwResult.html, pwResult.status);
+        if (pwType !== "BLOCKED_PAGE") {
+          html = pwResult.html;
+          status = pwResult.status;
+          finalUrl = pwResult.finalUrl;
+          type = pwType;
+          crawlMethod = "Playwright Fallback";
+        }
       }
     } catch (pwErr) {
       // Gracefully continue
     }
   }
 
-  // Fallback structural mock to ensure crawler framework never fully halts analysis
-  if (!html || html.length < 300) {
-    html = `<html><head><title>${cleanDomainBrand(url)} - Portal</title><meta name="description" content="AI Optimized and structured knowledge portal for digital solutions."></head><body><h1>Proven Expert digital Systems</h1><p>We provide enterprise-grade scalable framework integrations.</p></body></html>`;
-    status = 200;
-    type = "NORMAL_PAGE";
-  }
-
   if (status === 200) {
-    console.log(`[CRAWL] Fetch success: ${url}`);
+    console.log(`[CRAWL] Fetch success: ${url} (Crawl Method: ${crawlMethod})`);
   } else {
-    console.log(`[CRAWL] Fetch failed: ${url} (status: ${status})`);
+    console.log(`[CRAWL] Fetch completed: ${url} (status: ${status}, classification: ${type})`);
   }
-  return { html, finalUrl, type, status };
+  return { html, finalUrl, type, status, crawlMethod, contentLength: html.length };
 }
 
 // Highly robust regex fallback parser
@@ -1144,7 +1138,7 @@ export function aeoSimulationEngine(data) {
     hasLastModified
   } = safeObject(data);
 
-  // ChatGPT preferencies: FAQ, listCount, Direct answer, Author details
+  // ChatGPT preferences: FAQ, listCount, Direct answer, Author details
   const citationChatGPT = Math.min(95, 20 + 
     (hasFAQ ? 25 : 0) + 
     (listCount > 2 ? 15 : 0) + 
@@ -1153,7 +1147,7 @@ export function aeoSimulationEngine(data) {
     (topicalAuthorityScore > 60 ? 10 : 0)
   );
 
-  // Gemini preferencies: Structured Organization schema, E-E-A-T, Tables, Word Count
+  // Gemini preferences: Structured Organization schema, E-E-A-T, Tables, Word Count
   const citationGemini = Math.min(95, 20 + 
     (hasLocalBusiness ? 25 : 0) + 
     (tableCount > 0 ? 20 : 0) + 
@@ -1162,7 +1156,7 @@ export function aeoSimulationEngine(data) {
     (eeatScore > 60 ? 15 : 0)
   );
 
-  // Perplexity preferencies: Real-time update modifiers, Outbound citations, Lists, Direct answers
+  // Perplexity preferences: Real-time update modifiers, Outbound citations, Lists, Direct answers
   const citationPerplexity = Math.min(95, 20 + 
     (hasDirectAnswer ? 25 : 0) + 
     (hasLastModified ? 15 : 0) + 
@@ -1171,7 +1165,7 @@ export function aeoSimulationEngine(data) {
     (internalLinkScore > 60 ? 15 : 0)
   );
 
-  // Claude preferencies: Content depth, Logical hierarchy (HowTo), About clarity, Entity density
+  // Claude preferences: Content depth, Logical hierarchy (HowTo), About clarity, Entity density
   const citationClaude = Math.min(95, 20 + 
     (wordCount > 1500 ? 25 : 0) + 
     (hasHowTo ? 20 : 0) + 
@@ -1400,6 +1394,40 @@ export async function analyzeSingleUrl(url) {
       throw err;
     }
 
+    // Intercept blocked crawler pages immediately
+    if (crawlResult.type === "BLOCKED_PAGE") {
+      let blockedReason = "Access Denied / Bot Protection Triggered";
+      if (crawlResult.status === 403) {
+        blockedReason = "403 Forbidden detected";
+      } else if (crawlResult.status === 401) {
+        blockedReason = "401 Unauthorized detected";
+      } else if (crawlResult.status === 429) {
+        blockedReason = "429 Too Many Requests rate limiting";
+      } else if (crawlResult.html.toLowerCase().includes("cloudflare")) {
+        blockedReason = "Cloudflare security challenge detected";
+      } else if (crawlResult.html.toLowerCase().includes("captcha")) {
+        blockedReason = "CAPTCHA verification block";
+      }
+
+      return {
+        status: "blocked_page",
+        success: false,
+        crawlSuccess: false,
+        pageType: "BLOCKED_PAGE",
+        reason: blockedReason,
+        blockedReason: blockedReason,
+        recommendation: "Use Playwright fallback or configure proxy settings to bypass anti-bot protection.",
+        crawlMethod: crawlResult.crawlMethod,
+        httpStatus: crawlResult.status,
+        contentLength: crawlResult.contentLength,
+        resolvedUrl: crawlResult.finalUrl,
+        meta: {
+          url: crawlResult.finalUrl,
+          timestamp: new Date().toISOString()
+        }
+      };
+    }
+
     let $, backupExtraction, title, metaDescription, h1, bodyText, wordCount, h2s, h3s;
     let schemas, uniqueSchemas, recommendedSchemas, schemaDetected, schemaCount;
     let h1Count, h2Count, h3Count, listCount, tableCount, totalImages, imagesWithoutAlt;
@@ -1525,18 +1553,8 @@ export async function analyzeSingleUrl(url) {
     let payload;
 
     try {
-      const crawlQuality = crawlResult.type === "STRONG_PAGE" ? "High Quality" : (crawlResult.type === "NORMAL_PAGE" ? "Moderate Content" : "Low Content / Stub");
-      const crawlBlocked = crawlResult.type === "BLOCKED";
-
-      const validation = {
-        crawlBlocked,
-        reason: crawlBlocked ? "Request blocked by anti-bot detection or bad status code." : null,
-        crawlQuality
-      };
-
-      if (validation.crawlBlocked) {
-        throw new Error(validation.reason || "Crawl restricted by validation");
-      }
+      const crawlQuality = crawlResult.type === "VALID_CONTENT" ? "High Quality" : (crawlResult.type === "THIN_CONTENT" ? "Low Content / Stub" : "JavaScript Render Active");
+      const crawlBlocked = crawlResult.type === "BLOCKED_PAGE";
 
       const trustSignals = safeRun(() => scanTrustSignals($, normalizedUrl), {
         hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 20, totalSignals: 0, socialLinks: []
@@ -1900,6 +1918,14 @@ export async function analyzeSingleUrl(url) {
         schemaCount,
         recommendedSchemas,
         
+        // Crawl Diagnostics
+        crawlMethod: crawlResult.crawlMethod,
+        httpStatus: crawlResult.status,
+        contentLength: crawlResult.contentLength,
+        resolvedUrl: crawlResult.finalUrl,
+        pageType: crawlResult.type,
+        blockedReason: null,
+
         analysis: {
           seo: {
             status: seoStatus,
@@ -1957,7 +1983,7 @@ export async function analyzeSingleUrl(url) {
         success: true,
         crawlSuccess: true,
         fallbackMode: false,
-        crawlQuality: validation.crawlQuality,
+        crawlQuality,
         warning: null,
         schemaGenerator,
         schema: schemaGenerator,
@@ -2264,6 +2290,9 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
 
   try {
     const data = await analyzeSingleUrl(normalized);
+    if (data.status === "blocked_page") {
+      return res.status(403).json(data);
+    }
     if (data.status === "error") {
       return res.status(400).json(data);
     }
@@ -2334,6 +2363,18 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
         success: false,
         crawlSuccess: false,
         reason: "Comparison unavailable: One or both analysis engines threw a fatal error."
+      });
+    }
+
+    if (site1.status === "blocked_page" || site2.status === "blocked_page") {
+      return res.status(403).json({
+        status: "blocked_page",
+        success: false,
+        reason: "Comparison unavailable: One or both analysis engines encountered a blocked page.",
+        sites: [
+          { brand: site1.status === "blocked_page" ? "Blocked Site" : (site1.title || "Your Site"), url: normalizedUrl, pageType: site1.pageType || "VALID_CONTENT" },
+          { brand: site2.status === "blocked_page" ? "Blocked Site" : (site2.title || "Competitor Site"), url: normalizedComp, pageType: site2.pageType || "VALID_CONTENT" }
+        ]
       });
     }
 
@@ -2423,6 +2464,14 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
       throw err;
     }
 
+    if (userData.status === "blocked_page" || compData.status === "blocked_page") {
+      return res.status(403).json({
+        status: "blocked_page",
+        success: false,
+        error: "One or both pages failed validation due to bot blocking parameters."
+      });
+    }
+
     if (userData.status === "error" || compData.status === "error") {
       return res.status(400).json({ error: "One or both pages failed validation" });
     }
@@ -2474,6 +2523,10 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
       data = await analyzeSingleUrl(normalizedUrl);
     } catch (err) {
       throw err;
+    }
+
+    if (data.status === "blocked_page") {
+      return res.status(403).json(data);
     }
 
     if (data.status === "error" || data?.stopProcessing) {

@@ -1589,6 +1589,7 @@ export async function analyzeSingleUrl(url) {
     let faqSchemaExists = false;
     let organizationSchemaExists = false;
     let localBusinessSchemaExists = false;
+    let isFallback = false;
 
     let trustScore = 0;
     let authorityScore = 0;
@@ -1720,15 +1721,13 @@ export async function analyzeSingleUrl(url) {
       };
     }
 
-    // Clean body text safely
+    // Clean body text safely (Non-destructive node filter strategy)
     try {
-      let rawBodyText = safeText($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
-      rawBodyText = cleanText(rawBodyText);
-
-      // Perform destructive cleanup ONLY for body text word counting on cloned DOM
-      const $clone = cheerio.load(html);
-      $clone('script, style, nav, footer, header, noscript, svg').remove();
-      bodyText = cleanText(safeText($clone("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim()) || rawBodyText || "";
+      let visibleTextElements = $("p, li, h2, h3, h4, td, span, article")
+        .map((i, el) => $(el).text())
+        .get()
+        .join(" ");
+      bodyText = cleanText(visibleTextElements);
       wordCount = bodyText.split(/\s+/).filter(Boolean).length || 0;
     } catch (err) {
       bodyText = "";
@@ -1828,8 +1827,8 @@ export async function analyzeSingleUrl(url) {
 
     robotsExists = safeBoolean(html.includes("robots.txt"));
     sitemapExists = safeBoolean(html.includes("sitemap.xml"));
-    canonicalExists = safeBoolean(hasCanonical);
-    faqSchemaExists = safeBoolean(hasFAQ);
+    canonicalExists = hasCanonical;
+    faqSchemaExists = hasFAQ;
     organizationSchemaExists = safeBoolean(schemas?.Organization?.present);
     localBusinessSchemaExists = safeBoolean(schemas?.LocalBusiness?.present);
 
@@ -1987,12 +1986,12 @@ export async function analyzeSingleUrl(url) {
 
     let calculatedSeo = titleQuality + metaQuality + headingQuality + lengthFactor + linkFactor + imgFactor + schemaFactor + entityFactor;
 
-    // Penalize missing assets completely
-    if (!title || !metaDescription || wordCount < 500 || headingQuality === 0) {
-      calculatedSeo = Math.round(calculatedSeo * 0.15);
+    // Proportional scaling for missing parameters instead of flat destructive drop-offs
+    if (!title || !metaDescription) {
+      calculatedSeo = Math.round(calculatedSeo * 0.5);
     }
 
-    seoScore = clamp(calculatedSeo, 0, 100);
+    seoScore = clamp(calculatedSeo, 15, 100);
 
     // AEO Score
     const answerClarity = Math.min(100, Math.round((hasDirectAnswer ? 50 : 0) + (hasFAQ ? 30 : 0) + (readabilityScore * 0.2))) || 0;
@@ -2007,12 +2006,12 @@ export async function analyzeSingleUrl(url) {
     );
 
     if (wordCount < 500) {
-      rawAeoScore = Math.round(rawAeoScore * 0.15);
+      rawAeoScore = Math.round(rawAeoScore * 0.5);
     }
 
-    aeoScore = clamp(rawAeoScore, 0, 100);
+    aeoScore = clamp(rawAeoScore, 15, 100);
 
-    // Reassigned from original declarations cleanly with no double "const/let" binds
+    // Score definitions & variable mapping (reassigned with no duplicate const/let bindings)
     robotsExists = html.includes("robots.txt") || false; 
     sitemapExists = html.includes("sitemap.xml") || false;
     canonicalExists = hasCanonical;
@@ -2116,29 +2115,42 @@ export async function analyzeSingleUrl(url) {
     const extractedProducts = entityData?.products || [];
     const totalEntities = entityData?.totalEntities || 0;
 
-    // Diagnostics Logging requirement
-    console.log("[VARIABLE CHECK]", {
-      readabilityScore,
-      robotsExists,
-      canonicalExists,
-      sitemapExists,
-      trustScore: aiTrustScore,
-      authorityScore: topicalAuthority.authorityScore,
-      semanticScore: semanticSEO.nlpScore
+    // Logging requirement tasks
+    console.log("[RAW CRAWL DATA]", {
+      title,
+      metaDescription,
+      h1,
+      h1Count,
+      h2Count,
+      h3Count,
+      wordCount,
+      schemaCount,
+      internalLinks: internalLinkData.totalInternalLinks
     });
 
-    // Unified Payload Validation Logging Requirement
-    console.log("[PAYLOAD VALIDATION]", {
+    console.log("[SCORING INPUT]", {
+      titleQuality,
+      metaQuality,
+      headingQuality,
+      lengthFactor,
+      linkFactor,
+      imgFactor,
+      schemaFactor,
+      entityFactor,
+      calculatedSeo,
+      answerClarity,
+      schemaPresence,
+      citationReadiness,
+      eeatScore
+    });
+
+    console.log("[FINAL RESPONSE DATA]", {
       seoScore,
       aeoScore,
       eeatScore,
-      authorityScore,
-      trustScore,
-      aiTrustScore,
-      citationProbability,
-      readabilityScore,
-      robotsExists,
-      schemaCount
+      citationScore: citationProbability,
+      currentAIVisibility,
+      potentialAIVisibility
     });
 
     payload = {
@@ -2832,7 +2844,7 @@ app.use((err, req, res, next) => {
   console.error("UNHANDLED SYSTEM ERROR:", err);
   res.status(500).json({
     status: "error",
-    error: "Internal server error inside the AI Visibility Engine",
+    error: "Internal server error inside the AI Visibility SaaS Core",
     message: err.message
   });
 });

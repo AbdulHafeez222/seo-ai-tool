@@ -66,6 +66,10 @@ export const safeNumber = (v, d = 0) => {
   return isNaN(num) ? d : num;
 };
 
+export const safeBoolean = (v) => {
+  return Boolean(v);
+};
+
 export const safeArray = (v) => {
   return Array.isArray(v) ? v : [];
 };
@@ -1658,10 +1662,21 @@ export async function analyzeSingleUrl(url) {
     } catch (err) {
       console.error("[PARSER WARNING] Link analyzer failed, falling back to empty indicators. Reason:", err.message);
       internalLinkData = {
-        internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0,
-        orphanPages: [], avgLinkDepth: 1, averageDepth: 1, authorityFlow: 0,
-        weakLinking: true, suggestions: ["Add internal structure navigation"], score: 0,
-        internalLinkScore: 0, anchorDiversityScore: 0, contextualLinkScore: 0, linkDepthAverage: 1.0
+        internalLinks: 0,
+        totalInternalLinks: 0,
+        externalLinks: 0,
+        uniquePages: 0,
+        orphanPages: [],
+        avgLinkDepth: 1,
+        averageDepth: 1,
+        authorityFlow: 0,
+        weakLinking: true,
+        suggestions: ["Add internal structure navigation"],
+        score: 0,
+        internalLinkScore: 0,
+        anchorDiversityScore: 0,
+        contextualLinkScore: 0,
+        linkDepthAverage: 1.0
       };
     }
 
@@ -1933,6 +1948,21 @@ export async function analyzeSingleUrl(url) {
 
     aeoScore = clamp(rawAeoScore, 0, 100);
 
+    const robotsExists = html.includes("robots.txt") || false; 
+    const sitemapExists = html.includes("sitemap.xml") || false;
+    const canonicalExists = hasCanonical;
+
+    // Diagnostics Logging requirement
+    console.log("[VARIABLE CHECK]", {
+      readabilityScore,
+      robotsExists,
+      canonicalExists,
+      sitemapExists,
+      trustScore: aiTrustScore,
+      authorityScore: topicalAuthority.authorityScore,
+      semanticScore: semanticSEO.nlpScore
+    });
+
     const criticalIssues = [];
     const importantIssues = [];
     const minorIssues = [];
@@ -2134,10 +2164,20 @@ export async function analyzeSingleUrl(url) {
       hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatScore: eeatScore
     }), []);
 
-    // Strict Logging
-    console.log(`[SCORE] raw factors: title=${titleQuality}, meta=${metaQuality}, heading=${headingQuality}, length=${lengthFactor}, links=${linkFactor}`);
-    console.log(`[SCORE] confidence: ${analysisConfidence}`);
-    console.log(`[SCORE] final score: seo=${seoScore}, aeo=${aeoScore}, eeat=${eeatScore}`);
+    const aiSnippets = safeRun(() => generateAISnippets(h1, metaDescription, bodyText, keywords), {
+      directAnswer: metaDescription, directAnswerWordCount: 0, featuredSnippet: title, aiOverviewAnswer: "", quickFactsBlock: []
+    });
+
+    const visibilityTrend = safeRun(() => trackAIVisibilityTrend(normalizedUrl, overallAIVisibilityScore, seoScore, aeoScore), {
+      labels: [], scores: [], seoScores: [], aeoScores: [], growthPercentage: 0
+    });
+
+    const reasoning = safeRun(() => aiReasoningEngine(semanticSEO, seoScore, aeoScore, citationProbability), {
+      seo: "Analyzed structural details complete.",
+      aeo: "System visibility indicators calculated.",
+      citationLikelihood: "Medium source visibility potential.",
+      missingEntities: []
+    });
 
     payload = {
       status: "success",

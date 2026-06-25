@@ -1775,11 +1775,11 @@ export async function analyzeSingleUrl(url) {
       hasLastModified = !!dateStr;
       lastModified = dateStr ? new Date(dateStr).toLocaleDateString() : null;
 
-      const socialLinks = $("a").map((i, el) => safeText($(el).attr("href"))).get() || [];
-      hasFacebook = socialLinks.some(link => link.includes("facebook.com"));
-      hasLinkedIn = socialLinks.some(link => link.includes("linkedin.com"));
-      hasYouTube = socialLinks.some(link => link.includes("youtube.com"));
-      hasTwitter = socialLinks.some(link => link.includes("twitter.com") || link.includes("x.com"));
+      const socialLinksList = $("a").map((i, el) => safeText($(el).attr("href"))).get() || [];
+      hasFacebook = socialLinksList.some(link => link.includes("facebook.com"));
+      hasLinkedIn = socialLinksList.some(link => link.includes("linkedin.com"));
+      hasYouTube = socialLinksList.some(link => link.includes("youtube.com"));
+      hasTwitter = socialLinksList.some(link => link.includes("twitter.com") || link.includes("x.com"));
 
       const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
       const phoneMatch = bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
@@ -1950,7 +1950,7 @@ export async function analyzeSingleUrl(url) {
     if (totalImages > 0) confidenceFactors += 10;
 
     let analysisConfidence = clamp(confidenceFactors, 5, 100);
-    let isFallback = false;
+    isFallback = false;
 
     if (crawlResult.status !== 200 || crawlResult.type === "BLOCKED_PAGE" || wordCount < 10) {
       analysisConfidence = clamp(Math.round(analysisConfidence * 0.3), 5, 39);
@@ -2012,13 +2012,109 @@ export async function analyzeSingleUrl(url) {
 
     aeoScore = clamp(rawAeoScore, 0, 100);
 
+    // Reassigned from original declarations cleanly with no double "const/let" binds
     robotsExists = html.includes("robots.txt") || false; 
     sitemapExists = html.includes("sitemap.xml") || false;
     canonicalExists = hasCanonical;
     schemaScore = clamp(schemaCount * 25);
 
+    // Calculations of missing derived metadata blocks
+    const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 50 ? "Good" : "Needs Work";
+    const aeoStatus = aeoScore >= 80 ? "Excellent" : aeoScore >= 50 ? "Good" : "Needs Work";
+    const answerQuality = answerClarity;
+    const featuredSnippetChance = clamp(Math.round((hasDirectAnswer ? 50 : 0) + (wordCount > 500 ? 30 : 0) + (schemaDetected ? 20 : 0)));
+
+    const criticalIssues = [];
+    const importantIssues = [];
+    const minorIssues = [];
+    if (!title) criticalIssues.push("Missing Title Tag");
+    if (!metaDescription) criticalIssues.push("Missing Meta Description");
+    if (h1Count !== 1) importantIssues.push("H1 count should be exactly 1");
+    if (!isHttps) criticalIssues.push("Site is not running on HTTPS");
+    if (imagesWithoutAlt > 0) minorIssues.push("Images without alt attributes detected");
+
+    const aiAutopilot = [];
+    if (!hasFAQ) {
+      aiAutopilot.push({ task: "Deploy Structured FAQ JSON-LD Blocks", priority: "CRITICAL", impact: 15, effort: "15 mins" });
+    }
+    if (!hasDirectAnswer) {
+      aiAutopilot.push({ task: "Place a 50-word direct summary answer box under H1", priority: "HIGH", impact: 15, effort: "10 mins" });
+    }
+    if (!hasAuthor) {
+      aiAutopilot.push({ task: "Establish E-E-A-T: Include author name and schema reference", priority: "HIGH", impact: 10, effort: "15 mins" });
+    }
+    if (!hasCanonical) {
+      aiAutopilot.push({ task: "Add canonical link tag", priority: "MEDIUM", impact: 5, effort: "5 mins" });
+    }
+    if (imagesWithoutAlt > 0) {
+      aiAutopilot.push({ task: "Fix missing image alt attributes", priority: "LOW", impact: 5, effort: "20 mins" });
+    }
+    if (aiAutopilot.length === 0) {
+      aiAutopilot.push({ task: "Maintain regular content freshness", priority: "LOW", impact: 5, effort: "Continuous" });
+    }
+
+    const brandName = getBrandNameEnhanced(normalizedUrl, $, title, schemas);
+    const schemaGenerator = `<!-- Automated Schema Recommendation -->\n<script type="application/ld+json">\n${JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": title,
+      "description": metaDescription
+    }, null, 2)}\n</script>`;
+
+    const aiRecommendations = aiAutopilot.map(a => a.task);
+
     overallAIVisibilityScore = clamp(Math.round((seoScore * 0.3) + (aeoScore * 0.3) + (eeatScore * 0.2) + (citationProbability * 0.2)));
     const aiVisibilityLevel = overallAIVisibilityScore >= 80 ? "Leader" : overallAIVisibilityScore >= 50 ? "Competitor" : "Emerging";
+
+    const mobileScore = mobileViewport ? 90 : 50;
+    const desktopScore = 85;
+
+    totalRoadmapImpact = aiAutopilot.reduce((sum, task) => sum + task.impact, 0);
+    currentAIVisibility = overallAIVisibilityScore;
+    potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
+
+    const autoFAQ = faqQuestions.map(q => ({ question: q, answer: "Auto-generated answer context." }));
+    const aiSearchSimulation = {
+      chatgpt: { score: citationChatGPT, summary: "ChatGPT selection probability is high." },
+      gemini: { score: citationGemini, summary: "Gemini requires clear structured facts." },
+      perplexity: { score: citationPerplexity, summary: "Perplexity prefers fresh updates." },
+      claude: { score: citationClaude, summary: "Claude values semantic density." }
+    };
+
+    const recommendationScore = clamp(100 - (aiAutopilot.length * 10));
+    const visibilityForecast = {
+      current: currentAIVisibility,
+      forecast: Array.from({ length: 6 }, (_, i) => Math.min(100, Math.round(currentAIVisibility + (i * (potentialAIVisibility - currentAIVisibility) / 5))))
+    };
+
+    const citationOpportunities = findCitationOpportunities({ hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo });
+
+    try {
+      aiSnippets = generateAISnippets(h1, metaDescription, bodyText, keywords);
+    } catch (err) {
+      console.error("[PARSER WARNING] generateAISnippets failed", err);
+    }
+    const aiExtractedAnswer = aiSnippets.aiOverviewAnswer;
+
+    try {
+      reasoning = aiReasoningEngine({ missingEntities: semanticSEO.missingEntities || [] }, seoScore, aeoScore, citationProbability);
+    } catch (err) {
+      console.error("[PARSER WARNING] aiReasoningEngine failed", err);
+    }
+
+    try {
+      visibilityTrend = trackAIVisibilityTrend(normalizedUrl, overallAIVisibilityScore, seoScore, aeoScore);
+    } catch (err) {
+      console.error("[PARSER WARNING] trackAIVisibilityTrend failed", err);
+    }
+
+    const extractedBrands = entityData?.brands || [];
+    const extractedServices = entityData?.services || [];
+    const extractedLocations = entityData?.locations || [];
+    const extractedPeople = entityData?.people || [];
+    const extractedOrganizations = entityData?.organizations || [];
+    const extractedProducts = entityData?.products || [];
+    const totalEntities = entityData?.totalEntities || 0;
 
     // Diagnostics Logging requirement
     console.log("[VARIABLE CHECK]", {
@@ -2044,99 +2140,6 @@ export async function analyzeSingleUrl(url) {
       robotsExists,
       schemaCount
     });
-
-    const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 50 ? "Good" : "Needs Work";
-    const aeoStatus = aeoScore >= 80 ? "Excellent" : aeoScore >= 50 ? "Good" : "Needs Work";
-    const answerQuality = answerClarity;
-    const featuredSnippetChance = clamp(Math.round((hasDirectAnswer ? 50 : 0) + (wordCount > 500 ? 30 : 0) + (schemaDetected ? 20 : 0)));
-
-    const criticalIssues = [];
-    const importantIssues = [];
-    const minorIssues = [];
-    if (!title) criticalIssues.push("Missing Title Tag");
-    if (!metaDescription) criticalIssues.push("Missing Meta Description");
-    if (h1Count !== 1) importantIssues.push("H1 count should be exactly 1");
-    if (!isHttps) criticalIssues.push("Site is not running on HTTPS");
-
-    const aiAutopilot = [];
-    if (!hasFAQ) {
-      aiAutopilot.push({ task: "Deploy Structured FAQ JSON-LD Blocks", priority: "CRITICAL", impact: 15, effort: "15 mins" });
-    }
-    if (!hasDirectAnswer) {
-      aiAutopilot.push({ task: "Place a 50-word direct summary answer box under H1", priority: "HIGH", impact: 15, effort: "10 mins" });
-    }
-    if (!hasAuthor) {
-      aiAutopilot.push({ task: "Establish E-E-A-T: Include author name and schema reference", priority: "HIGH", impact: 10, effort: "15 mins" });
-    }
-    if (!hasCanonical) {
-      aiAutopilot.push({ task: "Add canonical link tag", priority: "MEDIUM", impact: 5, effort: "5 mins" });
-    }
-    if (imagesWithoutAlt > 0) {
-      aiAutopilot.push({ task: "Fix missing image alt attributes", priority: "LOW", impact: 5, effort: "20 mins" });
-    }
-    if (aiAutopilot.length === 0) {
-      aiAutopilot.push({ task: "Maintain regular content freshness", priority: "LOW", impact: 5, effort: "Continuous" });
-    }
-
-    totalRoadmapImpact = aiAutopilot.reduce((sum, t) => sum + t.impact, 0);
-    currentAIVisibility = overallAIVisibilityScore;
-    potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
-
-    const schemaGenerator = `<!-- Automated Schema Recommendation -->\n<script type="application/ld+json">\n${JSON.stringify({
-      "@context": "https://schema.org",
-      "@type": "WebPage",
-      "name": title,
-      "description": metaDescription
-    }, null, 2)}\n</script>`;
-
-    const aiRecommendations = aiAutopilot.map(a => a.task);
-    const mobileScore = mobileViewport ? 90 : 50;
-    const desktopScore = 85;
-    const autoFAQ = faqQuestions.map(q => ({ question: q, answer: "Auto-generated answer context." }));
-    
-    const aiSearchSimulation = {
-      chatgpt: { score: citationChatGPT, summary: "ChatGPT selection probability is high." },
-      gemini: { score: citationGemini, summary: "Gemini requires clear structured facts." },
-      perplexity: { score: citationPerplexity, summary: "Perplexity prefers fresh updates." },
-      claude: { score: citationClaude, summary: "Claude values semantic density." }
-    };
-
-    const recommendationScore = clamp(100 - (aiAutopilot.length * 10));
-    const visibilityForecast = {
-      current: currentAIVisibility,
-      forecast: Array.from({ length: 6 }, (_, i) => Math.min(100, Math.round(currentAIVisibility + (i * (potentialAIVisibility - currentAIVisibility) / 5))))
-    };
-
-    const citationOpportunities = findCitationOpportunities({ hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo });
-    
-    try {
-      aiSnippets = generateAISnippets(h1, metaDescription, bodyText, keywords);
-    } catch (err) {
-      console.error("[PARSER WARNING] generateAISnippets failed", err);
-    }
-    const aiExtractedAnswer = aiSnippets.aiOverviewAnswer;
-
-    try {
-      reasoning = aiReasoningEngine(semanticSEO, seoScore, aeoScore, citationProbability);
-    } catch (err) {
-      console.error("[PARSER WARNING] aiReasoningEngine failed", err);
-    }
-
-    try {
-      visibilityTrend = trackAIVisibilityTrend(normalizedUrl, overallAIVisibilityScore, seoScore, aeoScore);
-    } catch (err) {
-      console.error("[PARSER WARNING] trackAIVisibilityTrend failed", err);
-    }
-
-    const brandName = getBrandNameEnhanced(normalizedUrl, $, title, schemas);
-
-    const extractedBrands = entityData?.brands || [];
-    const extractedServices = entityData?.services || [];
-    const extractedLocations = entityData?.locations || [];
-    const extractedPeople = entityData?.people || [];
-    const extractedOrganizations = entityData?.organizations || [];
-    const extractedProducts = entityData?.products || [];
-    const totalEntities = entityData?.totalEntities || 0;
 
     payload = {
       status: "success",

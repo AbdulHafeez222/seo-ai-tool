@@ -135,12 +135,12 @@ const fallbackRegistry = {
   clamp: clamp,
   getKeywordDifficulty: (keyword) => {
     const len = fallbackRegistry.safeString(keyword).length;
-    if (len < 10) return 20;
-    if (len < 18) return 50;
-    return 80;
+    if (len < 10) return 10;
+    if (len < 18) return 30;
+    return 60;
   },
   getKeywordOpportunity: (keyword, hasFAQ, hasSchema) => {
-    let score = 30;
+    let score = 10;
     if (hasFAQ) score += 20;
     if (hasSchema) score += 20;
     if (fallbackRegistry.safeString(keyword).split(' ').length > 2) score += 20;
@@ -1164,10 +1164,10 @@ export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
   const key = Buffer.from(url).toString('base64');
   if (!trendDB[key]) {
     trendDB[key] = [
-      { date: "Day -4", score: Math.max(10, currentScore - 12), seo: Math.max(10, seoScore - 10), aeo: Math.max(10, aeoScore - 8) },
-      { date: "Day -3", score: Math.max(10, currentScore - 8), seo: Math.max(10, seoScore - 6), aeo: Math.max(10, aeoScore - 5) },
-      { date: "Day -2", score: Math.max(10, currentScore - 5), seo: Math.max(10, seoScore - 4), aeo: Math.max(10, aeoScore - 3) },
-      { date: "Day -1", score: Math.max(10, currentScore - 2), seo: Math.max(10, seoScore - 2), aeo: Math.max(10, aeoScore - 1) }
+      { date: "Day -4", score: Math.max(1, currentScore - 12), seo: Math.max(1, seoScore - 10), aeo: Math.max(1, aeoScore - 8) },
+      { date: "Day -3", score: Math.max(1, currentScore - 8), seo: Math.max(1, seoScore - 6), aeo: Math.max(1, aeoScore - 5) },
+      { date: "Day -2", score: Math.max(1, currentScore - 5), seo: Math.max(1, seoScore - 4), aeo: Math.max(1, aeoScore - 3) },
+      { date: "Day -1", score: Math.max(1, currentScore - 2), seo: Math.max(1, seoScore - 2), aeo: Math.max(1, aeoScore - 1) }
     ];
   }
 
@@ -1219,7 +1219,7 @@ export function aeoSimulationEngine(data) {
   } = safeObject(data);
 
   // ChatGPT preferences: FAQ, listCount, Direct answer, Author details
-  const citationChatGPT = Math.min(95, 20 + 
+  const citationChatGPT = Math.min(95, 10 + 
     (hasFAQ ? 25 : 0) + 
     (listCount > 2 ? 15 : 0) + 
     (hasDirectAnswer ? 20 : 0) + 
@@ -1228,7 +1228,7 @@ export function aeoSimulationEngine(data) {
   );
 
   // Gemini preferences: Structured Organization schema, E-E-A-T, Tables, Word Count
-  const citationGemini = Math.min(95, 20 + 
+  const citationGemini = Math.min(95, 10 + 
     (hasLocalBusiness ? 25 : 0) + 
     (tableCount > 0 ? 20 : 0) + 
     (hasAuthor ? 15 : 0) + 
@@ -1237,7 +1237,7 @@ export function aeoSimulationEngine(data) {
   );
 
   // Perplexity preferences: Real-time update modifiers, Outbound citations, Lists, Direct answers
-  const citationPerplexity = Math.min(95, 20 + 
+  const citationPerplexity = Math.min(95, 10 + 
     (hasDirectAnswer ? 25 : 0) + 
     (hasLastModified ? 15 : 0) + 
     (externalLinksCount > 5 ? 15 : 0) + 
@@ -1246,7 +1246,7 @@ export function aeoSimulationEngine(data) {
   );
 
   // Claude preferences: Content depth, Logical hierarchy (HowTo), About clarity, Entity density
-  const citationClaude = Math.min(95, 20 + 
+  const citationClaude = Math.min(95, 10 + 
     (wordCount > 1500 ? 25 : 0) + 
     (hasHowTo ? 20 : 0) + 
     (hasAbout ? 15 : 0) + 
@@ -1297,18 +1297,18 @@ export function aiReasoningEngine(data, seoScore, aeoScore, citationProbability)
   const missingEntities = safeArray(data?.missingEntities || data?.semanticGaps || []);
 
   let seoReasoning = "Your page features solid structural fundamentals.";
-  if (seoScore < 50) {
-    seoReasoning = "Critical structural elements are either missing or badly configured (missing meta tags, title length issues, or non-HTTPS URL).";
-  } else if (seoScore < 80) {
+  if (seoScore < 30) {
+    seoReasoning = "Critical structural elements are missing or badly configured (missing meta tags, title length issues, or non-HTTPS URL).";
+  } else if (seoScore < 70) {
     seoReasoning = "Strong structural base, but could be enhanced by fixing image alt tags, ensuring a canonical link, or speeding up loading performance.";
   } else {
     seoReasoning = "Excellent technical setup with correct HTML validation, metadata coverage, and optimal responsive design.";
   }
 
   let aeoReasoning = "Ready to be referenced by core generative model architectures.";
-  if (aeoScore < 40) {
+  if (aeoScore < 30) {
     aeoReasoning = "The document layout lacks LLM-friendly structural hooks like direct questions, list summaries, or JSON-LD FAQ/HowTo schemas.";
-  } else if (aeoScore < 75) {
+  } else if (aeoScore < 70) {
     aeoReasoning = "LLMs can parse the structure, but adding a high-contrast 'Answer Box' section and expanding Q&A schema blocks would significantly improve visibility.";
   }
 
@@ -1333,51 +1333,54 @@ export function fallbackSafePayload(url, err = null) {
   
   return {
     status: "success",
-    seoScore: 50,
-    aeoScore: 45,
-    eeatScore: 40,
-    citationScore: 35,
-    currentAIVisibility: 45,
-    potentialAIVisibility: 65,
-    totalRoadmapImpact: 20,
+    seoScore: 5,
+    aeoScore: 5,
+    eeatScore: 5,
+    citationScore: 5,
+    currentAIVisibility: 5,
+    potentialAIVisibility: 15,
+    totalRoadmapImpact: 10,
     schemaDetected: false,
     schemaCount: 0,
     recommendedSchemas: ["FAQPage", "LocalBusiness", "Organization"],
+    fallbackMode: true,
+    analysisConfidence: 20,
+    confidenceWarning: "Low confidence scan due to crawl limitations",
     
     analysis: {
       seo: {
-        status: "Fair",
-        criticalIssues: ["Fallback mode active due to page retrieve limitation"],
-        importantIssues: ["Title extracted from metadata fallback"],
+        status: "Poor",
+        criticalIssues = ["Crawl bypass triggered: verify domain is fully indexable."],
+        importantIssues: ["Dynamic crawler metadata parsing failed"],
         minorIssues: []
       },
       aeo: {
         status: "Needs Work",
-        answerQualityScore: 30,
-        featuredSnippetChance: 25,
-        citationChatGPT: 40,
-        citationGemini: 45,
-        citationPerplexity: 40,
-        citationClaude: 35
+        answerQualityScore: 5,
+        featuredSnippetChance: 5,
+        citationChatGPT: 5,
+        citationGemini: 5,
+        citationPerplexity: 5,
+        citationClaude: 5
       },
       eeat: {
-        score: 40,
+        score: 5,
         status: "Shallow Trust Profile",
-        factors: ["HTTPS Secure Check Completed"],
+        factors: [],
         issues: ["Author identification unverified", "No explicit organization mapping found"]
       },
       technical: {
         isHttps: true,
-        loadTime: 200,
+        loadTime: 500,
         mobileFriendly: true,
-        wordCount: 120,
+        wordCount: 0,
         hasSchemaMarkup: false
       }
     },
     
     entities: {
       brands: [brand],
-      services: ["Digital Infrastructure Integration"],
+      services: [],
       locations: ["Global Context"]
     },
     
@@ -1396,7 +1399,7 @@ export function fallbackSafePayload(url, err = null) {
     
     meta: {
       url: url || "https://example.com",
-      wordCount: 120,
+      wordCount: 0,
       timestamp: now
     }
   };
@@ -1500,6 +1503,9 @@ export async function analyzeSingleUrl(url) {
         httpStatus: crawlResult.status || 403,
         contentLength: crawlResult.contentLength || 0,
         resolvedUrl: crawlResult.finalUrl || normalizedUrl,
+        fallbackMode: true,
+        analysisConfidence: 20,
+        confidenceWarning: "Low confidence scan due to crawl limitations",
         meta: {
           url: crawlResult.finalUrl || normalizedUrl,
           timestamp: new Date().toISOString()
@@ -1535,7 +1541,7 @@ export async function analyzeSingleUrl(url) {
                 safeText($('meta[name="twitter:title"]').attr("content")).trim() || 
                 safeText($("h1").first().text()).trim() || 
                 backupExtraction.title ||
-                `Expert Digital Systems Platform`;
+                "";
       }
       title = cleanText(title);
 
@@ -1545,11 +1551,11 @@ export async function analyzeSingleUrl(url) {
                           safeText($('meta[name="twitter:description"]').attr("content")).trim() || 
                           safeText($("p").first().text()).substring(0, 150).trim() || 
                           backupExtraction.metaDescription ||
-                          `Comprehensive services and architectural layouts tailored around expert digital services.`;
+                          "";
       }
       metaDescription = cleanText(metaDescription);
 
-      h1 = safeText($("h1").first().text()).trim() || backupExtraction.h1 || `Proven Expert Digital Systems`;
+      h1 = safeText($("h1").first().text()).trim() || backupExtraction.h1 || "";
       h1 = cleanText(h1);
 
       h2s = $("h2").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
@@ -1562,8 +1568,8 @@ export async function analyzeSingleUrl(url) {
       const internalLinkData = safeRun(() => analyzeInternalLinks($, normalizedUrl, h2s), {
         internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0,
         orphanPages: [], avgLinkDepth: 1, averageDepth: 1, authorityFlow: 10,
-        weakLinking: true, suggestions: ["Add internal structure navigation"], score: 40,
-        internalLinkScore: 40, anchorDiversityScore: 50, contextualLinkScore: 40, linkDepthAverage: 1.0
+        weakLinking: true, suggestions: ["Add internal structure navigation"], score: 0,
+        internalLinkScore: 0, anchorDiversityScore: 0, contextualLinkScore: 0, linkDepthAverage: 1.0
       });
 
       // Now fetch structural text while filtering non-readable elements
@@ -1572,8 +1578,8 @@ export async function analyzeSingleUrl(url) {
 
       $('script, style, nav, footer, header, noscript, svg').remove();
 
-      bodyText = rawBodyText || "No content scanned.";
-      wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
+      bodyText = rawBodyText || "";
+      wordCount = bodyText.split(/\s+/).filter(Boolean).length || 0;
 
       faqQuestions = [];
       if (schemas.FAQPage?.present && schemas.FAQPage?.data?.length > 0) {
@@ -1643,7 +1649,7 @@ export async function analyzeSingleUrl(url) {
       const crawlBlocked = crawlResult.type === "BLOCKED_PAGE";
 
       const trustSignals = safeRun(() => scanTrustSignals($, normalizedUrl), {
-        hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 20, totalSignals: 0, socialLinks: []
+        hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 0, totalSignals: 0, socialLinks: []
       });
 
       const hasAboutPage = trustSignals.hasAbout;
@@ -1651,16 +1657,73 @@ export async function analyzeSingleUrl(url) {
       const hasPrivacyPolicy = trustSignals.hasPrivacyPolicy;
       const hasTermsPage = trustSignals.hasTermsPage;
 
+      // STRICTLY DATA-DRIVEN ANALYSIS CONFIDENCE SYSTEM
+      let confidenceFactors = 0;
+      if (title && title.length > 5) confidenceFactors += 15;
+      if (metaDescription && metaDescription.length > 15) confidenceFactors += 15;
+      if (h1 && h1.length > 3) confidenceFactors += 10;
+      if (wordCount >= 500) confidenceFactors += 20;
+      else if (wordCount > 100) confidenceFactors += 10;
+      if (h2Count > 0 || h3Count > 0) confidenceFactors += 10;
+      if (schemaDetected) confidenceFactors += 10;
+      if (internalLinkData.internalLinks > 0) confidenceFactors += 10;
+      if (totalImages > 0) confidenceFactors += 10;
+
+      let analysisConfidence = clamp(confidenceFactors, 5, 100);
+      let isFallback = false;
+
+      if (crawlResult.status !== 200 || crawlResult.type === "BLOCKED_PAGE" || wordCount < 10) {
+        analysisConfidence = clamp(Math.round(analysisConfidence * 0.3), 5, 39);
+        isFallback = true;
+      }
+
+      const confidenceWarning = analysisConfidence < 40 ? "Low confidence scan due to crawl limitations" : null;
+
+      // STRICTLY DATA-DRIVEN SCORING SYSTEM (No static baselines)
+      let titleQuality = 0;
+      if (title && title.trim().length > 5) {
+        titleQuality = title.length <= 60 ? 20 : 10;
+      }
+      
+      let metaQuality = 0;
+      if (metaDescription && metaDescription.trim().length > 20) {
+        metaQuality = metaDescription.length <= 160 ? 20 : 10;
+      }
+
+      let headingQuality = 0;
+      if (h1Count === 1) headingQuality += 5;
+      if (h2Count >= 2) headingQuality += 5;
+      if (h3Count >= 2) headingQuality += 5;
+
+      let lengthFactor = 0;
+      if (wordCount >= 1500) lengthFactor = 15;
+      else if (wordCount >= 800) lengthFactor = 10;
+      else if (wordCount >= 500) lengthFactor = 5;
+
+      let linkFactor = clamp(Math.min(10, internalLinkData.totalInternalLinks));
+      let imgFactor = clamp(totalImages > 0 ? Math.round(((totalImages - imagesWithoutAlt) / totalImages) * 10) : 0);
+      let schemaFactor = clamp(schemaCount * 3);
+      let entityFactor = clamp(Math.round(entityCoverageScore / 10));
+
+      let calculatedSeo = titleQuality + metaQuality + headingQuality + lengthFactor + linkFactor + imgFactor + schemaFactor + entityFactor;
+
+      // Penalize missing assets completely
+      if (!title || !metaDescription || wordCount < 500 || headingQuality === 0) {
+        calculatedSeo = Math.round(calculatedSeo * 0.15);
+      }
+
+      seoScore = clamp(calculatedSeo, 0, 100);
+
       const eeatData = safeRun(() => analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas, hasTermsPage, trustSignals.socialLinks), {
-        score: 30, status: "Shallow Trust Profile", breakdown: { experience: { score: 5, max: 25, factors: [] }, expertise: { score: 10, max: 25, factors: [] }, authoritativeness: { score: 5, max: 25, factors: [] }, trustworthiness: { score: 10, max: 25, factors: [] } }
+        score: 0, status: "Shallow Trust Profile", breakdown: { experience: { score: 0, max: 25, factors: [] }, expertise: { score: 0, max: 25, factors: [] }, authoritativeness: { score: 0, max: 25, factors: [] }, trustworthiness: { score: 0, max: 25, factors: [] } }
       });
 
       const localSEO = safeRun(() => analyzeLocalSEO($, bodyText, schemas, hasEmail, hasPhone), {
-        hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 30, localSEOScore: 30, napConsistency: "Incomplete/Missing", napStatus: "Incomplete/Missing", mapDetected: false, localBusinessSchemaDetected: false, recommendations: []
+        hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 0, localSEOScore: 0, napConsistency: "Incomplete/Missing", napStatus: "Incomplete/Missing", mapDetected: false, localBusinessSchemaDetected: false, recommendations: []
       });
 
       const topicalAuthority = safeRun(() => calculateTopicalAuthority($, keywords, h2s, h3s, wordCount), {
-        authorityScore: 30, clusters: [], coveragePercent: 10, missingClusters: [], missingTopics: [], depth: "Moderate Coverage", topicsCovered: "0/15"
+        authorityScore: 0, clusters: [], coveragePercent: 0, missingClusters: [], missingTopics: [], depth: "Moderate Coverage", topicsCovered: "0/15"
       });
 
       const aiTrustSignals = [];
@@ -1679,44 +1742,6 @@ export async function analyzeSingleUrl(url) {
       if (hasLastModified) aiTrustSignals.push("Recently Updated");
       if (hasCanonical) aiTrustSignals.push("Canonical URL");
       if (hasFavicon) aiTrustSignals.push("Favicon");
-
-      const sentences = bodyText.split(/[.!?]+/).length || 1;
-      const avgWordsPerSentence = wordCount / sentences;
-      let readabilityScore = 50;
-      if (avgWordsPerSentence > 25) readabilityScore = 30;
-      else if (avgWordsPerSentence > 20) readabilityScore = 50;
-      else readabilityScore = 80;
-
-      const robotsExists = false;
-      const sitemapExists = false;
-
-      let techSub = 100;
-      if (!isHttps) techSub -= 30;
-      if (!mobileViewport) techSub -= 30;
-      if (loadTime > 3000) techSub -= 20;
-      if (!hasCanonical) techSub -= 10;
-      if (!hasFavicon) techSub -= 10;
-      const techScore = clamp(techSub);
-
-      let contentSub = 50;
-      if (wordCount > 1500) contentSub += 50;
-      else if (wordCount > 800) contentSub += 30;
-      else if (wordCount > 400) contentSub += 10;
-      if (h1Count === 1) contentSub += 10;
-      if (h2Count >= 3) contentSub += 10;
-      const depthScore = clamp(contentSub);
-
-      const linkingScore = clamp(internalLinkData.internalLinkScore || 50);
-      const imgScore = clamp(totalImages > 0 ? Math.round(((totalImages - imagesWithoutAlt) / totalImages) * 100) : 100);
-      const schemaFactorScore = clamp(schemaDetected ? (schemaCount * 30) : 10);
-
-      let rawSeoScore = Math.round(
-        (techScore * 0.30) +
-        (depthScore * 0.25) +
-        (linkingScore * 0.15) +
-        (schemaFactorScore * 0.15) +
-        (imgScore * 0.15)
-      );
 
       const externalLinksCount = $("a[href^='http']").not(`a[href^='${normalizedUrl}']`).length || 0;
 
@@ -1738,15 +1763,15 @@ export async function analyzeSingleUrl(url) {
         hasDirectAnswer,
         hasLastModified
       }), {
-        citationChatGPT: 50,
-        citationGemini: 50,
-        citationPerplexity: 50,
-        citationClaude: 50,
-        chatgptProbability: 50,
-        geminiProbability: 50,
-        perplexityProbability: 50,
-        claudeProbability: 50,
-        citationProbability: 50,
+        citationChatGPT: 0,
+        citationGemini: 0,
+        citationPerplexity: 0,
+        citationClaude: 0,
+        chatgptProbability: 0,
+        geminiProbability: 0,
+        perplexityProbability: 0,
+        claudeProbability: 0,
+        citationProbability: 0,
         missingAnswerBlocks: [],
         improvementSuggestions: []
       });
@@ -1757,7 +1782,7 @@ export async function analyzeSingleUrl(url) {
       const citationPerplexity = simulationResult.citationPerplexity;
       const citationClaude = simulationResult.citationClaude;
 
-      const answerClarity = Math.min(100, Math.round((hasDirectAnswer ? 50 : 0) + (hasFAQ ? 30 : 0) + (readabilityScore * 0.2))) || 50;
+      const answerClarity = Math.min(100, Math.round((hasDirectAnswer ? 50 : 0) + (hasFAQ ? 30 : 0) + (readabilityScore * 0.2))) || 0;
       const schemaPresence = clamp((hasFAQ ? 40 : 0) + (hasHowTo ? 30 : 0) + (schemaDetected ? 30 : 0));
       const citationReadiness = citationProbability;
 
@@ -1768,19 +1793,25 @@ export async function analyzeSingleUrl(url) {
         (entityCoverageScore * 0.25)
       );
 
+      if (wordCount < 500) {
+        rawAeoScore = Math.round(rawAeoScore * 0.15);
+      }
+
+      aeoScore = clamp(rawAeoScore, 0, 100);
+
       const criticalIssues = [];
       const importantIssues = [];
       const minorIssues = [];
 
-      if (!title || title === "No Title Found" || title === "Not Found" || title.trim() === "") { 
+      if (!title || title.trim() === "") { 
         criticalIssues.push("Title tag missing or failed to parse"); 
       } else if (title.length > 60) { 
         importantIssues.push("Title too long (>60 chars)"); 
       }
-      if (!metaDescription || metaDescription === "Not Found" || metaDescription.trim() === "") { 
+      if (!metaDescription || metaDescription.trim() === "") { 
         criticalIssues.push("Meta description missing or failed to parse"); 
       }
-      if (!h1 || h1 === "Not Found" || h1.trim() === "") { 
+      if (!h1 || h1.trim() === "") { 
         criticalIssues.push("H1 tag missing or failed to parse"); 
       }
       if (imagesWithoutAlt > 0) { importantIssues.push(`${imagesWithoutAlt} images missing ALT text`); }
@@ -1798,20 +1829,20 @@ export async function analyzeSingleUrl(url) {
       
       const b64Key = Buffer.from(normalizedUrl).toString('base64');
       let historicalEntry = trendDB[b64Key];
-      let previousSEO = rawSeoScore;
-      let previousAEO = rawAeoScore;
+      let previousSEO = seoScore;
+      let previousAEO = aeoScore;
       let previousEEAT = eeatData.score;
 
       if (historicalEntry && historicalEntry.length > 0) {
         const lastPoint = historicalEntry[historicalEntry.length - 1];
-        previousSEO = lastPoint.seo || rawSeoScore;
-        previousAEO = lastPoint.aeo || rawAeoScore;
+        previousSEO = lastPoint.seo || seoScore;
+        previousAEO = lastPoint.aeo || aeoScore;
         previousEEAT = lastPoint.eeat || eeatData.score;
       }
 
-      seoScore = Math.max(35, Math.round((rawSeoScore * 0.6) + (previousSEO * 0.4)));
-      aeoScore = Math.max(35, Math.round((rawAeoScore * 0.6) + (previousAEO * 0.4)));
-      eeatScore = Math.max(35, Math.round((eeatData.score * 0.6) + (previousEEAT * 0.4)));
+      seoScore = clamp(Math.round((seoScore * 0.6) + (previousSEO * 0.4)), 0, 100);
+      aeoScore = clamp(Math.round((aeoScore * 0.6) + (previousAEO * 0.4)), 0, 100);
+      eeatScore = clamp(Math.round((eeatData.score * 0.6) + (previousEEAT * 0.4)), 0, 100);
 
       eeatData.score = eeatScore;
 
@@ -1970,7 +2001,7 @@ export async function analyzeSingleUrl(url) {
       }), []);
 
       const semanticSEO = safeRun(() => analyzeSemanticSEO($, bodyText, keywords), {
-        nlpScore: 40, topicCoverage: 20, semanticRelevance: 30, entityCoverage: 20, contentDepth: "Shallow", semanticGaps: [], missingEntities: [], recommendations: []
+        nlpScore: 0, topicCoverage: 0, semanticRelevance: 0, entityCoverage: 0, contentDepth: "Shallow", semanticGaps: [], missingEntities: [], recommendations: []
       });
 
       const aiSnippets = safeRun(() => generateAISnippets(h1, metaDescription, bodyText, keywords), {
@@ -1988,6 +2019,11 @@ export async function analyzeSingleUrl(url) {
         missingEntities: []
       });
 
+      // Strict Logging
+      console.log(`[SCORE] raw factors: title=${titleQuality}, meta=${metaQuality}, heading=${headingQuality}, length=${lengthFactor}, links=${linkFactor}`);
+      console.log(`[SCORE] confidence: ${analysisConfidence}`);
+      console.log(`[SCORE] final score: seo=${seoScore}, aeo=${aeoScore}, eeat=${eeatScore}`);
+
       payload = {
         status: "success",
         seoScore,
@@ -2000,6 +2036,9 @@ export async function analyzeSingleUrl(url) {
         schemaDetected,
         schemaCount,
         recommendedSchemas,
+        fallbackMode: isFallback,
+        analysisConfidence,
+        confidenceWarning,
         
         // Crawl Diagnostics
         crawlMethod: crawlResult.crawlMethod || "STANDARD_GET",
@@ -2065,9 +2104,9 @@ export async function analyzeSingleUrl(url) {
 
         success: true,
         crawlSuccess: true,
-        fallbackMode: false,
+        fallbackMode: isFallback,
         crawlQuality,
-        warning: null,
+        warning: confidenceWarning,
         schemaGenerator,
         schema: schemaGenerator,
         topicalClusters: topicalAuthority.clusters,
@@ -2446,6 +2485,19 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
         success: false,
         crawlSuccess: false,
         reason: "Comparison unavailable: One or both analysis engines threw a fatal error."
+      });
+    }
+
+    // DISALLOW COMPARISON ON FALLBACKS OR LOW CONFIDENCE PARAMETERS
+    if (site1.fallbackMode || site2.fallbackMode || site1.analysisConfidence < 40 || site2.analysisConfidence < 40) {
+      return res.status(200).json({
+        success: false,
+        crawlSuccess: false,
+        reason: "Comparison disabled: One or both target sites are operating in fallback mode or have low-confidence scan parameters.",
+        winner: null,
+        advantages: null,
+        competitorAdvantage: null,
+        winnerReason: "Crawl limitations prevent accurate data comparison."
       });
     }
 

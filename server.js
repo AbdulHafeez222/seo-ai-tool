@@ -1350,7 +1350,7 @@ export function fallbackSafePayload(url, err = null) {
     analysis: {
       seo: {
         status: "Poor",
-        criticalIssues = ["Crawl bypass triggered: verify domain is fully indexable."],
+        criticalIssues: ["Crawl bypass triggered: verify domain is fully indexable."],
         importantIssues: ["Dynamic crawler metadata parsing failed"],
         minorIssues: []
       },

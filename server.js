@@ -1456,8 +1456,8 @@ export function enforceSecureUrl(inputUrl) {
 // =========================================================================
 
 export async function analyzeSingleUrl(url) {
-  const rawUrl = url;
   let normalizedUrl;
+  let payload;
   
   try {
     try {
@@ -1610,6 +1610,7 @@ export async function analyzeSingleUrl(url) {
     let currentAIVisibility = 0;
     let potentialAIVisibility = 0;
     let totalRoadmapImpact = 0;
+    let schemaScore = 0;
 
     let trustSignals = { hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 0, totalSignals: 0, socialLinks: [] };
     let localSEO = { hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 0, localSEOScore: 0, napConsistency: "Incomplete/Missing", napStatus: "Incomplete/Missing", mapDetected: false, localBusinessSchemaDetected: false, recommendations: [] };
@@ -1892,6 +1893,8 @@ export async function analyzeSingleUrl(url) {
     if (hasCanonical) aiTrustSignals.push("Canonical URL");
     if (hasFavicon) aiTrustSignals.push("Favicon");
 
+    aiTrustScore = clamp(Math.round((aiTrustSignals.length / 15) * 100));
+
     const externalLinksCount = $("a[href^='http']").not(`a[href^='${normalizedUrl}']`).length || 0;
 
     const simulationResult = safeRun(() => aeoSimulationEngine({
@@ -2009,9 +2012,13 @@ export async function analyzeSingleUrl(url) {
 
     aeoScore = clamp(rawAeoScore, 0, 100);
 
-    const robotsExists = html.includes("robots.txt") || false; 
-    const sitemapExists = html.includes("sitemap.xml") || false;
-    const canonicalExists = hasCanonical;
+    robotsExists = html.includes("robots.txt") || false; 
+    sitemapExists = html.includes("sitemap.xml") || false;
+    canonicalExists = hasCanonical;
+    schemaScore = clamp(schemaCount * 25);
+
+    overallAIVisibilityScore = clamp(Math.round((seoScore * 0.3) + (aeoScore * 0.3) + (eeatScore * 0.2) + (citationProbability * 0.2)));
+    const aiVisibilityLevel = overallAIVisibilityScore >= 80 ? "Leader" : overallAIVisibilityScore >= 50 ? "Competitor" : "Emerging";
 
     // Diagnostics Logging requirement
     console.log("[VARIABLE CHECK]", {
@@ -2037,6 +2044,99 @@ export async function analyzeSingleUrl(url) {
       robotsExists,
       schemaCount
     });
+
+    const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 50 ? "Good" : "Needs Work";
+    const aeoStatus = aeoScore >= 80 ? "Excellent" : aeoScore >= 50 ? "Good" : "Needs Work";
+    const answerQuality = answerClarity;
+    const featuredSnippetChance = clamp(Math.round((hasDirectAnswer ? 50 : 0) + (wordCount > 500 ? 30 : 0) + (schemaDetected ? 20 : 0)));
+
+    const criticalIssues = [];
+    const importantIssues = [];
+    const minorIssues = [];
+    if (!title) criticalIssues.push("Missing Title Tag");
+    if (!metaDescription) criticalIssues.push("Missing Meta Description");
+    if (h1Count !== 1) importantIssues.push("H1 count should be exactly 1");
+    if (!isHttps) criticalIssues.push("Site is not running on HTTPS");
+
+    const aiAutopilot = [];
+    if (!hasFAQ) {
+      aiAutopilot.push({ task: "Deploy Structured FAQ JSON-LD Blocks", priority: "CRITICAL", impact: 15, effort: "15 mins" });
+    }
+    if (!hasDirectAnswer) {
+      aiAutopilot.push({ task: "Place a 50-word direct summary answer box under H1", priority: "HIGH", impact: 15, effort: "10 mins" });
+    }
+    if (!hasAuthor) {
+      aiAutopilot.push({ task: "Establish E-E-A-T: Include author name and schema reference", priority: "HIGH", impact: 10, effort: "15 mins" });
+    }
+    if (!hasCanonical) {
+      aiAutopilot.push({ task: "Add canonical link tag", priority: "MEDIUM", impact: 5, effort: "5 mins" });
+    }
+    if (imagesWithoutAlt > 0) {
+      aiAutopilot.push({ task: "Fix missing image alt attributes", priority: "LOW", impact: 5, effort: "20 mins" });
+    }
+    if (aiAutopilot.length === 0) {
+      aiAutopilot.push({ task: "Maintain regular content freshness", priority: "LOW", impact: 5, effort: "Continuous" });
+    }
+
+    totalRoadmapImpact = aiAutopilot.reduce((sum, t) => sum + t.impact, 0);
+    currentAIVisibility = overallAIVisibilityScore;
+    potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
+
+    const schemaGenerator = `<!-- Automated Schema Recommendation -->\n<script type="application/ld+json">\n${JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": title,
+      "description": metaDescription
+    }, null, 2)}\n</script>`;
+
+    const aiRecommendations = aiAutopilot.map(a => a.task);
+    const mobileScore = mobileViewport ? 90 : 50;
+    const desktopScore = 85;
+    const autoFAQ = faqQuestions.map(q => ({ question: q, answer: "Auto-generated answer context." }));
+    
+    const aiSearchSimulation = {
+      chatgpt: { score: citationChatGPT, summary: "ChatGPT selection probability is high." },
+      gemini: { score: citationGemini, summary: "Gemini requires clear structured facts." },
+      perplexity: { score: citationPerplexity, summary: "Perplexity prefers fresh updates." },
+      claude: { score: citationClaude, summary: "Claude values semantic density." }
+    };
+
+    const recommendationScore = clamp(100 - (aiAutopilot.length * 10));
+    const visibilityForecast = {
+      current: currentAIVisibility,
+      forecast: Array.from({ length: 6 }, (_, i) => Math.min(100, Math.round(currentAIVisibility + (i * (potentialAIVisibility - currentAIVisibility) / 5))))
+    };
+
+    const citationOpportunities = findCitationOpportunities({ hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo });
+    
+    try {
+      aiSnippets = generateAISnippets(h1, metaDescription, bodyText, keywords);
+    } catch (err) {
+      console.error("[PARSER WARNING] generateAISnippets failed", err);
+    }
+    const aiExtractedAnswer = aiSnippets.aiOverviewAnswer;
+
+    try {
+      reasoning = aiReasoningEngine(semanticSEO, seoScore, aeoScore, citationProbability);
+    } catch (err) {
+      console.error("[PARSER WARNING] aiReasoningEngine failed", err);
+    }
+
+    try {
+      visibilityTrend = trackAIVisibilityTrend(normalizedUrl, overallAIVisibilityScore, seoScore, aeoScore);
+    } catch (err) {
+      console.error("[PARSER WARNING] trackAIVisibilityTrend failed", err);
+    }
+
+    const brandName = getBrandNameEnhanced(normalizedUrl, $, title, schemas);
+
+    const extractedBrands = entityData?.brands || [];
+    const extractedServices = entityData?.services || [];
+    const extractedLocations = entityData?.locations || [];
+    const extractedPeople = entityData?.people || [];
+    const extractedOrganizations = entityData?.organizations || [];
+    const extractedProducts = entityData?.products || [];
+    const totalEntities = entityData?.totalEntities || 0;
 
     payload = {
       status: "success",
@@ -2118,7 +2218,6 @@ export async function analyzeSingleUrl(url) {
 
       success: true,
       crawlSuccess: true,
-      fallbackMode: isFallback,
       crawlQuality,
       warning: confidenceWarning,
       schemaGenerator,
@@ -2172,7 +2271,6 @@ export async function analyzeSingleUrl(url) {
       hasHowTo,
       hasDirectAnswer,
       keywords: keywords || [],
-      readabilityScore,
       aiTrustScore,
       answerQualityScore: answerQuality,
       featuredSnippetChance,

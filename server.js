@@ -1759,6 +1759,21 @@ export async function analyzeSingleUrl(url) {
     const crawlQuality = crawlResult.type === "VALID_CONTENT" ? "High Quality" : (crawlResult.type === "THIN_CONTENT" ? "Low Content / Stub" : "JavaScript Render Active");
     const crawlBlocked = crawlResult.type === "BLOCKED_PAGE";
 
+    // --------------------------------==================--------------------------------
+    // 1. EXTRACT / CALCULATE FOUNDATIONAL METRICS FIRST
+    // --------------------------------==================--------------------------------
+    let readabilityScore = 50;
+    try {
+      const sentences = bodyText.split(/[.!?]+/).length || 1;
+      const avgWordsPerSentence = wordCount / sentences;
+      if (avgWordsPerSentence > 25) readabilityScore = 30;
+      else if (avgWordsPerSentence > 20) readabilityScore = 50;
+      else readabilityScore = 80;
+    } catch (err) {
+      console.error("[READABILITY ERROR]", err);
+      readabilityScore = 50;
+    }
+
     const trustSignals = safeRun(() => scanTrustSignals($, normalizedUrl), {
       hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 0, totalSignals: 0, socialLinks: []
     });
@@ -1767,63 +1782,6 @@ export async function analyzeSingleUrl(url) {
     const hasContactPage = trustSignals.hasContact;
     const hasPrivacyPolicy = trustSignals.hasPrivacyPolicy;
     const hasTermsPage = trustSignals.hasTermsPage;
-
-    // STRICTLY DATA-DRIVEN ANALYSIS CONFIDENCE SYSTEM
-    let confidenceFactors = 0;
-    if (title && title.length > 5) confidenceFactors += 15;
-    if (metaDescription && metaDescription.length > 15) confidenceFactors += 15;
-    if (h1 && h1.length > 3) confidenceFactors += 10;
-    if (wordCount >= 500) confidenceFactors += 20;
-    else if (wordCount > 100) confidenceFactors += 10;
-    if (h2Count > 0 || h3Count > 0) confidenceFactors += 10;
-    if (schemaDetected) confidenceFactors += 10;
-    if (internalLinkData.internalLinks > 0) confidenceFactors += 10;
-    if (totalImages > 0) confidenceFactors += 10;
-
-    let analysisConfidence = clamp(confidenceFactors, 5, 100);
-    let isFallback = false;
-
-    if (crawlResult.status !== 200 || crawlResult.type === "BLOCKED_PAGE" || wordCount < 10) {
-      analysisConfidence = clamp(Math.round(analysisConfidence * 0.3), 5, 39);
-      isFallback = true;
-    }
-
-    const confidenceWarning = analysisConfidence < 40 ? "Low confidence scan due to crawl limitations" : null;
-
-    // STRICTLY DATA-DRIVEN SCORING SYSTEM (No static baselines)
-    let titleQuality = 0;
-    if (title && title.trim().length > 5) {
-      titleQuality = title.length <= 60 ? 20 : 10;
-    }
-    
-    let metaQuality = 0;
-    if (metaDescription && metaDescription.trim().length > 20) {
-      metaQuality = metaDescription.length <= 160 ? 20 : 10;
-    }
-
-    let headingQuality = 0;
-    if (h1Count === 1) headingQuality += 5;
-    if (h2Count >= 2) headingQuality += 5;
-    if (h3Count >= 2) headingQuality += 5;
-
-    let lengthFactor = 0;
-    if (wordCount >= 1500) lengthFactor = 15;
-    else if (wordCount >= 800) lengthFactor = 10;
-    else if (wordCount >= 500) lengthFactor = 5;
-
-    let linkFactor = clamp(Math.min(10, internalLinkData.totalInternalLinks));
-    let imgFactor = clamp(totalImages > 0 ? Math.round(((totalImages - imagesWithoutAlt) / totalImages) * 10) : 0);
-    let schemaFactor = clamp(schemaCount * 3);
-    let entityFactor = clamp(Math.round(entityCoverageScore / 10));
-
-    let calculatedSeo = titleQuality + metaQuality + headingQuality + lengthFactor + linkFactor + imgFactor + schemaFactor + entityFactor;
-
-    // Penalize missing assets completely
-    if (!title || !metaDescription || wordCount < 500 || headingQuality === 0) {
-      calculatedSeo = Math.round(calculatedSeo * 0.15);
-    }
-
-    seoScore = clamp(calculatedSeo, 0, 100);
 
     const eeatData = safeRun(() => analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas, hasTermsPage, trustSignals.socialLinks), {
       score: 0, status: "Shallow Trust Profile", breakdown: { experience: { score: 0, max: 25, factors: [] }, expertise: { score: 0, max: 25, factors: [] }, authoritativeness: { score: 0, max: 25, factors: [] }, trustworthiness: { score: 0, max: 25, factors: [] } }
@@ -1835,6 +1793,10 @@ export async function analyzeSingleUrl(url) {
 
     const topicalAuthority = safeRun(() => calculateTopicalAuthority($, keywords, h2s, h3s, wordCount), {
       authorityScore: 0, clusters: [], coveragePercent: 0, missingClusters: [], missingTopics: [], depth: "Moderate Coverage", topicsCovered: "0/15"
+    });
+
+    const semanticSEO = safeRun(() => analyzeSemanticSEO($, bodyText, keywords), {
+      nlpScore: 0, topicCoverage: 0, semanticRelevance: 0, entityCoverage: 0, contentDepth: "Shallow", semanticGaps: [], missingEntities: [], recommendations: []
     });
 
     const aiTrustSignals = [];
@@ -1893,7 +1855,68 @@ export async function analyzeSingleUrl(url) {
     const citationPerplexity = simulationResult.citationPerplexity;
     const citationClaude = simulationResult.citationClaude;
 
-    const answerClarity = Math.min(100, Math.round((hasDirectAnswer ? 50 : 0) + (hasFAQ ? 30 : 0) + (readabilityScore * 0.2))) || 0;
+    // --------------------------------==================--------------------------------
+    // 2. NOW RUN ANALYSIS SCORING CALCULATIONS SECURELY
+    // --------------------------------==================--------------------------------
+    // Analysis Confidence
+    let confidenceFactors = 0;
+    if (title && title.length > 5) confidenceFactors += 15;
+    if (metaDescription && metaDescription.length > 15) confidenceFactors += 15;
+    if (h1 && h1.length > 3) confidenceFactors += 10;
+    if (wordCount >= 500) confidenceFactors += 20;
+    else if (wordCount > 100) confidenceFactors += 10;
+    if (h2Count > 0 || h3Count > 0) confidenceFactors += 10;
+    if (schemaDetected) confidenceFactors += 10;
+    if (internalLinkData.internalLinks > 0) confidenceFactors += 10;
+    if (totalImages > 0) confidenceFactors += 10;
+
+    let analysisConfidence = clamp(confidenceFactors, 5, 100);
+    let isFallback = false;
+
+    if (crawlResult.status !== 200 || crawlResult.type === "BLOCKED_PAGE" || wordCount < 10) {
+      analysisConfidence = clamp(Math.round(analysisConfidence * 0.3), 5, 39);
+      isFallback = true;
+    }
+
+    const confidenceWarning = analysisConfidence < 40 ? "Low confidence scan due to crawl limitations" : null;
+
+    // SEO Score
+    let titleQuality = 0;
+    if (title && title.trim().length > 5) {
+      titleQuality = title.length <= 60 ? 20 : 10;
+    }
+    
+    let metaQuality = 0;
+    if (metaDescription && metaDescription.trim().length > 20) {
+      metaQuality = metaDescription.length <= 160 ? 20 : 10;
+    }
+
+    let headingQuality = 0;
+    if (h1Count === 1) headingQuality += 5;
+    if (h2Count >= 2) headingQuality += 5;
+    if (h3Count >= 2) headingQuality += 5;
+
+    let lengthFactor = 0;
+    if (wordCount >= 1500) lengthFactor = 15;
+    else if (wordCount >= 800) lengthFactor = 10;
+    else if (wordCount >= 500) lengthFactor = 5;
+
+    let linkFactor = clamp(Math.min(10, internalLinkData.totalInternalLinks));
+    let imgFactor = clamp(totalImages > 0 ? Math.round(((totalImages - imagesWithoutAlt) / totalImages) * 10) : 0);
+    let schemaFactor = clamp(schemaCount * 3);
+    let entityFactor = clamp(Math.round(entityCoverageScore / 10));
+
+    let calculatedSeo = titleQuality + metaQuality + headingQuality + lengthFactor + linkFactor + imgFactor + schemaFactor + entityFactor;
+
+    // Penalize missing assets completely
+    if (!title || !metaDescription || wordCount < 500 || headingQuality === 0) {
+      calculatedSeo = Math.round(calculatedSeo * 0.15);
+    }
+
+    seoScore = clamp(calculatedSeo, 0, 100);
+
+    // AEO Score
+    const answerClarity = Math.min(100, Math.round((hasDirectAnswer ? 50 : 0) + (hasFAQ ? 30 : 0) + (safeNumber(readabilityScore, 50) * 0.2))) || 0;
     const schemaPresence = clamp((hasFAQ ? 40 : 0) + (hasHowTo ? 30 : 0) + (schemaDetected ? 30 : 0));
     const citationReadiness = citationProbability;
 
@@ -2078,287 +2101,268 @@ export async function analyzeSingleUrl(url) {
             "addressLocality": extractedLocations[0],
             "addressCountry": "US"
           } : undefined
-          }, null, 2),
-          title: "LocalBusiness Schema - Trust Profile"
-        };
-      } else {
-        schemaGenerator.LocalBusiness = null;
-      }
-
-      schemaGenerator.HowTo = {
-        recommended: true,
-        code: JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "HowTo",
-          "name": `How to Optimize ${mainTopic}`,
-          "step": [
-            {
-              "@type": "HowToStep",
-              "name": "Audit Current AI Visibility",
-              "text": "Scan domain properties using real-time generative index benchmarks."
-            },
-            {
-              "@type": "HowToStep",
-              "name": "Inject Semantic Structure",
-              "text": "Add direct summary segments and FAQ schema segments to boost LLM reference citation rates."
-            }
-          ]
         }, null, 2),
-        title: "HowTo Schema"
+        title: "LocalBusiness Schema - Trust Profile"
       };
+    } else {
+      schemaGenerator.LocalBusiness = null;
+    }
 
-      const citationOpportunities = safeRun(() => findCitationOpportunities({
-        hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatScore: eeatScore
-      }), []);
-
-      const semanticSEO = safeRun(() => analyzeSemanticSEO($, bodyText, keywords), {
-        nlpScore: 0, topicCoverage: 0, semanticRelevance: 0, entityCoverage: 0, contentDepth: "Shallow", semanticGaps: [], missingEntities: [], recommendations: []
-      });
-
-      const aiSnippets = safeRun(() => generateAISnippets(h1, metaDescription, bodyText, keywords), {
-        directAnswer: metaDescription, directAnswerWordCount: 0, featuredSnippet: title, aiOverviewAnswer: "", quickFactsBlock: []
-      });
-
-      const visibilityTrend = safeRun(() => trackAIVisibilityTrend(normalizedUrl, overallAIVisibilityScore, seoScore, aeoScore), {
-        labels: [], scores: [], seoScores: [], aeoScores: [], growthPercentage: 0
-      });
-
-      const reasoning = safeRun(() => aiReasoningEngine(semanticSEO, seoScore, aeoScore, citationProbability), {
-        seo: "Analyzed structural details complete.",
-        aeo: "System visibility indicators calculated.",
-        citationLikelihood: "Medium source visibility potential.",
-        missingEntities: []
-      });
-
-      // Strict Logging
-      console.log(`[SCORE] raw factors: title=${titleQuality}, meta=${metaQuality}, heading=${headingQuality}, length=${lengthFactor}, links=${linkFactor}`);
-      console.log(`[SCORE] confidence: ${analysisConfidence}`);
-      console.log(`[SCORE] final score: seo=${seoScore}, aeo=${aeoScore}, eeat=${eeatScore}`);
-
-      payload = {
-        status: "success",
-        seoScore,
-        aeoScore,
-        eeatScore,
-        citationScore: citationProbability,
-        currentAIVisibility,
-        potentialAIVisibility,
-        totalRoadmapImpact,
-        schemaDetected,
-        schemaCount,
-        recommendedSchemas,
-        fallbackMode: isFallback,
-        analysisConfidence,
-        confidenceWarning,
-        
-        // Crawl Diagnostics
-        crawlMethod: crawlResult.crawlMethod || "STANDARD_GET",
-        httpStatus: crawlResult.status || 200,
-        contentLength: crawlResult.contentLength || 0,
-        resolvedUrl: crawlResult.finalUrl || normalizedUrl,
-        pageType: crawlResult.type,
-        blockedReason: null,
-
-        analysis: {
-          seo: {
-            status: seoStatus,
-            criticalIssues,
-            importantIssues,
-            minorIssues,
-            readabilityScore
+    schemaGenerator.HowTo = {
+      recommended: true,
+      code: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        "name": `How to Optimize ${mainTopic}`,
+        "step": [
+          {
+            "@type": "HowToStep",
+            "name": "Audit Current AI Visibility",
+            "text": "Scan domain properties using real-time generative index benchmarks."
           },
-          aeo: {
-            status: aeoStatus,
-            answerQualityScore: answerQuality,
-            featuredSnippetChance,
-            citationChatGPT,
-            citationGemini,
-            citationPerplexity,
-            citationClaude,
-            faqQuestions
-          },
-          eeat: {
-            score: eeatScore,
-            status: eeatData.status || "Shallow Trust Profile",
-            factors: eeatData.factors || [],
-            issues: eeatData.issues || []
-          },
-          technical: {
-            isHttps,
-            loadTime,
-            mobileFriendly: mobileViewport,
-            wordCount,
-            hasSchemaMarkup: schemaDetected,
-            schemas: uniqueSchemas,
-            recommendedSchemas
+          {
+            "@type": "HowToStep",
+            "name": "Inject Semantic Structure",
+            "text": "Add direct summary segments and FAQ schema segments to boost LLM reference citation rates."
           }
-        },
-        
-        entities: {
-          brands: extractedBrands,
-          services: extractedServices,
-          locations: extractedLocations
-        },
-        
-        issues: [...criticalIssues, ...importantIssues].map(issue => ({ priority: "HIGH", description: issue })),
-        roadmap: aiAutopilot.map((task, idx) => ({ step: idx + 1, task: task.task, priority: task.priority, impact: task.impact, effort: task.effort })),
-        competitor: {
-          winner: brandName,
-          winnerReason: "Live verification complete"
-        },
-        
-        meta: {
-          url: normalizedUrl,
-          wordCount,
-          timestamp: new Date().toISOString()
-        },
+        ]
+      }, null, 2),
+      title: "HowTo Schema"
+    };
 
-        success: true,
-        crawlSuccess: true,
-        fallbackMode: isFallback,
-        crawlQuality,
-        warning: confidenceWarning,
-        schemaGenerator,
-        schema: schemaGenerator,
-        topicalClusters: topicalAuthority.clusters,
-        recommendations: aiRecommendations,
-        aiAutopilot,
-        autopilot: {
-          tasks: aiAutopilot
+    const citationOpportunities = safeRun(() => findCitationOpportunities({
+      hasFAQ, hasDirectAnswer, hasAuthor, hasHowTo, wordCount, eeatScore: eeatScore
+    }), []);
+
+    // Strict Logging
+    console.log(`[SCORE] raw factors: title=${titleQuality}, meta=${metaQuality}, heading=${headingQuality}, length=${lengthFactor}, links=${linkFactor}`);
+    console.log(`[SCORE] confidence: ${analysisConfidence}`);
+    console.log(`[SCORE] final score: seo=${seoScore}, aeo=${aeoScore}, eeat=${eeatScore}`);
+
+    payload = {
+      status: "success",
+      seoScore,
+      aeoScore,
+      eeatScore,
+      citationScore: citationProbability,
+      currentAIVisibility,
+      potentialAIVisibility,
+      totalRoadmapImpact,
+      schemaDetected,
+      schemaCount,
+      recommendedSchemas,
+      fallbackMode: isFallback,
+      analysisConfidence,
+      confidenceWarning,
+      
+      // Crawl Diagnostics
+      crawlMethod: crawlResult.crawlMethod || "STANDARD_GET",
+      httpStatus: crawlResult.status || 200,
+      contentLength: crawlResult.contentLength || 0,
+      resolvedUrl: crawlResult.finalUrl || normalizedUrl,
+      pageType: crawlResult.type,
+      blockedReason: null,
+
+      analysis: {
+        seo: {
+          status: seoStatus,
+          criticalIssues,
+          importantIssues,
+          minorIssues,
+          readabilityScore
         },
-        title,
-        h1,
-        h2s,
-        h3s,
-        metaDescription,
-        lastModified,
-        score: seoScore,
-        citationProbability,
-        aiTrustSignals,
-        overallAIVisibilityScore,
-        aiVisibilityLevel,
-        breakdown: {
-          seo: seoScore,
-          aeo: aeoScore,
-          eeatScore: eeatScore,
-          eeatBreakdown: eeatData,
-          internalLinkingAudit: internalLinkData,
-          trust: aiTrustScore,
-          citation: citationProbability,
-          readability: readabilityScore,
-          schema: schemaScore
-        },
-        totalImages,
-        imagesWithoutAlt,
-        internalLinks: internalLinkData.totalInternalLinks,
-        externalLinks: externalLinksCount,
-        mobileScore,
-        desktopScore,
-        robotsExists,
-        sitemapExists,
-        hasCanonical,
-        canonical,
-        hasFavicon,
-        favicon,
-        hasOGTags,
-        ogTitle,
-        ogDescription,
-        ogImage,
-        aeoStatus,
-        hasFAQ,
-        hasHowTo,
-        hasDirectAnswer,
-        keywords: keywords || [],
-        readabilityScore,
-        aiTrustScore,
-        answerQualityScore: answerQuality,
-        featuredSnippetChance,
-        contentStructureScore: (h1Count === 1 ? 20 : 0) + (h2Count >= 3 ? 20 : 0) + (h3Count >= 5 ? 20 : 0) + (listCount >= 2 ? 20 : 0) + (tableCount >= 1 ? 20 : 0),
-        h1Count,
-        h2Count,
-        h3Count,
-        listCount,
-        tableCount,
-        hasPrivacyPolicy,
-        hasAboutPage,
-        hasContactPage,
-        hasAuthor,
-        hasFacebook,
-        hasLinkedIn,
-        hasYouTube,
-        hasTwitter,
-        hasEmail,
-        hasPhone,
-        email,
-        phone,
-        hasLastModified,
-        autoFAQ,
-        aiSearchSimulation,
-        aiSimulation: {
-          chatgpt: aiSearchSimulation.chatgpt,
-          gemini: aiSearchSimulation.gemini,
-          perplexity: aiSearchSimulation.perplexity
-        },
-        aiRecommendations,
-        recommendationScore,
-        visibilityForecast,
-        topicalAuthority,
-        semanticSEO,
-        citationOpportunities,
-        aiSnippets,
-        trustSignals,
-        localSEO,
-        visibilityTrend,
-        aiEntities: { 
-          brands: extractedBrands, 
-          locations: extractedLocations, 
-          services: extractedServices, 
-          people: extractedPeople, 
-          organizations: extractedOrganizations, 
-          products: extractedProducts, 
-          totalEntities: totalEntities 
-        },
-        internalLinkIntelligence: internalLinkData,
-        brokenLinkCount: 0,
-        lcpScore: 1200,
-        aiExtractedAnswer,
-        reasoning,
-        aiReasoning: reasoning,
-        aeoSimulation: {
+        aeo: {
+          status: aeoStatus,
+          answerQualityScore: answerQuality,
+          featuredSnippetChance,
           citationChatGPT,
           citationGemini,
           citationPerplexity,
           citationClaude,
-          chatgptProbability: citationChatGPT,
-          geminiProbability: citationGemini,
-          perplexityProbability: citationPerplexity,
-          claudeProbability: citationClaude,
-          citationProbability,
-          missingAnswerBlocks: simulationResult.missingAnswerBlocks,
-          improvementSuggestions: simulationResult.improvementSuggestions
+          faqQuestions
+        },
+        eeat: {
+          score: eeatScore,
+          status: eeatData.status || "Shallow Trust Profile",
+          factors: eeatData.factors || [],
+          issues: eeatData.issues || []
+        },
+        technical: {
+          isHttps,
+          loadTime,
+          mobileFriendly: mobileViewport,
+          wordCount,
+          hasSchemaMarkup: schemaDetected,
+          schemas: uniqueSchemas,
+          recommendedSchemas
         }
-      };
-
-      scanCache.set(cacheKey, {
-        cachedAt: Date.now(),
-        payload
-      });
-
-      scanHistory.unshift({
-        url: payload.url,
-        score: payload.overallAIVisibilityScore,
-        seoScore: payload.score,
-        aeoScore: payload.aeoScore,
+      },
+      
+      entities: {
+        brands: extractedBrands,
+        services: extractedServices,
+        locations: extractedLocations
+      },
+      
+      issues: [...criticalIssues, ...importantIssues].map(issue => ({ priority: "HIGH", description: issue })),
+      roadmap: aiAutopilot.map((task, idx) => ({ step: idx + 1, task: task.task, priority: task.priority, impact: task.impact, effort: task.effort })),
+      competitor: {
+        winner: brandName,
+        winnerReason: "Live verification complete"
+      },
+      
+      meta: {
+        url: normalizedUrl,
+        wordCount,
         timestamp: new Date().toISOString()
-      });
-      if (scanHistory.length > 50) scanHistory.pop();
+      },
 
-      return payload;
+      success: true,
+      crawlSuccess: true,
+      fallbackMode: isFallback,
+      crawlQuality,
+      warning: confidenceWarning,
+      schemaGenerator,
+      schema: schemaGenerator,
+      topicalClusters: topicalAuthority.clusters,
+      recommendations: aiRecommendations,
+      aiAutopilot,
+      autopilot: {
+        tasks: aiAutopilot
+      },
+      title,
+      h1,
+      h2s,
+      h3s,
+      metaDescription,
+      lastModified,
+      score: seoScore,
+      citationProbability,
+      aiTrustSignals,
+      overallAIVisibilityScore,
+      aiVisibilityLevel,
+      breakdown: {
+        seo: seoScore,
+        aeo: aeoScore,
+        eeatScore: eeatScore,
+        eeatBreakdown: eeatData,
+        internalLinkingAudit: internalLinkData,
+        trust: aiTrustScore,
+        citation: citationProbability,
+        readability: readabilityScore,
+        schema: schemaScore
+      },
+      totalImages,
+      imagesWithoutAlt,
+      internalLinks: internalLinkData.totalInternalLinks,
+      externalLinks: externalLinksCount,
+      mobileScore,
+      desktopScore,
+      robotsExists,
+      sitemapExists,
+      hasCanonical,
+      canonical,
+      hasFavicon,
+      favicon,
+      hasOGTags,
+      ogTitle,
+      ogDescription,
+      ogImage,
+      aeoStatus,
+      hasFAQ,
+      hasHowTo,
+      hasDirectAnswer,
+      keywords: keywords || [],
+      readabilityScore,
+      aiTrustScore,
+      answerQualityScore: answerQuality,
+      featuredSnippetChance,
+      contentStructureScore: (h1Count === 1 ? 20 : 0) + (h2Count >= 3 ? 20 : 0) + (h3Count >= 5 ? 20 : 0) + (listCount >= 2 ? 20 : 0) + (tableCount >= 1 ? 20 : 0),
+      h1Count,
+      h2Count,
+      h3Count,
+      listCount,
+      tableCount,
+      hasPrivacyPolicy,
+      hasAboutPage,
+      hasContactPage,
+      hasAuthor,
+      hasFacebook,
+      hasLinkedIn,
+      hasYouTube,
+      hasTwitter,
+      hasEmail,
+      hasPhone,
+      email,
+      phone,
+      hasLastModified,
+      autoFAQ,
+      aiSearchSimulation,
+      aiSimulation: {
+        chatgpt: aiSearchSimulation.chatgpt,
+        gemini: aiSearchSimulation.gemini,
+        perplexity: aiSearchSimulation.perplexity
+      },
+      aiRecommendations,
+      recommendationScore,
+      visibilityForecast,
+      topicalAuthority,
+      semanticSEO,
+      citationOpportunities,
+      aiSnippets,
+      trustSignals,
+      localSEO,
+      visibilityTrend,
+      aiEntities: { 
+        brands: extractedBrands, 
+        locations: extractedLocations, 
+        services: extractedServices, 
+        people: extractedPeople, 
+        organizations: extractedOrganizations, 
+        products: extractedProducts, 
+        totalEntities: totalEntities 
+      },
+      internalLinkIntelligence: internalLinkData,
+      brokenLinkCount: 0,
+      lcpScore: 1200,
+      aiExtractedAnswer,
+      reasoning,
+      aiReasoning: reasoning,
+      aeoSimulation: {
+        citationChatGPT,
+        citationGemini,
+        citationPerplexity,
+        citationClaude,
+        chatgptProbability: citationChatGPT,
+        geminiProbability: citationGemini,
+        perplexityProbability: citationPerplexity,
+        claudeProbability: citationClaude,
+        citationProbability,
+        missingAnswerBlocks: simulationResult.missingAnswerBlocks,
+        improvementSuggestions: simulationResult.improvementSuggestions
+      }
+    };
 
-    } catch (err) {
-      console.error("[FALLBACK TRIGGERED] unhandled single url scan runtime error. Reason:", err.message);
-      return fallbackSafePayload(normalizedUrl || url, err);
-    }
+    scanCache.set(cacheKey, {
+      cachedAt: Date.now(),
+      payload
+    });
+
+    scanHistory.unshift({
+      url: payload.url,
+      score: payload.overallAIVisibilityScore,
+      seoScore: payload.score,
+      aeoScore: payload.aeoScore,
+      timestamp: new Date().toISOString()
+    });
+    if (scanHistory.length > 50) scanHistory.pop();
+
+    return payload;
+
+  } catch (err) {
+    console.error("[FALLBACK TRIGGERED] unhandled single url scan runtime error. Reason:", err.message);
+    return fallbackSafePayload(normalizedUrl || url, err);
+  }
 }
 
 // TASK 3: FIX GAP FINDER

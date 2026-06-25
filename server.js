@@ -538,36 +538,114 @@ export function detectAllSchemas($, html) {
       schemas.HowTo.recommended = true;
     }
   } catch (e) {}
+
+  const detectedCount = Object.keys(schemas).filter(k => schemas[k].present).length;
+  console.log(`[SCHEMA] detected count: ${detectedCount}`);
   return schemas;
 }
 
 export function getBrandNameEnhanced(url, $, title, schemas) {
-  try {
-    if (schemas?.Organization?.present && schemas?.Organization?.data?.length > 0) {
-      const orgName = schemas.Organization.data[0]?.name;
-      if (orgName && typeof orgName === 'string' && orgName.trim().length > 0) {
-        return cleanText(orgName);
+  let selectedSource = "Title Tag (Last Fallback)";
+  let brand = "";
+
+  const genericServiceKeywords = [
+    "seo", "search engine optimization", "web design", "digital marketing", "web development", 
+    "content writing", "copywriting", "social media marketing", "ecommerce", "shopify", 
+    "branding", "analytics", "enterprise software", "ai integration", "consulting", 
+    "software development", "product strategy", "ui/ux design", "cloud hosting", "cybersecurity",
+    "expert digital systems", "home", "homepage", "services", "contact", "about", "about us", "privacy policy"
+  ];
+
+  const isGeneric = (name) => {
+    if (!name) return true;
+    const lower = name.toLowerCase().trim();
+    if (lower.length <= 1 || lower.length > 60) return true;
+    return genericServiceKeywords.some(kw => lower === kw || lower.includes("expert digital systems") || lower === "brand authority" || lower === "unknown");
+  };
+
+  // 1. Organization Schema
+  if (schemas?.Organization?.present && schemas?.Organization?.data?.length > 0) {
+    const orgName = schemas.Organization.data[0]?.name;
+    if (orgName && typeof orgName === 'string' && !isGeneric(orgName)) {
+      brand = cleanText(orgName);
+      selectedSource = "Organization Schema";
+    }
+  }
+
+  // 2. Site Name
+  if (!brand) {
+    const ogSiteName = $('meta[property="og:site_name"]').attr("content") || $('meta[name="application-name"]').attr("content");
+    if (ogSiteName && typeof ogSiteName === 'string' && !isGeneric(ogSiteName)) {
+      brand = cleanText(ogSiteName);
+      selectedSource = "Site Name";
+    }
+  }
+
+  // 3. Logo Alt
+  if (!brand) {
+    const logoAlt = $('img[src*="logo" i]').attr('alt') || $('img[class*="logo" i]').attr('alt') || $('img[id*="logo" i]').attr('alt');
+    if (logoAlt && typeof logoAlt === 'string' && !isGeneric(logoAlt)) {
+      brand = cleanText(logoAlt);
+      selectedSource = "Logo Alt";
+    }
+  }
+
+  // 4. Footer Company Name
+  if (!brand) {
+    const footerText = $('footer, .footer, #footer').text();
+    if (footerText) {
+      const copyrightMatch = footerText.match(/(?:copyright|©|\(c\))\s*(?:\d{4})?\s*([A-Za-z0-9\s,\.\-]+?)(?:\.|all rights|rights reserved|$)/i);
+      if (copyrightMatch && copyrightMatch[1]) {
+        const matchedName = copyrightMatch[1].trim();
+        if (!isGeneric(matchedName) && matchedName.length > 2 && matchedName.length < 50) {
+          brand = cleanText(matchedName);
+          selectedSource = "Footer Company Name";
+        }
       }
     }
-    
-    const logoAlt = $('img[src*="logo" i]').attr('alt') || $('img[class*="logo" i]').attr('alt') || $('img[id*="logo" i]').attr('alt');
-    if (logoAlt && logoAlt.trim().length > 1 && logoAlt.trim().length < 50) {
-      return cleanText(logoAlt);
-    }
+  }
 
-    const ogSiteName = $('meta[property="og:site_name"]').attr("content") || $('meta[name="application-name"]').attr("content");
-    if (ogSiteName && ogSiteName.trim().length > 0) {
-      return cleanText(ogSiteName);
+  // 5. About Page Context
+  if (!brand) {
+    const aboutLinkText = $('a[href*="about" i]').first().text();
+    if (aboutLinkText && aboutLinkText.toLowerCase().includes("about") && aboutLinkText.length > 5) {
+      const cleanedAbout = aboutLinkText.replace(/about\s*/i, "").trim();
+      if (!isGeneric(cleanedAbout)) {
+        brand = cleanText(cleanedAbout);
+        selectedSource = "About Page Link";
+      }
     }
+  }
 
-    const domain = new URL(url).hostname.replace("www.", "");
-    const brand = domain.split('.')[0] || 'unknown';
-    if (brand && brand !== 'localhost') {
-      return brand.charAt(0).toUpperCase() + brand.slice(1);
+  // 6. Title Tag (last fallback)
+  if (!brand) {
+    if (title && !isGeneric(title)) {
+      const parts = title.split(/[|\-\u2013\u2014]/);
+      const possibleBrand = parts[parts.length - 1]?.trim() || parts[0]?.trim();
+      if (possibleBrand && !isGeneric(possibleBrand)) {
+        brand = cleanText(possibleBrand);
+        selectedSource = "Title Tag (Last Fallback)";
+      }
     }
-  } catch (e) {}
+  }
 
-  return "Brand Authority";
+  // 7. Hard URL fallback
+  if (!brand) {
+    try {
+      const domain = new URL(url).hostname.replace("www.", "");
+      const hostBrand = domain.split('.')[0];
+      if (hostBrand && hostBrand !== 'localhost') {
+        brand = hostBrand.charAt(0).toUpperCase() + hostBrand.slice(1);
+        selectedSource = "Domain Fallback";
+      }
+    } catch {
+      brand = "Brand Authority";
+      selectedSource = "Default Fallback";
+    }
+  }
+
+  console.log(`[BRAND] selected brand source: ${selectedSource} (${brand})`);
+  return brand;
 }
 
 export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas) {
@@ -716,7 +794,6 @@ export function analyzeInternalLinks($, url, h2s) {
         anchorTexts.push(anchorText);
       }
 
-      // Check if link is inside a paragraph, list item or table cell (contextual)
       if ($(el).closest('p, li, td').length > 0) {
         contextualLinksCount++;
       }
@@ -758,14 +835,11 @@ export function analyzeInternalLinks($, url, h2s) {
     safeArraySlice(h2s, 0, 3).forEach(h2 => suggestions.push(`Add internal anchor link referencing H2: "${h2}"`));
   }
 
-  // Anchor Diversity metric calculation
   const uniqueAnchors = new Set(anchorTexts);
   const anchorDiversityScore = anchorTexts.length > 0 ? clamp(Math.round((uniqueAnchors.size / anchorTexts.length) * 100)) : 100;
   
-  // Link score calculation
   const contextualLinkScore = internalLinks > 0 ? clamp(Math.round((contextualLinksCount / Math.max(1, internalLinks)) * 100)) : 0;
   
-  // High-performance internal link score calculation
   const internalLinkScore = clamp(
     Math.round(
       (Math.min(100, internalLinks * 10) * 0.3) +
@@ -774,6 +848,8 @@ export function analyzeInternalLinks($, url, h2s) {
       (contextualLinkScore * 0.2)
     )
   );
+
+  console.log(`[LINKS] internal links found: ${internalLinks} (unique pages: ${uniquePages})`);
 
   return {
     internalLinks,
@@ -1363,7 +1439,6 @@ export function enforceSecureUrl(inputUrl) {
 // =========================================================================
 
 export async function analyzeSingleUrl(url) {
-  // Validate and normalize raw parameter inputs safely
   const rawUrl = url;
   let normalizedUrl;
   
@@ -1421,12 +1496,12 @@ export async function analyzeSingleUrl(url) {
         reason: blockedReason,
         blockedReason: blockedReason,
         recommendation: "Use Playwright fallback or configure proxy settings to bypass anti-bot protection.",
-        crawlMethod: crawlResult.crawlMethod,
-        httpStatus: crawlResult.status,
-        contentLength: crawlResult.contentLength,
-        resolvedUrl: crawlResult.finalUrl,
+        crawlMethod: crawlResult.crawlMethod || "STANDARD_GET",
+        httpStatus: crawlResult.status || 403,
+        contentLength: crawlResult.contentLength || 0,
+        resolvedUrl: crawlResult.finalUrl || normalizedUrl,
         meta: {
-          url: crawlResult.finalUrl,
+          url: crawlResult.finalUrl || normalizedUrl,
           timestamp: new Date().toISOString()
         }
       };
@@ -1445,13 +1520,14 @@ export async function analyzeSingleUrl(url) {
     try {
       $ = cheerio.load(html);
 
-      // Apply regexFallbackParser if Cheerio finds empty fields
+      // Perform links audit, schema detection and brand mapping BEFORE cleaning navigation elements
+      schemas = detectAllSchemas($, html);
+      uniqueSchemas = Object.keys(schemas).filter(k => schemas[k]?.present) || [];
+      recommendedSchemas = Object.keys(schemas).filter(k => schemas[k]?.recommended && !schemas[k]?.present) || [];
+      schemaDetected = uniqueSchemas.length > 0;
+      schemaCount = uniqueSchemas.length;
+
       backupExtraction = regexFallbackParser(html, normalizedUrl);
-
-      let rawBodyText = safeText($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
-      rawBodyText = cleanText(rawBodyText);
-
-      $('script, style, nav, footer, header, noscript, svg').remove();
 
       title = safeText($("title").text()).trim();
       if (!title || title.toLowerCase().includes("not found")) {
@@ -1476,20 +1552,28 @@ export async function analyzeSingleUrl(url) {
       h1 = safeText($("h1").first().text()).trim() || backupExtraction.h1 || `Proven Expert Digital Systems`;
       h1 = cleanText(h1);
 
-      bodyText = rawBodyText || "No content scanned.";
-      wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
-      
       h2s = $("h2").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
       if (h2s.length === 0) h2s = backupExtraction.h2s;
 
       h3s = $("h3").map((i, el) => safeText($(el).text()).trim()).get().filter(Boolean).map(cleanText).filter(Boolean) || [];
       if (h3s.length === 0) h3s = backupExtraction.h3s;
 
-      schemas = detectAllSchemas($, html);
-      uniqueSchemas = Object.keys(schemas).filter(k => schemas[k]?.present) || [];
-      recommendedSchemas = Object.keys(schemas).filter(k => schemas[k]?.recommended && !schemas[k]?.present) || [];
-      schemaDetected = uniqueSchemas.length > 0;
-      schemaCount = uniqueSchemas.length;
+      // Extract accurate links on clean, unmodified DOM tree
+      const internalLinkData = safeRun(() => analyzeInternalLinks($, normalizedUrl, h2s), {
+        internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0,
+        orphanPages: [], avgLinkDepth: 1, averageDepth: 1, authorityFlow: 10,
+        weakLinking: true, suggestions: ["Add internal structure navigation"], score: 40,
+        internalLinkScore: 40, anchorDiversityScore: 50, contextualLinkScore: 40, linkDepthAverage: 1.0
+      });
+
+      // Now fetch structural text while filtering non-readable elements
+      let rawBodyText = safeText($("p, li, h2, h3, h4, td").text()).replace(/\s+/g, " ").trim();
+      rawBodyText = cleanText(rawBodyText);
+
+      $('script, style, nav, footer, header, noscript, svg').remove();
+
+      bodyText = rawBodyText || "No content scanned.";
+      wordCount = bodyText.split(/\s+/).filter(Boolean).length || 1;
 
       faqQuestions = [];
       if (schemas.FAQPage?.present && schemas.FAQPage?.data?.length > 0) {
@@ -1540,23 +1624,21 @@ export async function analyzeSingleUrl(url) {
       hasEmail = !!email;
       hasPhone = !!phone;
 
+      console.log(`[LOCAL] extracted contact fields: phone=${phone || "none"}, email=${email || "none"}`);
+
       keywords = tokenizeKeywords(bodyText);
-    } catch (err) {
-      throw err;
-    }
 
-    let entityData, entityCoverageScore;
-    try {
-      entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, normalizedUrl, schemas);
-      entityCoverageScore = clamp(safeArray(entityData?.entities).length * 10);
-    } catch (err) {
-      throw err;
-    }
+      let entityData, entityCoverageScore;
+      try {
+        entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, normalizedUrl, schemas);
+        entityCoverageScore = clamp(safeArray(entityData?.entities).length * 10);
+      } catch (err) {
+        throw err;
+      }
 
-    let seoScore, aeoScore, eeatScore, citationProbability, currentAIVisibility, potentialAIVisibility, totalRoadmapImpact;
-    let payload;
+      let seoScore, aeoScore, eeatScore, citationProbability, currentAIVisibility, potentialAIVisibility, totalRoadmapImpact;
+      let payload;
 
-    try {
       const crawlQuality = crawlResult.type === "VALID_CONTENT" ? "High Quality" : (crawlResult.type === "THIN_CONTENT" ? "Low Content / Stub" : "JavaScript Render Active");
       const crawlBlocked = crawlResult.type === "BLOCKED_PAGE";
 
@@ -1568,13 +1650,6 @@ export async function analyzeSingleUrl(url) {
       const hasContactPage = trustSignals.hasContact;
       const hasPrivacyPolicy = trustSignals.hasPrivacyPolicy;
       const hasTermsPage = trustSignals.hasTermsPage;
-
-      const internalLinkData = safeRun(() => analyzeInternalLinks($, normalizedUrl, h2s), {
-        internalLinks: 0, totalInternalLinks: 0, externalLinks: 0, uniquePages: 0,
-        orphanPages: [], avgLinkDepth: 1, averageDepth: 1, authorityFlow: 10,
-        weakLinking: true, suggestions: ["Add internal structure navigation"], score: 40,
-        internalLinkScore: 40, anchorDiversityScore: 50, contextualLinkScore: 40, linkDepthAverage: 1.0
-      });
 
       const eeatData = safeRun(() => analyzeEEATAdvanced($, bodyText, hasAuthor, hasAboutPage, hasContactPage, hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas, hasTermsPage, trustSignals.socialLinks), {
         score: 30, status: "Shallow Trust Profile", breakdown: { experience: { score: 5, max: 25, factors: [] }, expertise: { score: 10, max: 25, factors: [] }, authoritativeness: { score: 5, max: 25, factors: [] }, trustworthiness: { score: 10, max: 25, factors: [] } }
@@ -1845,24 +1920,28 @@ export async function analyzeSingleUrl(url) {
         title: "FAQ Schema - AI Preferred"
       };
 
-      schemaGenerator.LocalBusiness = {
-        recommended: true,
-        code: JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "LocalBusiness",
-          "name": brandName,
-          "image": ogImage || favicon || "",
-          "telephone": phone || "1-800-555-0199",
-          "email": email || "info@domain.com",
-          "address": {
-            "@type": "PostalAddress",
-            "streetAddress": "Digital Framework Portal Street",
-            "addressLocality": extractedLocations[0] || "Global",
-            "addressCountry": "US"
-          }
-        }, null, 2),
-        title: "LocalBusiness Schema - Trust Profile"
-      };
+      // Real local variables only, no placeholders
+      if (phone || email || extractedLocations[0]) {
+        schemaGenerator.LocalBusiness = {
+          recommended: true,
+          code: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "LocalBusiness",
+            "name": brandName,
+            "image": ogImage || favicon || "",
+            "telephone": phone || undefined,
+            "email": email || undefined,
+            "address": extractedLocations[0] ? {
+              "@type": "PostalAddress",
+              "addressLocality": extractedLocations[0],
+              "addressCountry": "US"
+            } : undefined
+          }, null, 2),
+          title: "LocalBusiness Schema - Trust Profile"
+        };
+      } else {
+        schemaGenerator.LocalBusiness = null;
+      }
 
       schemaGenerator.HowTo = {
         recommended: true,
@@ -1923,10 +2002,10 @@ export async function analyzeSingleUrl(url) {
         recommendedSchemas,
         
         // Crawl Diagnostics
-        crawlMethod: crawlResult.crawlMethod,
-        httpStatus: crawlResult.status,
-        contentLength: crawlResult.contentLength,
-        resolvedUrl: crawlResult.finalUrl,
+        crawlMethod: crawlResult.crawlMethod || "STANDARD_GET",
+        httpStatus: crawlResult.status || 200,
+        contentLength: crawlResult.contentLength || 0,
+        resolvedUrl: crawlResult.finalUrl || normalizedUrl,
         pageType: crawlResult.type,
         blockedReason: null,
 

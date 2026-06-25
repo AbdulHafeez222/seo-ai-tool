@@ -406,7 +406,7 @@ async function fetchPlaywright(url) {
 // Unified Smart Crawl Controller
 export async function smartCrawl(url) {
   let result = null;
-  let crawlMethod = "Axios";
+  let crawlMethod = "STANDARD_GET";
   console.log(`[CRAWL] Starting scan: ${url}`);
   try {
     result = await withRetry(() => fetchAxios(url), 1);
@@ -421,29 +421,33 @@ export async function smartCrawl(url) {
   let type = classifyPage(html, status);
 
   // Fallback to Playwright if Axios gets blocked or JS execution is required
-  if (type === "BLOCKED_PAGE" || type === "JS_RENDER_REQUIRED") {
+  const isBlocked = type === "BLOCKED_PAGE" || [401, 403, 429].includes(status) || fallbackRegistry.isBlockedHTML(html, status);
+
+  if (isBlocked || type === "JS_RENDER_REQUIRED") {
+    console.log(`[CRAWL] Standard fetch blocked (Status: ${status}).`);
+    console.log(`[CRAWL] Switching to Playwright...`);
     try {
-      console.log(`[CRAWL] Axios crawl blocked or JS rendering needed. Executing Playwright fallback...`);
       const pwResult = await withRetry(() => fetchPlaywright(url), 1);
       if (pwResult && pwResult.html && pwResult.html.length >= 300) {
         let pwType = classifyPage(pwResult.html, pwResult.status);
-        if (pwType !== "BLOCKED_PAGE") {
+        if (pwType !== "BLOCKED_PAGE" && ![401, 403, 429].includes(pwResult.status)) {
           html = pwResult.html;
           status = pwResult.status;
           finalUrl = pwResult.finalUrl;
           type = pwType;
-          crawlMethod = "Playwright Fallback";
+          crawlMethod = "PLAYWRIGHT_RENDERED";
+          console.log(`[CRAWL] Playwright success`);
         }
       }
     } catch (pwErr) {
-      // Gracefully continue
+      console.error("[CRAWL] Playwright fallback failed:", pwErr.message);
     }
   }
 
-  if (status === 200) {
-    console.log(`[CRAWL] Fetch success: ${url} (Crawl Method: ${crawlMethod})`);
+  if (type !== "BLOCKED_PAGE" && ![401, 403, 429].includes(status)) {
+    console.log(`[CRAWL] Analysis started`);
   } else {
-    console.log(`[CRAWL] Fetch completed: ${url} (status: ${status}, classification: ${type})`);
+    console.log(`[CRAWL] Fetch completed (status: ${status}, classification: ${type})`);
   }
   return { html, finalUrl, type, status, crawlMethod, contentLength: html.length };
 }

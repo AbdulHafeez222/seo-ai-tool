@@ -1634,7 +1634,11 @@ export async function analyzeSingleUrl(url) {
     try {
       schemas = detectAllSchemas($, html);
       uniqueSchemas = Object.keys(schemas || {}).filter(k => schemas[k]?.present) || [];
-      recommendedSchemas = Object.keys(schemas || {}).filter(k => schemas[k]?.recommended && !schemas[k]?.present) || [];
+      const ALLOWED_RECOMMENDED_TYPES = ["FAQPage", "Organization", "LocalBusiness", "WebSite", "Article", "HowTo"];
+      recommendedSchemas = [...new Set(
+        Object.keys(schemas || {})
+          .filter(k => schemas[k]?.recommended && !schemas[k]?.present && ALLOWED_RECOMMENDED_TYPES.includes(k))
+      )];
       schemaDetected = uniqueSchemas.length > 0;
       schemaCount = uniqueSchemas.length;
     } catch (err) {
@@ -1698,8 +1702,12 @@ export async function analyzeSingleUrl(url) {
 
     // Link auditing safely
     let internalLinkData;
+    const visitedUrls = new Set(); // deduplication tracker to prevent circular reference crawls
     try {
       internalLinkData = analyzeInternalLinks($, normalizedUrl, h2s);
+      if (internalLinkData?.linkDistribution) {
+        Object.keys(internalLinkData.linkDistribution || {}).forEach(k => visitedUrls.add(k));
+      }
     } catch (err) {
       console.error("[PARSER WARNING] Link analyzer failed, falling back to empty indicators. Reason:", err.message);
       internalLinkData = {

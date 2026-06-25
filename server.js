@@ -1195,8 +1195,8 @@ export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
 
   if (trendDB[key].length > 10) trendDB[key] = trendDB[key].slice(-10);
 
-  const history = trendDB[key];
-  const firstScore = history[0].score;
+  const history = safeArray(trendDB[key]);
+  const firstScore = safeObject(history[0]).score || 0;
   const growthPercentage = firstScore > 0 ? Math.round(((currentScore - firstScore) / firstScore) * 100) : 0;
 
   return {
@@ -1581,7 +1581,7 @@ export async function analyzeSingleUrl(url) {
     let hasPhone = false;
     let keywords = [];
 
-    // PRE-DECLARE ALL CALCULATED SCORING & AUDIT PARAMETERS TO PREVENT TDZ AND REFERENCEERRORS
+    // SINGLE PRE-DECLARATION POINT TO PREVENT CONFLICTING DUPLICATE BINDINGS
     let readabilityScore = 50;
     let robotsExists = false;
     let sitemapExists = false;
@@ -1605,6 +1605,11 @@ export async function analyzeSingleUrl(url) {
     let linkScore = 0;
     let internalLinkScore = 0;
     let crawlabilityScore = 0;
+
+    let citationProbability = 0;
+    let currentAIVisibility = 0;
+    let potentialAIVisibility = 0;
+    let totalRoadmapImpact = 0;
 
     let trustSignals = { hasContact: false, hasAbout: false, hasPrivacyPolicy: false, hasTermsPage: false, hasSocialProfiles: false, hasReviews: false, hasTestimonials: false, hasAuthorPage: false, trustScore: 0, totalSignals: 0, socialLinks: [] };
     let localSEO = { hasNAP: false, hasLocalBusiness: false, hasMap: false, hasCity: false, localScore: 0, localSEOScore: 0, napConsistency: "Incomplete/Missing", napStatus: "Incomplete/Missing", mapDetected: false, localBusinessSchemaDetected: false, recommendations: [] };
@@ -1801,9 +1806,6 @@ export async function analyzeSingleUrl(url) {
       console.error("[PARSER WARNING] Entity extraction failed", err);
       entityData = { brands: [], locations: [], services: [], people: [], organizations: [], products: [], entities: [], totalEntities: 0 };
     }
-
-    let seoScore = 0, aeoScore = 0, eeatScore = 0, citationProbability = 0, currentAIVisibility = 0, potentialAIVisibility = 0, totalRoadmapImpact = 0;
-    let payload;
 
     const crawlQuality = crawlResult.type === "VALID_CONTENT" ? "High Quality" : (crawlResult.type === "THIN_CONTENT" ? "Low Content / Stub" : "JavaScript Render Active");
     const crawlBlocked = crawlResult.type === "BLOCKED_PAGE";
@@ -2007,6 +2009,10 @@ export async function analyzeSingleUrl(url) {
 
     aeoScore = clamp(rawAeoScore, 0, 100);
 
+    const robotsExists = html.includes("robots.txt") || false; 
+    const sitemapExists = html.includes("sitemap.xml") || false;
+    const canonicalExists = hasCanonical;
+
     // Diagnostics Logging requirement
     console.log("[VARIABLE CHECK]", {
       readabilityScore,
@@ -2024,6 +2030,7 @@ export async function analyzeSingleUrl(url) {
       aeoScore,
       eeatScore,
       authorityScore,
+      trustScore,
       aiTrustScore,
       citationProbability,
       readabilityScore,

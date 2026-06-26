@@ -121,7 +121,7 @@ const fallbackRegistry = {
   safeString: (input) => {
     return fallbackRegistry.cleanText(
       safeText(input)
-        .replace(/<[^>]*>/g, "") // Strip HTML elements safely
+        .replace(/<[^>]*>/g, "")
         .replace(/undefined|null/g, "")
     );
   },
@@ -1232,59 +1232,95 @@ export function aiReasoningEngine(data, seoScore, aeoScore, citationProbability)
   };
 }
 
+// =========================================================================
+// ========== SECTION 4.4: CENTRALIZED SCORE ENGINE (NO FAKES) =============
+// =========================================================================
+
+export function calculateCentralScores(signals) {
+  const {
+    title,
+    metaDescription,
+    h1,
+    bodyText,
+    wordCount,
+    h1Count,
+    h2Count,
+    h3Count,
+    totalImages,
+    imagesWithoutAlt,
+    uniqueSchemas,
+    internalLinkData,
+    readabilityScore,
+    semanticSEO,
+    citationProbability,
+    eeatScore
+  } = signals;
+
+  // Requirement 4: Score calculation executes ONLY when crawl signals exist
+  if (!title || !metaDescription || !h1 || !bodyText || wordCount < 50 || !internalLinkData) {
+    return null;
+  }
+
+  // Pure dynamic signal-based math
+  let titleQuality = title.trim().length > 5 ? (title.length <= 60 ? 20 : 10) : 0;
+  let metaQuality = metaDescription.trim().length > 20 ? (metaDescription.length <= 160 ? 20 : 10) : 0;
+  let headingQuality = (h1Count === 1 ? 5 : 0) + (h2Count >= 2 ? 5 : 0) + (h3Count >= 2 ? 5 : 0);
+  let lengthFactor = wordCount >= 1500 ? 15 : (wordCount >= 800 ? 10 : (wordCount >= 500 ? 5 : 0));
+  let linkFactor = clamp(Math.min(10, internalLinkData.totalInternalLinks));
+  let imgFactor = clamp(totalImages > 0 ? Math.round(((totalImages - imagesWithoutAlt) / totalImages) * 10) : 0);
+  let schemaFactor = clamp(uniqueSchemas.length * 3);
+  let entityFactor = clamp(Math.round((semanticSEO?.entityCoverage || 0) / 10));
+
+  let calculatedSeo = titleQuality + metaQuality + headingQuality + lengthFactor + linkFactor + imgFactor + schemaFactor + entityFactor;
+  const seoScore = clamp(calculatedSeo, 0, 100);
+
+  const hasFAQ = uniqueSchemas.includes("FAQPage");
+  const hasHowTo = uniqueSchemas.includes("HowTo");
+  const hasDirectAnswer = (bodyText.includes("Q:") && bodyText.includes("A:")) || bodyText.toLowerCase().includes("what is") || bodyText.toLowerCase().includes("how to") || (h2Count >= 3 && bodyText.length > 500);
+  
+  const answerClarity = Math.min(100, Math.round((hasDirectAnswer ? 50 : 0) + (hasFAQ ? 30 : 0) + (readabilityScore * 0.2))) || 0;
+  const schemaPresence = clamp((hasFAQ ? 40 : 0) + (hasHowTo ? 30 : 0) + (uniqueSchemas.length > 0 ? 30 : 0));
+  
+  const rawAeoScore = Math.round((answerClarity * 0.30) + (citationProbability * 0.25) + (schemaPresence * 0.20) + ((semanticSEO?.entityCoverage || 0) * 0.25));
+  const aeoScore = clamp(rawAeoScore, 0, 100);
+
+  const overallAIVisibilityScore = clamp(Math.round((seoScore * 0.3) + (aeoScore * 0.3) + ((eeatScore || 0) * 0.2) + ((citationProbability || 0) * 0.2)));
+
+  return {
+    seoScore,
+    aeoScore,
+    overallAIVisibilityScore
+  };
+}
+
 export function fallbackSafePayload(url, err = null) {
   const brand = cleanDomainBrand(url);
   const now = new Date().toISOString();
   
   return {
     status: "success",
-    seoScore: 0,
-    aeoScore: 0,
-    eeatScore: 0,
-    citationScore: 0,
-    currentAIVisibility: 0,
-    potentialAIVisibility: 0,
-    totalRoadmapImpact: 0,
+    seoScore: null,
+    aeoScore: null,
+    eeatScore: null,
+    citationScore: null,
+    currentAIVisibility: null,
+    potentialAIVisibility: null,
+    totalRoadmapImpact: null,
     schemaDetected: false,
     schemaCount: 0,
     recommendedSchemas: ["FAQPage", "LocalBusiness", "Organization"],
     fallbackMode: true,
-    analysisConfidence: 20,
-    confidenceWarning: "Low confidence scan due to crawl limitations",
+    analysisConfidence: 0,
+    confidenceWarning: "Crawl limitations / protection wall detected.",
     classification: "FAILED",
-    analysisStatus: "FAILED",
+    analysisStatus: "BLOCKED",
+    scores: null,
+    comparison: null,
+    gapAnalysis: null,
+    keywordIntelligence: null,
+    roadmap: null,
     
-    analysis: {
-      seo: {
-        status: "Poor",
-        criticalIssues: ["Crawl bypass triggered: verify domain is fully indexable."],
-        importantIssues: ["Dynamic crawler metadata parsing failed"],
-        minorIssues: []
-      },
-      aeo: {
-        status: "Needs Work",
-        answerQualityScore: 0,
-        featuredSnippetChance: 0,
-        citationChatGPT: 0,
-        citationGemini: 0,
-        citationPerplexity: 0,
-        citationClaude: 0
-      },
-      eeat: {
-        score: 0,
-        status: "Shallow Trust Profile",
-        factors: [],
-        issues: ["Author identification unverified", "No explicit organization mapping found"]
-      },
-      technical: {
-        isHttps: true,
-        loadTime: 500,
-        mobileFriendly: true,
-        wordCount: 0,
-        hasSchemaMarkup: false
-      }
-    },
-    
+    analysis: null,
     entities: {
       brands: [brand],
       services: [],
@@ -1292,18 +1328,8 @@ export function fallbackSafePayload(url, err = null) {
     },
     
     issues: [
-      { priority: "CRITICAL", description: "Standard HTML crawler bypass activated. Ensure target is public and fully indexable." }
+      { priority: "CRITICAL", description: "Bypass triggered: target resource is protected or unreadable." }
     ],
-    
-    roadmap: [
-      { step: 1, task: "Deploy Structured FAQ JSON-LD Blocks", priority: "CRITICAL", impact: 15, effort: "15 mins" }
-    ],
-    
-    competitor: {
-      winner: brand,
-      winnerReason: "Standard verification baseline established."
-    },
-    
     meta: {
       url: url || "https://example.com",
       wordCount: 0,
@@ -1407,6 +1433,11 @@ export async function analyzeSingleUrl(url) {
       citationProbability: null,
       overallAIVisibilityScore: null,
       pageType: "BLOCKED_PAGE",
+      scores: null,
+      comparison: null,
+      gapAnalysis: null,
+      keywordIntelligence: null,
+      roadmap: null,
       meta: {
         url: crawlResult.finalUrl || normalizedUrl,
         timestamp: new Date().toISOString()
@@ -1427,6 +1458,44 @@ export async function analyzeSingleUrl(url) {
   const internalLinkData = analyzeInternalLinks($, normalizedUrl, h2s);
   const bodyText = cleanText($("p, li, h2, h3, h4, td, span, article").map((i, el) => $(el).text()).get().join(" "));
   const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 0;
+
+  // Requirement 3: If signals are missing, classify as blocked/insufficient structure
+  if (!title || !metaDescription || !h1 || wordCount < 50) {
+    return {
+      status: "success",
+      success: false,
+      crawlSuccess: true,
+      analysisStatus: "BLOCKED",
+      classification: "FAILED",
+      reason: "Insufficient page metadata or HTML body content parsed.",
+      crawlMethod: crawlResult.crawlMethod || "STANDARD_GET",
+      httpStatus: crawlResult.status || 200,
+      contentLength: html.length,
+      resolvedUrl: crawlResult.finalUrl || normalizedUrl,
+      fallbackMode: false,
+      analysisConfidence: 0,
+      confidenceWarning: "Core metrics calculation disabled: missing title, meta tags, h1, or body markup.",
+      seoScore: null,
+      aeoScore: null,
+      eeatScore: null,
+      citationScore: null,
+      currentAIVisibility: null,
+      potentialAIVisibility: null,
+      score: null,
+      citationProbability: null,
+      overallAIVisibilityScore: null,
+      pageType: "THIN_CONTENT",
+      scores: null,
+      comparison: null,
+      gapAnalysis: null,
+      keywordIntelligence: null,
+      roadmap: null,
+      meta: {
+        url: crawlResult.finalUrl || normalizedUrl,
+        timestamp: new Date().toISOString()
+      }
+    };
+  }
 
   const schemas = detectAllSchemas($, html);
   const uniqueSchemas = [...new Set(Object.keys(schemas).filter(k => schemas[k]?.present))];
@@ -1486,7 +1555,7 @@ export async function analyzeSingleUrl(url) {
   const entityData = extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, normalizedUrl, schemas);
   const entityCoverageScore = clamp(safeArray(entityData?.entities).length * 10);
 
-  let crawlQuality = wordCount > 150 ? "High Quality" : "Low Content / Stub";
+  let crawlQuality = "High Quality";
   let classification = "SUCCESS";
 
   let readabilityScore = 50;
@@ -1567,28 +1636,29 @@ export async function analyzeSingleUrl(url) {
   let analysisConfidence = clamp(confidenceFactors, 5, 100);
   const confidenceWarning = analysisConfidence < 40 ? "Low confidence scan due to crawl limitations" : null;
 
-  let titleQuality = title.trim().length > 5 ? (title.length <= 60 ? 20 : 10) : 0;
-  let metaQuality = metaDescription.trim().length > 20 ? (metaDescription.length <= 160 ? 20 : 10) : 0;
-  let headingQuality = (h1Count === 1 ? 5 : 0) + (h2Count >= 2 ? 5 : 0) + (h3Count >= 2 ? 5 : 0);
-  let lengthFactor = wordCount >= 1500 ? 15 : (wordCount >= 800 ? 10 : (wordCount >= 500 ? 5 : 0));
-  let linkFactor = clamp(Math.min(10, internalLinkData.totalInternalLinks));
-  let imgFactor = clamp(totalImages > 0 ? Math.round(((totalImages - imagesWithoutAlt) / totalImages) * 10) : 0);
-  let schemaFactor = clamp(uniqueSchemas.length * 3);
-  let entityFactor = clamp(Math.round(entityCoverageScore / 10));
+  // Execute Central Scoring Pipeline with Zero Hardcoded Defaults
+  const calculatedSignalsScores = calculateCentralScores({
+    title,
+    metaDescription,
+    h1,
+    bodyText,
+    wordCount,
+    h1Count,
+    h2Count,
+    h3Count,
+    totalImages,
+    imagesWithoutAlt,
+    uniqueSchemas,
+    internalLinkData,
+    readabilityScore,
+    semanticSEO,
+    citationProbability,
+    eeatScore
+  });
 
-  let calculatedSeo = titleQuality + metaQuality + headingQuality + lengthFactor + linkFactor + imgFactor + schemaFactor + entityFactor;
-  if (!title || !metaDescription) {
-    calculatedSeo = Math.round(calculatedSeo * 0.5);
-  }
-  const seoScore = clamp(calculatedSeo, 15, 100);
-
-  const answerClarity = Math.min(100, Math.round((hasDirectAnswer ? 50 : 0) + (hasFAQ ? 30 : 0) + (readabilityScore * 0.2))) || 0;
-  const schemaPresence = clamp((hasFAQ ? 40 : 0) + (hasHowTo ? 30 : 0) + (uniqueSchemas.length > 0 ? 30 : 0));
-  let rawAeoScore = Math.round((answerClarity * 0.30) + (citationProbability * 0.25) + (schemaPresence * 0.20) + (entityCoverageScore * 0.25));
-  if (wordCount < 500) {
-    rawAeoScore = Math.round(rawAeoScore * 0.5);
-  }
-  const aeoScore = clamp(rawAeoScore, 15, 100);
+  const seoScore = calculatedSignalsScores?.seoScore || 0;
+  const aeoScore = calculatedSignalsScores?.aeoScore || 0;
+  const overallAIVisibilityScore = calculatedSignalsScores?.overallAIVisibilityScore || 0;
 
   const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 50 ? "Good" : "Needs Work";
   const aeoStatus = aeoScore >= 80 ? "Excellent" : aeoScore >= 50 ? "Good" : "Needs Work";
@@ -1621,9 +1691,7 @@ export async function analyzeSingleUrl(url) {
     "description": metaDescription
   }, null, 2)}\n</script>`;
 
-  const overallAIVisibilityScore = clamp(Math.round((seoScore * 0.3) + (aeoScore * 0.3) + (eeatScore * 0.2) + (citationProbability * 0.2)));
   const aiVisibilityLevel = overallAIVisibilityScore >= 80 ? "Leader" : overallAIVisibilityScore >= 50 ? "Competitor" : "Emerging";
-
   const totalRoadmapImpact = aiAutopilot.reduce((sum, task) => sum + task.impact, 0);
   const currentAIVisibility = overallAIVisibilityScore;
   const potentialAIVisibility = Math.min(100, currentAIVisibility + totalRoadmapImpact);
@@ -1935,13 +2003,13 @@ function authenticateAndRateLimit(req, res, next) {
   if (user.scansToday >= limit) {
     const targetUrl = req.query.url || "https://example.com";
     const fallbackResponse = fallbackSafePayload(targetUrl);
-    fallbackResponse.warning = `You reached the limit of ${limit} scans/day for plan '${user.plan.toUpperCase()}'. Showing standard verification limits baseline.`;
+    fallbackResponse.warning = `You reached the limit of ${limit} scans/day for plan '${user.plan.toUpperCase()}'.`;
     return res.json({
       status: "success",
-      seoScore: fallbackResponse.seoScore,
-      aeoScore: fallbackResponse.aeoScore,
-      eeatScore: fallbackResponse.eeatScore,
-      citationScore: fallbackResponse.citationScore,
+      seoScore: null,
+      aeoScore: null,
+      eeatScore: null,
+      citationScore: null,
       data: fallbackResponse,
       ...fallbackResponse
     });
@@ -2006,10 +2074,10 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
     }
     res.json({
       status: "success",
-      seoScore: data.seoScore || data.score || 0,
-      aeoScore: data.aeoScore || 0,
-      eeatScore: data.eeatScore || 0,
-      citationScore: data.citationScore || data.citationProbability || 0,
+      seoScore: data.seoScore,
+      aeoScore: data.aeoScore,
+      eeatScore: data.eeatScore,
+      citationScore: data.citationScore,
       audit: data.analysis || {},
       suggestions: data.roadmap || [],
       data: data,
@@ -2020,12 +2088,12 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
     res.json({
       status: "error",
       message: "safe fallback activated",
-      seoScore: fb.seoScore,
-      aeoScore: fb.aeoScore,
-      eeatScore: fb.eeatScore,
-      citationScore: fb.citationScore,
-      audit: fb.analysis || {},
-      suggestions: fb.roadmap || [],
+      seoScore: null,
+      aeoScore: null,
+      eeatScore: null,
+      citationScore: null,
+      audit: {},
+      suggestions: [],
       ...fb
     });
   } finally {
@@ -2057,7 +2125,7 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
       return res.status(200).json({
         success: false,
         crawlSuccess: false,
-        reason: "Comparison unavailable: One or both analysis engines threw a fatal error."
+        reason: "Comparison unavailable: One or both engines failed."
       });
     }
 
@@ -2066,19 +2134,23 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
         status: "blocked_page",
         success: false,
         analysisStatus: "BLOCKED",
-        reason: "Comparison unavailable: One or both analysis engines encountered a blocked page.",
+        reason: "Comparison unavailable: Content blocked or insufficient crawl metadata.",
         sites: [
-          { brand: site1.analysisStatus === "BLOCKED" ? "Blocked Site" : (site1.title || "Your Site"), url: normalizedUrl, pageType: site1.pageType || "VALID_CONTENT" },
-          { brand: site2.analysisStatus === "BLOCKED" ? "Blocked Site" : (site2.title || "Competitor Site"), url: normalizedComp, pageType: site2.pageType || "VALID_CONTENT" }
-        ]
+          { brand: "Blocked Site", url: normalizedUrl, pageType: site1.pageType || "BLOCKED_PAGE" },
+          { brand: "Blocked Site", url: normalizedComp, pageType: site2.pageType || "BLOCKED_PAGE" }
+        ],
+        advantages: null,
+        competitorAdvantage: null,
+        winner: null,
+        winnerReason: "Comparison not applicable: Deep crawl blocked."
       });
     }
 
-    if (site1.fallbackMode || site2.fallbackMode || site1.analysisConfidence < 40 || site2.analysisConfidence < 40) {
+    if (site1.fallbackMode || site2.fallbackMode) {
       return res.status(200).json({
         success: false,
         crawlSuccess: false,
-        reason: "Comparison disabled: One or both target sites are operating in fallback mode or have low-confidence scan parameters.",
+        reason: "Comparison disabled: One or both target sites are operating in fallback mode.",
         winner: null,
         advantages: null,
         competitorAdvantage: null,
@@ -2109,10 +2181,10 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
 
     res.json({
       status: "success",
-      seoScore: site1?.overallAIVisibilityScore || 0,
-      aeoScore: site1?.aeoScore || 0,
-      eeatScore: site1?.eeatScore || 0,
-      citationScore: site1?.citationScore || 0,
+      seoScore: site1?.overallAIVisibilityScore,
+      aeoScore: site1?.aeoScore,
+      eeatScore: site1?.eeatScore,
+      citationScore: site1?.citationScore,
       sites: [
         { brand: getBrandNameEnhanced(site1?.url, cheerio.load("<html></html>"), site1?.title, {}), url: site1?.url, aiVisibilityScore: site1?.overallAIVisibilityScore, seoScore: site1?.score, aeoScore: site1?.aeoScore },
         { brand: getBrandNameEnhanced(site2?.url, cheerio.load("<html></html>"), site2?.title, {}), url: site2?.url, aiVisibilityScore: site2?.overallAIVisibilityScore, seoScore: site2?.score, aeoScore: site2?.aeoScore }
@@ -2144,12 +2216,13 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
       analyzeSingleUrl(normalizedComp)
     ]);
 
-    if (userData.analysisStatus === "BLOCKED" || compData.analysisStatus === "BLOCKED" || userData.status === "blocked_page" || compData.status === "blocked_page") {
+    if (userData.analysisStatus === "BLOCKED" || compData.analysisStatus === "BLOCKED") {
       return res.status(200).json({
         status: "success",
         success: false,
         analysisStatus: "BLOCKED",
-        error: "One or both pages failed validation due to bot blocking parameters."
+        error: "One or both pages failed validation due to bot blocking parameters or insufficient content.",
+        gapAnalysis: null
       });
     }
 
@@ -2161,10 +2234,10 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
     
     res.json({
       status: "success",
-      seoScore: userData?.seoScore || 0,
-      aeoScore: userData?.aeoScore || 0,
-      eeatScore: userData?.eeatScore || 0,
-      citationScore: userData?.citationScore || 0,
+      seoScore: userData?.seoScore,
+      aeoScore: userData?.aeoScore,
+      eeatScore: userData?.eeatScore,
+      citationScore: userData?.citationScore,
       ...gapData,
       keywordGap: {
         competitorKeywords: gapData?.keywordGaps?.slice(0, 5) || [],
@@ -2196,13 +2269,9 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
         analysisStatus: "BLOCKED",
         currentScore: null,
         potentialScore: null,
-        roadmap: [],
-        estimatedTime: "0 hours"
+        roadmap: null,
+        estimatedTime: null
       });
-    }
-
-    if (data.status === "error" || data?.stopProcessing) {
-      return res.json({ currentScore: null, potentialScore: null, roadmap: [], estimatedTime: "0 hours" });
     }
 
     const autopilotTasks = data?.aiAutopilot || [];
@@ -2222,10 +2291,10 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
     
     res.json({
       status: "success",
-      seoScore: data?.seoScore || 0,
-      aeoScore: data?.aeoScore || 0,
-      eeatScore: data?.eeatScore || 0,
-      citationScore: data?.citationScore || 0,
+      seoScore: data?.seoScore,
+      aeoScore: data?.aeoScore,
+      eeatScore: data?.eeatScore,
+      citationScore: data?.citationScore,
       currentScore: currentAIVisibility,
       potentialScore: potentialAIVisibility,
       currentAIVisibility,
@@ -2283,7 +2352,8 @@ function validateRequiredSystemHelpers() {
     { name: "validateHtmlContent", fn: typeof validateHtmlContent === "function" ? validateHtmlContent : null },
     { name: "detectAllSchemas", fn: typeof detectAllSchemas === "function" ? detectAllSchemas : null },
     { name: "aeoSimulationEngine", fn: typeof aeoSimulationEngine === "function" ? aeoSimulationEngine : null },
-    { name: "aiReasoningEngine", fn: typeof aiReasoningEngine === "function" ? aiReasoningEngine : null }
+    { name: "aiReasoningEngine", fn: typeof aiReasoningEngine === "function" ? aiReasoningEngine : null },
+    { name: "calculateCentralScores", fn: typeof calculateCentralScores === "function" ? calculateCentralScores : null }
   ];
 
   helpers.forEach(helper => {

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Aegis AI - SEO + GEO Intelligence Platform v8 Enterprise</title>
+  <title>Aegis AI - SEO + GEO Intelligence Platform v9 Enterprise</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -523,7 +523,7 @@ details summary { cursor: pointer; font-weight: 600; padding: 10px 0; color: var
   <div class="brand-title-wrap">
     <div class="brand-logo-icon">A</div>
     <div>
-      <h1>Aegis AI Visibility v8</h1>
+      <h1>Aegis AI Visibility v9</h1>
       <small>Enterprise GEO Index Engine</small>
     </div>
   </div>
@@ -598,28 +598,28 @@ details summary { cursor: pointer; font-weight: 600; padding: 10px 0; color: var
     <div class="chartBox">
       <div class="chartWrapper">
         <canvas id="seoChart"></canvas>
-        <div class="centerScore" id="seoScore">0%</div>
+        <div class="centerScore" id="seoScore">Data unavailable</div>
       </div>
       <div style="font-weight:700; margin-top:10px;">SEO SCORE</div>
     </div>
     <div class="chartBox">
       <div class="chartWrapper">
         <canvas id="aeoChart"></canvas>
-        <div class="centerScore" id="aeoScore">0%</div>
+        <div class="centerScore" id="aeoScore">Data unavailable</div>
       </div>
       <div style="font-weight:700; margin-top:10px;">AEO SCORE</div>
     </div>
     <div class="chartBox">
       <div class="chartWrapper">
         <canvas id="eeatChart"></canvas>
-        <div class="centerScore" id="eeatScore">0%</div>
+        <div class="centerScore" id="eeatScore">Data unavailable</div>
       </div>
       <div style="font-weight:700; margin-top:10px;">E-E-A-T SCORE</div>
     </div>
     <div class="chartBox">
       <div class="chartWrapper">
         <canvas id="citationChart"></canvas>
-        <div class="centerScore" id="citationScore">0%</div>
+        <div class="centerScore" id="citationScore">Data unavailable</div>
       </div>
       <div style="font-weight:700; margin-top:10px;">AI CITATION</div>
     </div>
@@ -628,7 +628,7 @@ details summary { cursor: pointer; font-weight: 600; padding: 10px 0; color: var
   <!-- DUAL VISUALS GRAPH CONTAINER -->
   <div class="dual-visuals-grid" id="chartsTrendContainer" style="display:none;">
     <div class="chartBox" style="align-items:stretch; height: 350px;">
-      <h4 style="margin: 0 0 10px 0; color: var(--text-heading); font-size:14px; text-transform:uppercase;">AI Index Distribution</h4>
+      <h4 style="margin: 0 0 10px 0; color: var(--text-heading); font-size:14px; text-transform:uppercase;">AI Index Footprint</h4>
       <div style="position:relative; flex:1; height: 260px;">
         <canvas id="radarVisualsChart"></canvas>
       </div>
@@ -804,7 +804,6 @@ function toggleTheme() {
   document.body.classList.toggle("light");
   localStorage.setItem("theme", document.body.classList.contains("light") ? "light" : "dark");
   
-  // Re-render visual components safely if datasets exist
   if (lastScanData) {
     try {
       renderAllResults(lastScanData);
@@ -814,16 +813,17 @@ function toggleTheme() {
   }
 }
 
-// Universal Safe Data Fetchers to prevent empty templates or errors
-function safeGet(obj, path, fallback = 0) {
+// Universal Safe Data Fetchers
+function safeGet(obj, path, fallback = null) {
   try {
-    return path.split('.').reduce((a, b) => (a !== undefined && a !== null) ? a[b] : undefined, obj) ?? fallback;
+    const val = path.split('.').reduce((a, b) => (a !== undefined && a !== null) ? a[b] : undefined, obj);
+    return val !== undefined && val !== null ? val : fallback;
   } catch {
     return fallback;
   }
 }
 
-function safeText(value, fallback = "Not Available") {
+function safeText(value, fallback = "Data unavailable") {
   if (value == null || String(value).trim() === "" || String(value).trim() === "undefined" || String(value).trim() === "null") {
     return fallback;
   }
@@ -834,7 +834,7 @@ function safeArray(arr) {
   return Array.isArray(arr) ? arr : [];
 }
 
-function safeNumber(num, fallback = 0) {
+function safeNumber(num, fallback = null) {
   const parsed = Number(num);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
@@ -863,6 +863,7 @@ function cleanDomainBrand(url) {
 }
 
 function getProgressColor(score) {
+  if (score == null) return "rgba(156, 163, 175, 0.2)";
   if (score >= 80) return "#10b981"; // Success Green
   if (score >= 60) return "#3b82f6"; // Primary Blue
   if (score >= 40) return "#f59e0b"; // Warning Orange
@@ -870,6 +871,7 @@ function getProgressColor(score) {
 }
 
 function getStatusLabel(score) {
+  if (score == null) return "Data unavailable";
   if (score >= 80) return "Excellent";
   if (score >= 60) return "High";
   if (score >= 40) return "Medium";
@@ -882,8 +884,30 @@ function renderRadialChart(canvasId, score) {
 
   const ctx = canvas.getContext('2d');
   const color = getProgressColor(score);
-  const dataVal = Math.min(100, Math.max(0, score));
+  
+  if (score == null) {
+    return new Chart(canvas, {
+      type: "doughnut",
+      data: {
+        datasets: [{
+          data: [0, 100],
+          backgroundColor: ["rgba(156, 163, 175, 0.1)", "rgba(156, 163, 175, 0.1)"],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        cutout: '75%',
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false }
+        }
+      }
+    });
+  }
 
+  const dataVal = Math.min(100, Math.max(0, score));
   return new Chart(canvas, {
     type: "doughnut",
     data: {
@@ -908,6 +932,10 @@ function renderRadialChart(canvasId, score) {
 function animateValue(id, start, end, duration, suffix = "") {
   const obj = document.getElementById(id);
   if (!obj) return;
+  if (end == null) {
+    obj.innerHTML = `Data unavailable`;
+    return;
+  }
   if (start === end) {
     obj.innerHTML = `${end}${suffix}`;
     return;
@@ -925,7 +953,6 @@ function animateValue(id, start, end, duration, suffix = "") {
   window.requestAnimationFrame(step);
 }
 
-// Global visual status indicators controller
 function showLoading(statusText = "Analyzing Crawl Vectors...", subText = "Evaluating SEO and AEO index vectors") {
   const overlay = document.getElementById("loadingOverlay");
   const sText = document.getElementById("loadingStatusText");
@@ -940,6 +967,10 @@ function showLoading(statusText = "Analyzing Crawl Vectors...", subText = "Evalu
   
   const scanStatus = document.getElementById("scanStatusIndicator");
   if (scanStatus) scanStatus.textContent = "Crawl Active";
+
+  // Disable Action Buttons
+  const buttons = document.querySelectorAll(".btn-grid button");
+  buttons.forEach(btn => btn.disabled = true);
 }
 
 function hideLoading() {
@@ -951,20 +982,36 @@ function hideLoading() {
   
   const scanStatus = document.getElementById("scanStatusIndicator");
   if (scanStatus) scanStatus.textContent = "Ready";
+
+  // Re-enable Action Buttons
+  const buttons = document.querySelectorAll(".btn-grid button");
+  buttons.forEach(btn => btn.disabled = false);
 }
 
-function hideAllCards() {
-  const cards = ["executiveSummaryPanel", "gaugeChartsContainer", "chartsTrendContainer", "aiReasoningCard", "realCitationCard", "aiSimulationCard", "seoAuditCard", "titleAnalyzerCard",
-                 "metaAnalyzerCard", "headingCard", "internalLinkCard", "imageSeoCard", "entityCard", "eeatCard",
-                 "schemaCard", "competitorCard", "gapCard", "roadmapCard", "keywordTheftCard", "briefCard",
-                 "autopilotCard", "topicalAuthorityCard", "semanticSEOCard", "citationOppCard", "trustSignalsCard", "localSeoCard", "crawlDiagnosticsCard"];
+function resetReportState() {
+  const cards = [
+    "executiveSummaryPanel", "gaugeChartsContainer", "chartsTrendContainer", 
+    "aiReasoningCard", "realCitationCard", "aiSimulationCard", "seoAuditCard", 
+    "titleAnalyzerCard", "metaAnalyzerCard", "headingCard", "internalLinkCard", 
+    "imageSeoCard", "entityCard", "eeatCard", "schemaCard", "competitorCard", 
+    "gapCard", "roadmapCard", "keywordTheftCard", "briefCard", "autopilotCard", 
+    "topicalAuthorityCard", "semanticSEOCard", "citationOppCard", 
+    "trustSignalsCard", "localSeoCard", "crawlDiagnosticsCard"
+  ];
+  
   cards.forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.style.display = "none";
+    if (el) {
+      el.style.display = "none";
+    }
   });
+
+  const resultEl = document.getElementById("result");
+  if (resultEl) resultEl.innerHTML = "";
+
+  lastScanData = null;
 }
 
-// Clear any active setTimeout tasks safely
 function clearLoadingTimers() {
   if (loadingTimer1) {
     clearTimeout(loadingTimer1);
@@ -994,19 +1041,10 @@ async function scan() {
     return;
   }
 
-  const scanBtn = document.getElementById("scanBtn");
-  if (scanBtn) scanBtn.disabled = true;
-
-  // Reset timers before registering new ones
   clearLoadingTimers();
-
+  resetReportState();
   showLoading("Fetching Website Content...", "Establishing secure crawl layer to download target components");
-  hideAllCards();
   
-  const resultEl = document.getElementById("result");
-  if (resultEl) resultEl.innerHTML = "";
-
-  // Set progressive status timers (only execute if scan remains active)
   loadingTimer1 = setTimeout(() => {
     if (scanInProgress) {
       showLoading("Analyzing Content Struct...", "Parsing semantic tags, heading hierarchies and image entities");
@@ -1020,20 +1058,16 @@ async function scan() {
   }, 6000);
 
   try {
-    console.log("BEFORE fetch");
     const res = await fetch(`${window.API_BASE}/scan?url=${encodeURIComponent(url)}`);
-    console.log("AFTER fetch");
-
     if (!res.ok) {
       throw new Error(`Crawl server responded with status: ${res.status}`);
     }
     
     const data = await res.json();
-    console.log("AFTER response.json()");
-
     clearLoadingTimers();
 
     if (data && data.status === "error") {
+      const resultEl = document.getElementById("result");
       if (resultEl) {
         resultEl.innerHTML = `
           <div class="card" style="border-color:var(--accent-danger);">
@@ -1042,26 +1076,22 @@ async function scan() {
             <button onclick="retryLastScan()" style="background:var(--accent-danger); margin-top:10px;">🔄 Retry Scan</button>
           </div>`;
       }
-      console.log("BEFORE hideLoading()");
       hideLoading();
-      console.log("AFTER hideLoading()");
       return;
     }
 
     lastScanData = data ? (data.data || data) : null;
     
     if (lastScanData) {
-      console.log("BEFORE renderResults()");
       renderAllResults(lastScanData);
-      console.log("AFTER renderResults()");
       saveLocalHistory(url, lastScanData);
     } else {
       throw new Error("Empty or invalid layout payload structure returned from server.");
     }
 
   } catch (err) {
-    console.error("Scan analysis failure state occurred:", err);
     clearLoadingTimers();
+    const resultEl = document.getElementById("result");
     if (resultEl) {
       resultEl.innerHTML = `
         <div class="card" style="border-color:var(--accent-danger);">
@@ -1074,11 +1104,8 @@ async function scan() {
     }
   } finally {
     clearLoadingTimers();
-    console.log("BEFORE hideLoading()");
     hideLoading();
-    console.log("AFTER hideLoading()");
     scanInProgress = false;
-    if (scanBtn) scanBtn.disabled = false;
   }
 }
 
@@ -1090,13 +1117,13 @@ function renderAllResults(data) {
   if (!data) return;
 
   try {
-    // Defensive Crawl Engine Diagnostic Parsing
-    const pageType = data.pageType || data.type || "";
-    const crawlMethod = data.crawlMethod || data.method || "";
-    const finalUrl = data.finalUrl || data.resolvedUrl || data.url || "";
-    const statusCode = data.statusCode || data.httpStatusCode || data.status_code || data.status || "";
-    const contentLength = data.contentLength || data.htmlLength || (data.html && data.html.length) || "";
-    const crawlStatus = data.crawlStatus || "";
+    // Diagnostic State Parsing
+    const pageType = safeGet(data, "pageType");
+    const crawlMethod = safeGet(data, "crawlMethod");
+    const finalUrl = safeGet(data, "resolvedUrl");
+    const statusCode = safeGet(data, "httpStatus");
+    const contentLength = safeGet(data, "contentLength");
+    const crawlStatus = safeGet(data, "analysisStatus");
 
     const diagCard = document.getElementById("crawlDiagnosticsCard");
     if (diagCard) {
@@ -1106,35 +1133,23 @@ function renderAllResults(data) {
         let statusBadgeClass = "badge-green";
         let statusLabel = "SUCCESS";
         
-        if (pageType === "BLOCKED" || crawlStatus === "blocked" || String(statusCode).startsWith("4") || String(statusCode).startsWith("5")) {
+        if (pageType === "BLOCKED_PAGE" || crawlStatus === "BLOCKED" || String(statusCode).startsWith("4") || String(statusCode).startsWith("5")) {
           statusBadgeClass = "badge-red";
           statusLabel = "BLOCKED";
-        } else if (pageType === "JS_OR_THIN_PAGE") {
+        } else if (pageType === "THIN_CONTENT") {
           statusBadgeClass = "badge-orange";
-          statusLabel = "THIN / JS PAGE";
-        } else if (pageType === "PLAYWRIGHT_RENDERED") {
+          statusLabel = "THIN CONTENT";
+        } else if (crawlMethod === "PLAYWRIGHT_RENDERED") {
           statusBadgeClass = "badge-purple";
-          statusLabel = "PLAYWRIGHT RENDERED";
+          statusLabel = "DYNAMIC AUTOMATION";
         }
 
         let warningHtml = "";
-        if (pageType === "BLOCKED") {
+        if (pageType === "BLOCKED_PAGE" || crawlStatus === "BLOCKED") {
           warningHtml = `
             <div class="reasoning-box weakness" style="margin-top: 15px;">
               <div class="reasoning-title" style="color:var(--accent-danger)">⚠️ Crawl Block Notice</div>
-              <p>Website appears blocked or inaccessible.</p>
-            </div>`;
-        } else if (pageType === "PLAYWRIGHT_RENDERED") {
-          warningHtml = `
-            <div class="reasoning-box strength" style="margin-top: 15px; background: rgba(139, 92, 246, 0.08); border-color: rgba(139, 92, 246, 0.3);">
-              <div class="reasoning-title" style="color:var(--accent-purple)">ℹ️ Dynamic JS Execution</div>
-              <p>JavaScript rendering was required to compile the client-side templates correctly.</p>
-            </div>`;
-        } else if (pageType === "JS_OR_THIN_PAGE") {
-          warningHtml = `
-            <div class="reasoning-box weakness" style="margin-top: 15px;">
-              <div class="reasoning-title" style="color:var(--accent-warning)">⚠️ Thin HTML Markup Detected</div>
-              <p>Limited text content was found during standard index parsing. Target page relies heavily on dynamic loading elements.</p>
+              <p>Website appears blocked, restricted, or protected by anti-bot measures.</p>
             </div>`;
         }
 
@@ -1143,20 +1158,20 @@ function renderAllResults(data) {
           diagContent.innerHTML = `
             <div class="grid-3">
               <div class="metric-box" style="background:#111827; border: 1px solid var(--border-color);">
-                <div class="metric-value" style="font-size: 18px; color: var(--text-primary);">${escapeHtml(safeText(crawlMethod, "STANDARD GET"))}</div>
+                <div class="metric-value" style="font-size: 18px; color: var(--text-primary);">${escapeHtml(safeText(crawlMethod))}</div>
                 <div class="metric-label">Crawl Method</div>
               </div>
               <div class="metric-box" style="background:#111827; border: 1px solid var(--border-color);">
-                <div class="metric-value" style="font-size: 18px; color: var(--text-primary);">${escapeHtml(safeText(statusCode, "200 OK"))}</div>
+                <div class="metric-value" style="font-size: 18px; color: var(--text-primary);">${escapeHtml(safeText(statusCode))}</div>
                 <div class="metric-label">HTTP Status Code</div>
               </div>
               <div class="metric-box" style="background:#111827; border: 1px solid var(--border-color);">
-                <div class="metric-value" style="font-size: 18px; color: var(--text-primary);">${contentLength ? (Number(contentLength) / 1024).toFixed(1) + " KB" : "Unknown"}</div>
+                <div class="metric-value" style="font-size: 18px; color: var(--text-primary);">${contentLength != null ? (Number(contentLength) / 1024).toFixed(1) + " KB" : "Data unavailable"}</div>
                 <div class="metric-label">Content Size</div>
               </div>
             </div>
             <div style="margin-top: 15px;">
-              <p><strong>Resolved Target URL:</strong> <a href="${escapeHtml(finalUrl)}" target="_blank" style="color: var(--accent-primary); word-break: break-all;">${escapeHtml(finalUrl)}</a></p>
+              <p><strong>Resolved Target URL:</strong> <a href="${escapeHtml(finalUrl || '')}" target="_blank" style="color: var(--accent-primary); word-break: break-all;">${escapeHtml(safeText(finalUrl))}</a></p>
               <p><strong>Process Verification State:</strong> <span class="badge ${statusBadgeClass}">${statusLabel}</span></p>
             </div>
             ${warningHtml}
@@ -1167,20 +1182,25 @@ function renderAllResults(data) {
       }
     }
 
-    // Exact Field Mapping from Backend with resilient fallback ranges (Never 0%)
-    const seoScore = Math.max(35, safeNumber(data.seoScore !== undefined ? data.seoScore : data.score, 50));
-    const aeoScore = Math.max(35, safeNumber(data.aeoScore !== undefined ? data.aeoScore : (data.breakdown && data.breakdown.aeo), 45));
-    const eeatScore = Math.max(35, safeNumber(data.eeatScore !== undefined ? data.eeatScore : (data.analysis && data.analysis.eeat && data.analysis.eeat.score), 40));
-    const citationScore = Math.max(35, safeNumber(data.citationScore !== undefined ? data.citationScore : data.citationProbability, 35));
-    
-    const topicalAuthorityScore = Math.max(35, safeNumber(data.topicalAuthority?.authorityScore || data.breakdown?.topical, 40));
-    const trustScore = Math.max(35, safeNumber(data.trustSignals?.trustScore || data.breakdown?.trust, 45));
+    // Dynamic Central Scores Only
+    const seoScore = safeNumber(safeGet(data, "seoScore"));
+    const aeoScore = safeNumber(safeGet(data, "aeoScore"));
+    const eeatScore = safeNumber(safeGet(data, "eeatScore"));
+    const citationScore = safeNumber(safeGet(data, "citationScore"));
+    const topicalAuthorityScore = safeNumber(safeGet(data, "topicalAuthority.authorityScore"));
+    const trustScore = safeNumber(safeGet(data, "aiTrustScore"));
 
-    // Render Visual Gauges Container
+    // Render Gauges Container
     const gaugeContainer = document.getElementById("gaugeChartsContainer");
-    if (gaugeContainer) gaugeContainer.style.display = "grid";
+    if (gaugeContainer) {
+      if (seoScore != null || aeoScore != null || eeatScore != null || citationScore != null) {
+        gaugeContainer.style.display = "grid";
+      } else {
+        gaugeContainer.style.display = "none";
+      }
+    }
 
-    // Animate Gauges
+    // Animate Gauges securely
     animateValue("seoScore", 0, seoScore, 1000, "%<span>SEO</span>");
     animateValue("aeoScore", 0, aeoScore, 1000, "%<span>AEO</span>");
     animateValue("eeatScore", 0, eeatScore, 1000, "%<span>EEAT</span>");
@@ -1196,479 +1216,584 @@ function renderAllResults(data) {
     eeatChart = renderRadialChart("eeatChart", eeatScore);
     citationChart = renderRadialChart("citationChart", citationScore);
 
-    // Render EXECUTIVE SUMMARY PANEL
+    // Render Executive Summary Panel
     const execPanel = document.getElementById("executiveSummaryPanel");
     if (execPanel) {
-      execPanel.style.display = "block";
-      
-      const dashboardGrid = document.getElementById("execDashboardGrid");
-      if (dashboardGrid) {
-        dashboardGrid.innerHTML = `
-          <div class="metric-box">
-            <div class="metric-value">${seoScore}%</div>
-            <div class="metric-label">SEO Score</div>
-            <span class="status-indicator-p" style="background:${getProgressColor(seoScore)}">${getStatusLabel(seoScore)}</span>
-          </div>
-          <div class="metric-box">
-            <div class="metric-value">${aeoScore}%</div>
-            <div class="metric-label">AEO Score</div>
-            <span class="status-indicator-p" style="background:${getProgressColor(aeoScore)}">${getStatusLabel(aeoScore)}</span>
-          </div>
-          <div class="metric-box">
-            <div class="metric-value">${eeatScore}%</div>
-            <div class="metric-label">EEAT Score</div>
-            <span class="status-indicator-p" style="background:${getProgressColor(eeatScore)}">${getStatusLabel(eeatScore)}</span>
-          </div>
-          <div class="metric-box">
-            <div class="metric-value">${citationScore}%</div>
-            <div class="metric-label">AI Citation</div>
-            <span class="status-indicator-p" style="background:${getProgressColor(citationScore)}">${getStatusLabel(citationScore)}</span>
-          </div>
-          <div class="metric-box">
-            <div class="metric-value">${topicalAuthorityScore}%</div>
-            <div class="metric-label">Authority Score</div>
-            <span class="status-indicator-p" style="background:${getProgressColor(topicalAuthorityScore)}">${getStatusLabel(topicalAuthorityScore)}</span>
-          </div>
-          <div class="metric-box">
-            <div class="metric-value">${trustScore}%</div>
-            <div class="metric-label">Trust Score</div>
-            <span class="status-indicator-p" style="background:${getProgressColor(trustScore)}">${getStatusLabel(trustScore)}</span>
-          </div>
-        `;
+      if (seoScore != null || aeoScore != null || eeatScore != null || citationScore != null || topicalAuthorityScore != null || trustScore != null) {
+        execPanel.style.display = "block";
+        const dashboardGrid = document.getElementById("execDashboardGrid");
+        if (dashboardGrid) {
+          dashboardGrid.innerHTML = `
+            <div class="metric-box">
+              <div class="metric-value">${seoScore != null ? seoScore + '%' : 'Data unavailable'}</div>
+              <div class="metric-label">SEO Score</div>
+              <span class="status-indicator-p" style="background:${getProgressColor(seoScore)}">${getStatusLabel(seoScore)}</span>
+            </div>
+            <div class="metric-box">
+              <div class="metric-value">${aeoScore != null ? aeoScore + '%' : 'Data unavailable'}</div>
+              <div class="metric-label">AEO Score</div>
+              <span class="status-indicator-p" style="background:${getProgressColor(aeoScore)}">${getStatusLabel(aeoScore)}</span>
+            </div>
+            <div class="metric-box">
+              <div class="metric-value">${eeatScore != null ? eeatScore + '%' : 'Data unavailable'}</div>
+              <div class="metric-label">EEAT Score</div>
+              <span class="status-indicator-p" style="background:${getProgressColor(eeatScore)}">${getStatusLabel(eeatScore)}</span>
+            </div>
+            <div class="metric-box">
+              <div class="metric-value">${citationScore != null ? citationScore + '%' : 'Data unavailable'}</div>
+              <div class="metric-label">AI Citation</div>
+              <span class="status-indicator-p" style="background:${getProgressColor(citationScore)}">${getStatusLabel(citationScore)}</span>
+            </div>
+            <div class="metric-box">
+              <div class="metric-value">${topicalAuthorityScore != null ? topicalAuthorityScore + '%' : 'Data unavailable'}</div>
+              <div class="metric-label">Authority Score</div>
+              <span class="status-indicator-p" style="background:${getProgressColor(topicalAuthorityScore)}">${getStatusLabel(topicalAuthorityScore)}</span>
+            </div>
+            <div class="metric-box">
+              <div class="metric-value">${trustScore != null ? trustScore + '%' : 'Data unavailable'}</div>
+              <div class="metric-label">Trust Score</div>
+              <span class="status-indicator-p" style="background:${getProgressColor(trustScore)}">${getStatusLabel(trustScore)}</span>
+            </div>
+          `;
+        }
+      } else {
+        execPanel.style.display = "none";
       }
     }
 
-    // Dual Visuals Trend & Radar Charts rendering
+    // Radar & Trend Charts
     const chartsTrend = document.getElementById("chartsTrendContainer");
     if (chartsTrend) {
-      chartsTrend.style.display = "grid";
-      
-      // Render Radar Chart
-      const radarEl = document.getElementById("radarVisualsChart");
-      if (radarEl) {
-        const ctxRadar = radarEl.getContext('2d');
-        if (radarChart) radarChart.destroy();
-        radarChart = new Chart(ctxRadar, {
-          type: 'radar',
-          data: {
-            labels: ['SEO', 'AEO', 'E-E-A-T', 'Citation', 'Authority', 'Trust'],
-            datasets: [{
-              label: 'Domain Footprint',
-              data: [seoScore, aeoScore, eeatScore, citationScore, topicalAuthorityScore, trustScore],
-              backgroundColor: 'rgba(59, 130, 246, 0.2)',
-              borderColor: '#3b82f6',
-              pointBackgroundColor: '#2563eb',
-              borderWidth: 2
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-              r: {
-                angleLines: { color: 'rgba(156, 163, 175, 0.2)' },
-                grid: { color: 'rgba(156, 163, 175, 0.2)' },
-                pointLabels: { color: '#9ca3af', font: { size: 10 } },
-                ticks: { display: false },
-                suggestedMin: 0,
-                suggestedMax: 100
-              }
-            },
-            plugins: { legend: { display: false } }
-          }
-        });
-      }
-
-      // Render Historical Trend Chart
-      const trendEl = document.getElementById("trendVisualsChart");
-      if (trendEl) {
-        const trend = data.visibilityTrend || {};
-        const ctxTrend = trendEl.getContext('2d');
-        if (trendChart) trendChart.destroy();
-        trendChart = new Chart(ctxTrend, {
-          type: 'line',
-          data: {
-            labels: safeArray(trend.labels).length > 0 ? trend.labels : ['Day -4', 'Day -3', 'Day -2', 'Day -1', 'Current'],
-            datasets: [
-              {
-                label: 'AI Visibility',
-                data: safeArray(trend.scores).length > 0 ? trend.scores : [citationScore - 12, citationScore - 8, citationScore - 4, citationScore - 2, citationScore],
-                borderColor: '#8b5cf6',
-                backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                fill: true,
-                tension: 0.4
-              },
-              {
-                label: 'SEO Trend',
-                data: safeArray(trend.seoScores).length > 0 ? trend.seoScores : [seoScore - 8, seoScore - 6, seoScore - 4, seoScore - 2, seoScore],
+      if (seoScore != null || aeoScore != null || eeatScore != null || citationScore != null) {
+        chartsTrend.style.display = "grid";
+        
+        const radarEl = document.getElementById("radarVisualsChart");
+        if (radarEl) {
+          const ctxRadar = radarEl.getContext('2d');
+          if (radarChart) radarChart.destroy();
+          radarChart = new Chart(ctxRadar, {
+            type: 'radar',
+            data: {
+              labels: ['SEO', 'AEO', 'E-E-A-T', 'Citation', 'Authority', 'Trust'],
+              datasets: [{
+                label: 'Domain Footprint',
+                data: [
+                  seoScore ?? 0, 
+                  aeoScore ?? 0, 
+                  eeatScore ?? 0, 
+                  citationScore ?? 0, 
+                  topicalAuthorityScore ?? 0, 
+                  trustScore ?? 0
+                ],
+                backgroundColor: 'rgba(59, 130, 246, 0.2)',
                 borderColor: '#3b82f6',
-                fill: false,
-                tension: 0.4
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-              x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
-              y: { grid: { color: 'rgba(156, 163, 175, 0.1)' }, ticks: { color: '#9ca3af' }, suggestedMin: 20, suggestedMax: 100 }
+                pointBackgroundColor: '#2563eb',
+                borderWidth: 2
+              }]
             },
-            plugins: { legend: { labels: { color: '#9ca3af' } } }
-          }
-        });
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                r: {
+                  angleLines: { color: 'rgba(156, 163, 175, 0.2)' },
+                  grid: { color: 'rgba(156, 163, 175, 0.2)' },
+                  pointLabels: { color: '#9ca3af', font: { size: 10 } },
+                  ticks: { display: false },
+                  suggestedMin: 0,
+                  suggestedMax: 100
+                }
+              },
+              plugins: { legend: { display: false } }
+            }
+          });
+        }
+
+        const trendEl = document.getElementById("trendVisualsChart");
+        if (trendEl) {
+          const trend = safeGet(data, "visibilityTrend") || {};
+          const ctxTrend = trendEl.getContext('2d');
+          if (trendChart) trendChart.destroy();
+          trendChart = new Chart(ctxTrend, {
+            type: 'line',
+            data: {
+              labels: safeArray(trend?.labels).length > 0 ? trend.labels : ['Current'],
+              datasets: [
+                {
+                  label: 'AI Visibility',
+                  data: safeArray(trend?.scores).length > 0 ? trend.scores : [citationScore ?? 0],
+                  borderColor: '#8b5cf6',
+                  backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                  fill: true,
+                  tension: 0.4
+                },
+                {
+                  label: 'SEO Trend',
+                  data: safeArray(trend?.seoScores).length > 0 ? trend.seoScores : [seoScore ?? 0],
+                  borderColor: '#3b82f6',
+                  fill: false,
+                  tension: 0.4
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
+                y: { grid: { color: 'rgba(156, 163, 175, 0.1)' }, ticks: { color: '#9ca3af' }, suggestedMin: 0, suggestedMax: 100 }
+              },
+              plugins: { legend: { labels: { color: '#9ca3af' } } }
+            }
+          });
+        }
+      } else {
+        chartsTrend.style.display = "none";
       }
     }
 
     // AI Reasoning Panel
-    const reasoning = safeGet(data, "analysis.seo") || safeGet(data, "reasoning") || {};
-    const aeoAnalysis = safeGet(data, "analysis.aeo") || {};
-    const eeatAnalysis = safeGet(data, "analysis.eeat") || {};
-    const techAnalysis = safeGet(data, "analysis.technical") || {};
-
+    const reasoning = safeGet(data, "reasoning");
     const reasoningCard = document.getElementById("aiReasoningCard");
     if (reasoningCard) {
-      reasoningCard.style.display = "block";
-      const reasoningContent = document.getElementById("aiReasoningContent");
-      if (reasoningContent) {
-        reasoningContent.innerHTML = `
-          <div class="reasoning-panel">
-            <div class="reasoning-box strength">
-              <div class="reasoning-title" style="color:var(--accent-success)">✔ SEO Audit Insight</div>
-              <p>Technical Status: <strong>${escapeHtml(safeText(reasoning.status || data.status || "Good"))}</strong></p>
-              <p>The technical parameters show excellent layout standards. Structural metadata and mobile responsiveness check values match target requirements.</p>
+      if (reasoning?.seo || reasoning?.aeo) {
+        reasoningCard.style.display = "block";
+        const reasoningContent = document.getElementById("aiReasoningContent");
+        if (reasoningContent) {
+          reasoningContent.innerHTML = `
+            <div class="reasoning-panel">
+              <div class="reasoning-box strength">
+                <div class="reasoning-title" style="color:var(--accent-success)">✔ SEO Audit Insight</div>
+                <p>${escapeHtml(safeText(reasoning?.seo))}</p>
+              </div>
+              <div class="reasoning-box weakness">
+                <div class="reasoning-title" style="color:var(--accent-warning)">❌ AEO Audit Insight</div>
+                <p>${escapeHtml(safeText(reasoning?.aeo))}</p>
+              </div>
             </div>
-            <div class="reasoning-box weakness">
-              <div class="reasoning-title" style="color:var(--accent-warning)">❌ Answer Engine Optimization Vectors</div>
-              <p>AEO Grade: <strong>${escapeHtml(safeText(aeoAnalysis.status || data.aeoStatus || "Needs Work"))}</strong></p>
-              <p>Structured Q&A and FAQ blocks are either partially integrated or missing logical schema configurations required by LLM parsers.</p>
-            </div>
-          </div>
-        `;
+          `;
+        }
+      } else {
+        reasoningCard.style.display = "none";
       }
     }
 
-    // LLM Simulation Probabilities
+    // AEO Citation Sim Engine
+    const aeoSim = safeGet(data, "aeoSimulation") || safeGet(data, "analysis.aeo") || {};
     const realCitationCard = document.getElementById("realCitationCard");
     if (realCitationCard) {
-      realCitationCard.style.display = "block";
-      
-      const chatgptProb = safeNumber(aeoAnalysis.citationChatGPT || data.citationChatGPT || data.chatgptProbability || 40);
-      const geminiProb = safeNumber(aeoAnalysis.citationGemini || data.citationGemini || data.geminiProbability || 45);
-      const perplexityProb = safeNumber(aeoAnalysis.citationPerplexity || data.citationPerplexity || data.perplexityProbability || 40);
-      const claudeProb = safeNumber(aeoAnalysis.citationClaude || data.citationClaude || data.claudeProbability || 35);
+      const chatgptProb = safeNumber(aeoSim?.citationChatGPT ?? aeoSim?.chatgptProbability);
+      const geminiProb = safeNumber(aeoSim?.citationGemini ?? aeoSim?.geminiProbability);
+      const perplexityProb = safeNumber(aeoSim?.citationPerplexity ?? aeoSim?.perplexityProbability);
+      const claudeProb = safeNumber(aeoSim?.citationClaude ?? aeoSim?.claudeProbability);
 
-      const explanationEl = document.getElementById("aeoSimulationExplanation");
-      if (explanationEl) {
-        explanationEl.innerHTML = `
-          <div style="space-y-4">
+      if (chatgptProb != null || geminiProb != null || perplexityProb != null || claudeProb != null) {
+        realCitationCard.style.display = "block";
+        const explanationEl = document.getElementById("aeoSimulationExplanation");
+        if (explanationEl) {
+          explanationEl.innerHTML = `
             <div>
-              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span><strong>ChatGPT (OpenAI Search)</strong></span>
-                <span><strong>${chatgptProb}% Citation Probability</strong></span>
-              </div>
-              <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden; margin-bottom:12px;">
-                <div style="height:100%; width:${chatgptProb}%; background:var(--accent-success);"></div>
-              </div>
+              ${chatgptProb != null ? `
+                <div style="margin-bottom:12px;">
+                  <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span><strong>ChatGPT (OpenAI Search)</strong></span>
+                    <span><strong>${chatgptProb}% Citation Probability</strong></span>
+                  </div>
+                  <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
+                    <div style="height:100%; width:${chatgptProb}%; background:var(--accent-success);"></div>
+                  </div>
+                </div>` : ''}
+              ${geminiProb != null ? `
+                <div style="margin-bottom:12px;">
+                  <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span><strong>Gemini (Google Overviews)</strong></span>
+                    <span><strong>${geminiProb}% Citation Probability</strong></span>
+                  </div>
+                  <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
+                    <div style="height:100%; width:${geminiProb}%; background:var(--accent-primary);"></div>
+                  </div>
+                </div>` : ''}
+              ${perplexityProb != null ? `
+                <div style="margin-bottom:12px;">
+                  <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span><strong>Perplexity Engine (Discovery)</strong></span>
+                    <span><strong>${perplexityProb}% Citation Probability</strong></span>
+                  </div>
+                  <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
+                    <div style="height:100%; width:${perplexityProb}%; background:var(--accent-purple);"></div>
+                  </div>
+                </div>` : ''}
+              ${claudeProb != null ? `
+                <div style="margin-bottom:12px;">
+                  <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span><strong>Claude (Anthropic Index)</strong></span>
+                    <span><strong>${claudeProb}% Citation Probability</strong></span>
+                  </div>
+                  <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
+                    <div style="height:100%; width:${claudeProb}%; background:var(--accent-warning);"></div>
+                  </div>
+                </div>` : ''}
             </div>
-            <div>
-              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span><strong>Gemini (Google Overviews)</strong></span>
-                <span><strong>${geminiProb}% Citation Probability</strong></span>
-              </div>
-              <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden; margin-bottom:12px;">
-                <div style="height:100%; width:${geminiProb}%; background:var(--accent-primary);"></div>
-              </div>
-            </div>
-            <div>
-              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span><strong>Perplexity Engine (Discovery)</strong></span>
-                <span><strong>${perplexityProb}% Citation Probability</strong></span>
-              </div>
-              <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden; margin-bottom:12px;">
-                <div style="height:100%; width:${perplexityProb}%; background:var(--accent-purple);"></div>
-              </div>
-            </div>
-             <div>
-              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span><strong>Claude (Anthropic Index)</strong></span>
-                <span><strong>${claudeProb}% Citation Probability</strong></span>
-              </div>
-              <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
-                <div style="height:100%; width:${claudeProb}%; background:var(--accent-warning);"></div>
-              </div>
-            </div>
-          </div>
-        `;
+          `;
+        }
+      } else {
+        realCitationCard.style.display = "none";
       }
     }
 
-    // Simulations
-    const sim = data.aiSearchSimulation || data.aiSimulation || {};
-    if (sim.chatgpt || sim.gemini || sim.perplexity) {
-      const simCard = document.getElementById("aiSimulationCard");
-      if (simCard) {
+    // Model Output Simulations: Fixes [object Object] rendering
+    const sim = safeGet(data, "aiSimulation") || safeGet(data, "aiSearchSimulation") || {};
+    const simCard = document.getElementById("aiSimulationCard");
+    if (simCard) {
+      if (Object.keys(sim).length > 0) {
         simCard.style.display = "block";
         const simText = document.getElementById("aiSimulationText");
         if (simText) {
+          const renderItem = (title, key) => {
+            const item = sim[key];
+            if (!item) return '';
+            // If backend returned object instead of string, format it logically
+            let outStr = '';
+            if (typeof item === 'object') {
+              outStr = Object.entries(item)
+                .map(([k, v]) => `<strong>${escapeHtml(k.toUpperCase())}:</strong> ${escapeHtml(String(v))}`)
+                .join('<br/>');
+            } else {
+              outStr = escapeHtml(String(item));
+            }
+            return `<div class="ai-box"><strong>${escapeHtml(title)}:</strong><p style="margin-top:5px; line-height:1.6;">${outStr}</p></div>`;
+          };
+
           simText.innerHTML = `
-            <div class="ai-box"><strong>ChatGPT Synthesized Overview:</strong><p style="margin-top:5px;">${escapeHtml(safeText(sim.chatgpt?.answer || sim.chatgpt))}</p></div>
-            <div class="ai-box"><strong>Gemini Schema Parse Simulation:</strong><p style="margin-top:5px;">${escapeHtml(safeText(sim.gemini?.answer || sim.gemini))}</p></div>
-            <div class="ai-box"><strong>Perplexity Citation Graph Output:</strong><p style="margin-top:5px;">${escapeHtml(safeText(sim.perplexity?.answer || sim.perplexity))}</p></div>
+            ${renderItem("ChatGPT Simulation", "chatgpt")}
+            ${renderItem("Gemini Overviews Simulation", "gemini")}
+            ${renderItem("Perplexity Discovery Simulation", "perplexity")}
+            ${renderItem("Claude Logic Simulation", "claude")}
           `;
         }
+      } else {
+        simCard.style.display = "none";
       }
     }
 
-    // Detailed Audit Display
+    // Detailed SEO Audit Table
     const seoAuditCard = document.getElementById("seoAuditCard");
     if (seoAuditCard) {
-      seoAuditCard.style.display = "block";
-      const crit = safeArray(reasoning.criticalIssues || data.criticalIssues || []);
-      const imp = safeArray(reasoning.importantIssues || data.importantIssues || []);
-      
-      const seoAuditResults = document.getElementById("seoAuditResults");
-      if (seoAuditResults) {
-        seoAuditResults.innerHTML = `
-          <div class="grid-3">
-            <div class="metric-box" style="background:var(--accent-danger)"><div class="metric-value">${crit.length}</div><div class="metric-label">Critical Priority</div></div>
-            <div class="metric-box" style="background:var(--accent-warning)"><div class="metric-value">${imp.length}</div><div class="metric-label">Warnings</div></div>
-            <div class="metric-box" style="background:var(--accent-primary)"><div class="metric-value">Active</div><div class="metric-label">Audit Engine</div></div>
-          </div>
-          ${crit.length > 0 ? `<h4 style="margin-top:20px; color:var(--accent-danger)">🚨 Critical Rectifications Required:</h4><ul>${crit.map(c => `<li>${escapeHtml(c.description || c)}</li>`).join('')}</ul>` : ''}
-          ${imp.length > 0 ? `<h4 style="margin-top:20px; color:var(--accent-warning)">⚠️ General Warnings:</h4><ul>${imp.map(i => `<li>${escapeHtml(i.description || i)}</li>`).join('')}</ul>` : ''}
-        `;
+      const crit = safeArray(safeGet(data, "analysis.seo.criticalIssues") || safeGet(data, "criticalIssues"));
+      const imp = safeArray(safeGet(data, "analysis.seo.importantIssues") || safeGet(data, "importantIssues"));
+      const minor = safeArray(safeGet(data, "analysis.seo.minorIssues") || safeGet(data, "minorIssues"));
+
+      if (crit.length > 0 || imp.length > 0 || minor.length > 0) {
+        seoAuditCard.style.display = "block";
+        const seoAuditResults = document.getElementById("seoAuditResults");
+        if (seoAuditResults) {
+          seoAuditResults.innerHTML = `
+            <div class="grid-3" style="margin-bottom: 20px;">
+              <div class="metric-box" style="background:var(--accent-danger)"><div class="metric-value">${crit.length}</div><div class="metric-label">Critical Issues</div></div>
+              <div class="metric-box" style="background:var(--accent-warning)"><div class="metric-value">${imp.length}</div><div class="metric-label">Important Issues</div></div>
+              <div class="metric-box" style="background:var(--accent-primary)"><div class="metric-value">${minor.length}</div><div class="metric-label">Minor Issues</div></div>
+            </div>
+            ${crit.length > 0 ? `<h4 style="color:var(--accent-danger)">🚨 Critical Rectifications Required:</h4><ul>${crit.map(c => `<li>${escapeHtml(c?.description || c)}</li>`).join('')}</ul>` : ''}
+            ${imp.length > 0 ? `<h4 style="color:var(--accent-warning)">⚠️ General Warnings:</h4><ul>${imp.map(i => `<li>${escapeHtml(i?.description || i)}</li>`).join('')}</ul>` : ''}
+            ${minor.length > 0 ? `<h4 style="color:var(--accent-primary)">ℹ️ Minor Alerts:</h4><ul>${minor.map(m => `<li>${escapeHtml(m?.description || m)}</li>`).join('')}</ul>` : ''}
+          `;
+        }
+      } else {
+        seoAuditCard.style.display = "none";
       }
     }
 
     // Metadata Analyzers
     const titleCard = document.getElementById("titleAnalyzerCard");
     if (titleCard) {
-      titleCard.style.display = "block";
-      const titleResults = document.getElementById("titleAnalyzerResults");
-      if (titleResults) {
-        titleResults.innerHTML = `
-          <p><strong>Discovered Title Header:</strong> ${escapeHtml(safeText(data.title))}</p>
-          <p><strong>Characters Metric:</strong> ${safeText(data.title).length} characters</p>
-        `;
+      if (data?.title) {
+        titleCard.style.display = "block";
+        const titleResults = document.getElementById("titleAnalyzerResults");
+        if (titleResults) {
+          titleResults.innerHTML = `
+            <p><strong>Discovered Title Header:</strong> ${escapeHtml(data.title)}</p>
+            <p><strong>Characters Metric:</strong> ${data.title.length} characters</p>
+          `;
+        }
+      } else {
+        titleCard.style.display = "none";
       }
     }
 
     const metaCard = document.getElementById("metaAnalyzerCard");
     if (metaCard) {
-      metaCard.style.display = "block";
-      const metaResults = document.getElementById("metaAnalyzerResults");
-      if (metaResults) {
-        metaResults.innerHTML = `
-          <p><strong>Discovered Meta Description:</strong> ${escapeHtml(safeText(data.metaDescription))}</p>
-          <p><strong>Characters Metric:</strong> ${safeText(data.metaDescription).length} characters</p>
-        `;
+      if (data?.metaDescription) {
+        metaCard.style.display = "block";
+        const metaResults = document.getElementById("metaAnalyzerResults");
+        if (metaResults) {
+          metaResults.innerHTML = `
+            <p><strong>Discovered Meta Description:</strong> ${escapeHtml(data.metaDescription)}</p>
+            <p><strong>Characters Metric:</strong> ${data.metaDescription.length} characters</p>
+          `;
+        }
+      } else {
+        metaCard.style.display = "none";
       }
     }
 
+    // Heading Structure Metrics
     const headingCard = document.getElementById("headingCard");
     if (headingCard) {
-      headingCard.style.display = "block";
-      const headingResults = document.getElementById("headingResults");
-      if (headingResults) {
-        headingResults.innerHTML = `
-          <p><strong>H1 Main Count:</strong> ${safeNumber(data.h1Count)} detected</p>
-          <p><strong>H2 Subsection Count:</strong> ${safeNumber(data.h2Count)} detected</p>
-          <p><strong>H3 Topic Count:</strong> ${safeNumber(data.h3Count)} detected</p>
-        `;
+      if (data?.h1Count != null || data?.h2Count != null || data?.h3Count != null) {
+        headingCard.style.display = "block";
+        const headingResults = document.getElementById("headingResults");
+        if (headingResults) {
+          headingResults.innerHTML = `
+            <p><strong>H1 Main Count:</strong> ${safeText(data.h1Count)} detected</p>
+            <p><strong>H2 Subsection Count:</strong> ${safeText(data.h2Count)} detected</p>
+            <p><strong>H3 Topic Count:</strong> ${safeText(data.h3Count)} detected</p>
+          `;
+        }
+      } else {
+        headingCard.style.display = "none";
       }
     }
 
+    // Internal Link Auditing
     const internalCard = document.getElementById("internalLinkCard");
     if (internalCard) {
-      internalCard.style.display = "block";
-      const linkIntel = data.internalLinkIntelligence || data.breakdown?.internalLinkingAudit || {};
-      const linkResults = document.getElementById("internalLinkResults");
-      if (linkResults) {
-        linkResults.innerHTML = `
-          <p><strong>Internal Link Elements:</strong> ${safeNumber(data.internalLinks || linkIntel.internalLinks)}</p>
-          <p><strong>Average Link Depth:</strong> ${safeNumber(linkIntel.avgLinkDepth || linkIntel.linkDepthAverage)}</p>
-          <p><strong>Anchor Diversity Score:</strong> ${safeNumber(linkIntel.anchorDiversityScore)}%</p>
-          <p><strong>Contextual Link Score:</strong> ${safeNumber(linkIntel.contextualLinkScore)}%</p>
-        `;
+      const linkIntel = safeGet(data, "internalLinkIntelligence") || safeGet(data, "breakdown.internalLinkingAudit");
+      if (linkIntel) {
+        internalCard.style.display = "block";
+        const linkResults = document.getElementById("internalLinkResults");
+        if (linkResults) {
+          linkResults.innerHTML = `
+            <p><strong>Internal Link Elements:</strong> ${safeText(data.internalLinks ?? linkIntel?.internalLinks)}</p>
+            <p><strong>Average Link Depth:</strong> ${safeText(linkIntel?.avgLinkDepth ?? linkIntel?.linkDepthAverage)}</p>
+            <p><strong>Anchor Diversity Score:</strong> ${linkIntel?.anchorDiversityScore != null ? linkIntel.anchorDiversityScore + '%' : 'Data unavailable'}</p>
+            <p><strong>Contextual Link Score:</strong> ${linkIntel?.contextualLinkScore != null ? linkIntel.contextualLinkScore + '%' : 'Data unavailable'}</p>
+          `;
+        }
+      } else {
+        internalCard.style.display = "none";
       }
     }
 
+    // Image SEO Alt Indicators
     const imageCard = document.getElementById("imageSeoCard");
     if (imageCard) {
-      imageCard.style.display = "block";
-      const imgResults = document.getElementById("imageSeoResults");
-      if (imgResults) {
-        imgResults.innerHTML = `
-          <p><strong>Total Image Nodes Scanned:</strong> ${safeNumber(data.totalImages)}</p>
-          <p><strong>Images Missing ALT Texts:</strong> ${safeNumber(data.imagesWithoutAlt)}</p>
-        `;
+      if (data?.totalImages != null || data?.imagesWithoutAlt != null) {
+        imageCard.style.display = "block";
+        const imgResults = document.getElementById("imageSeoResults");
+        if (imgResults) {
+          imgResults.innerHTML = `
+            <p><strong>Total Image Nodes Scanned:</strong> ${safeText(data.totalImages)}</p>
+            <p><strong>Images Missing ALT Attributes:</strong> ${safeText(data.imagesWithoutAlt)}</p>
+          `;
+        }
+      } else {
+        imageCard.style.display = "none";
       }
     }
 
+    // Entity Map Lists
     const entityCard = document.getElementById("entityCard");
     if (entityCard) {
-      entityCard.style.display = "block";
-      const ent = data.entities || {};
-      const entResults = document.getElementById("entityResults");
-      if (entResults) {
-        entResults.innerHTML = `
-          <p><strong>Identified Brand Names:</strong> ${safeArray(ent.brands).join(', ') || 'None found'}</p>
-          <p><strong>Extracted Services & Products:</strong> ${safeArray(ent.services).join(', ') || 'None found'}</p>
-          <p><strong>Inferred Locations:</strong> ${safeArray(ent.locations).join(', ') || 'None found'}</p>
-        `;
+      const ent = safeGet(data, "entities") || safeGet(data, "aiEntities") || {};
+      if (Object.keys(ent).length > 0) {
+        entityCard.style.display = "block";
+        const entResults = document.getElementById("entityResults");
+        if (entResults) {
+          const listBrands = safeArray(ent?.brands).join(', ');
+          const listServices = safeArray(ent?.services).join(', ');
+          const listLocations = safeArray(ent?.locations).join(', ');
+
+          entResults.innerHTML = `
+            <p><strong>Identified Brand Names:</strong> ${escapeHtml(safeText(listBrands))}</p>
+            <p><strong>Extracted Services & Products:</strong> ${escapeHtml(safeText(listServices))}</p>
+            <p><strong>Inferred Locations:</strong> ${escapeHtml(safeText(listLocations))}</p>
+          `;
+        }
+      } else {
+        entityCard.style.display = "none";
       }
     }
 
+    // EEAT Signals Indicators
     const eeatCard = document.getElementById("eeatCard");
     if (eeatCard) {
-      eeatCard.style.display = "block";
-      const eeatResults = document.getElementById("eeatResults");
-      if (eeatResults) {
-        eeatResults.innerHTML = `
-          <p><strong>EEAT Signal Grade:</strong> ${escapeHtml(safeText(eeatAnalysis.status || data.eeatStatus))}</p>
-          <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;">
-            <span class="badge ${data.hasAboutPage ? 'badge-green' : 'badge-red'}">About Page</span>
-            <span class="badge ${data.hasContactPage ? 'badge-green' : 'badge-red'}">Contact Page</span>
-            <span class="badge ${data.hasPrivacyPolicy ? 'badge-green' : 'badge-red'}">Privacy Policy</span>
-            <span class="badge ${data.hasAuthor ? 'badge-green' : 'badge-red'}">Author Bio</span>
-            <span class="badge ${techAnalysis.isHttps ? 'badge-green' : 'badge-red'}">HTTPS Secure</span>
-          </div>
-        `;
-      }
-    }
-
-    // Schema Card Rendering
-    const schemaCard = document.getElementById("schemaCard");
-    if (schemaCard) {
-      schemaCard.style.display = "block";
-      const detectedStr = safeArray(techAnalysis.schemas || data.schemas).length > 0 
-        ? safeArray(techAnalysis.schemas || data.schemas).map(s => `<span class="badge badge-green" style="margin:2px;">${escapeHtml(s)}</span>`).join('')
-        : `<span class="badge badge-red">No Schema Markup Detected</span>`;
-
-      const recommendedStr = safeArray(techAnalysis.recommendedSchemas || data.recommendedSchemas).length > 0
-        ? safeArray(techAnalysis.recommendedSchemas || data.recommendedSchemas).map(s => `<span class="badge badge-purple" style="margin:2px;">${escapeHtml(s)}</span>`).join('')
-        : `<span>None</span>`;
-
-      let schemasCodeHtml = "";
-      if (data.schemaGenerator && Object.keys(data.schemaGenerator).length > 0) {
-        schemasCodeHtml = Object.entries(data.schemaGenerator).map(([key, value]) => `
-          <div class="ai-box">
-            <strong>Recommended Structured Markup (${escapeHtml(key)})</strong>
-            <pre>${escapeHtml(value.code)}</pre>
-            <button onclick="copyToClipboard(\`${(value.code || '').replace(/`/g, '\\`')}\`, this)">📋 Copy Markup</button>
-          </div>
-        `).join('');
-      }
-
-      const schemaResults = document.getElementById("schemaResults");
-      if (schemaResults) {
-        schemaResults.innerHTML = `
-          <p><strong>Detected Schemas on Domain:</strong></p>
-          <div style="margin-bottom:15px;">${detectedStr}</div>
-          <p><strong>Recommended Schemas to Deploy:</strong></p>
-          <div style="margin-bottom:20px;">${recommendedStr}</div>
-          ${schemasCodeHtml}
-        `;
-      }
-    }
-
-    // Topical Authority Card Mapping
-    if (data.topicalAuthority) {
-      const topical = data.topicalAuthority;
-      const tCard = document.getElementById("topicalAuthorityCard");
-      if (tCard) {
-        tCard.style.display = "block";
-        
-        const clustersHtml = safeArray(topical.clusters).map(cls => `
-          <div class="ai-box" style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
-            <span><strong>${escapeHtml(cls.name)}</strong></span>
-            <span class="badge ${cls.status === 'Active' ? 'badge-green' : 'badge-orange'}">${escapeHtml(cls.status)}</span>
-          </div>
-        `).join('');
-
-        const contentEl = document.getElementById("topicalAuthorityContent");
-        if (contentEl) {
-          contentEl.innerHTML = `
-            <p><strong>Authority Score:</strong> ${safeNumber(topical.authorityScore)}/100</p>
-            <p><strong>Topical Coverage Depth:</strong> ${escapeHtml(safeText(topical.depth))}</p>
-            <p><strong>Coverage Percent:</strong> ${escapeHtml(safeText(topical.topicsCovered))}</p>
-            <div style="margin-top:15px;">
-              <strong>Dynamic Topical Clusters:</strong>
-              ${clustersHtml || '<p style="color:var(--text-muted)">No active topical clusters found.</p>'}
+      const eeatAnalysis = safeGet(data, "analysis.eeat") || {};
+      if (Object.keys(eeatAnalysis).length > 0) {
+        eeatCard.style.display = "block";
+        const eeatResults = document.getElementById("eeatResults");
+        if (eeatResults) {
+          eeatResults.innerHTML = `
+            <p><strong>EEAT Signal Grade:</strong> ${escapeHtml(safeText(eeatAnalysis?.status))}</p>
+            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;">
+              <span class="badge ${data?.hasAboutPage ? 'badge-green' : 'badge-red'}">About Page</span>
+              <span class="badge ${data?.hasContactPage ? 'badge-green' : 'badge-red'}">Contact Page</span>
+              <span class="badge ${data?.hasPrivacyPolicy ? 'badge-green' : 'badge-red'}">Privacy Policy</span>
+              <span class="badge ${data?.hasAuthor ? 'badge-green' : 'badge-red'}">Author Bio</span>
+              <span class="badge ${techAnalysis?.isHttps ? 'badge-green' : 'badge-red'}">HTTPS Secure</span>
             </div>
           `;
         }
+      } else {
+        eeatCard.style.display = "none";
       }
     }
 
-    if (data.semanticSEO) {
-      const semantic = data.semanticSEO;
-      const sCard = document.getElementById("semanticSEOCard");
-      if (sCard) {
+    // Recommended Schema Array Card: Fixes duplicate schema block rendering issues
+    const schemaCard = document.getElementById("schemaCard");
+    if (schemaCard) {
+      const techAnalysis = safeGet(data, "analysis.technical") || {};
+      const detectedList = safeArray(techAnalysis?.schemas || data?.schemas);
+      const recommendedList = safeArray(techAnalysis?.recommendedSchemas || data?.recommendedSchemas);
+
+      if (detectedList.length > 0 || recommendedList.length > 0) {
+        schemaCard.style.display = "block";
+        const schemaResults = document.getElementById("schemaResults");
+        if (schemaResults) {
+          const detectedStr = detectedList.length > 0 
+            ? detectedList.map(s => `<span class="badge badge-green" style="margin:2px;">${escapeHtml(s)}</span>`).join('')
+            : `<span class="badge badge-red">No Schema Markup Detected</span>`;
+
+          const recommendedStr = recommendedList.length > 0
+            ? recommendedList.map(s => `<span class="badge badge-purple" style="margin:2px;">${escapeHtml(s)}</span>`).join('')
+            : `<span>No recommendations required</span>`;
+
+          // Generate Schema code cards strictly once
+          let schemasCodeHtml = "";
+          if (data?.schemaGenerator || data?.schema) {
+            const rawSchema = data?.schemaGenerator || data?.schema;
+            schemasCodeHtml = `
+              <div class="ai-box" style="margin-top:15px;">
+                <strong>Recommended Structured Markup Schema Draft:</strong>
+                <pre>${escapeHtml(rawSchema)}</pre>
+                <button onclick="copyToClipboard(\`${String(rawSchema).replace(/`/g, '\\`')}\`, this)">📋 Copy Markup</button>
+              </div>`;
+          }
+
+          schemaResults.innerHTML = `
+            <p><strong>Detected Schemas on Domain:</strong></p>
+            <div style="margin-bottom:15px;">${detectedStr}</div>
+            <p><strong>Recommended Schemas to Deploy:</strong></p>
+            <div style="margin-bottom:20px;">${recommendedStr}</div>
+            ${schemasCodeHtml}
+          `;
+        }
+      } else {
+        schemaCard.style.display = "none";
+      }
+    }
+
+    // Topical & Semantic Content
+    const tCard = document.getElementById("topicalAuthorityCard");
+    if (tCard) {
+      const topical = safeGet(data, "topicalAuthority");
+      if (topical) {
+        tCard.style.display = "block";
+        const contentEl = document.getElementById("topicalAuthorityContent");
+        if (contentEl) {
+          const clustersHtml = safeArray(topical?.clusters).map(cls => `
+            <div class="ai-box" style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+              <span><strong>${escapeHtml(cls?.name)}</strong></span>
+              <span class="badge ${cls?.status === 'Active' ? 'badge-green' : 'badge-orange'}">${escapeHtml(cls?.status)}</span>
+            </div>
+          `).join('');
+
+          contentEl.innerHTML = `
+            <p><strong>Authority Score:</strong> ${topical?.authorityScore != null ? topical.authorityScore + '/100' : 'Data unavailable'}</p>
+            <p><strong>Topical Coverage Depth:</strong> ${escapeHtml(safeText(topical?.depth))}</p>
+            <p><strong>Coverage Percent:</strong> ${escapeHtml(safeText(topical?.topicsCovered))}</p>
+            <div style="margin-top:15px;">
+              <strong>Dynamic Topical Clusters:</strong>
+              ${clustersHtml || '<p style="color:var(--text-muted)">No active topical clusters parsed.</p>'}
+            </div>
+          `;
+        }
+      } else {
+        tCard.style.display = "none";
+      }
+    }
+
+    const sCard = document.getElementById("semanticSEOCard");
+    if (sCard) {
+      const semantic = safeGet(data, "semanticSEO");
+      if (semantic) {
         sCard.style.display = "block";
         const contentEl = document.getElementById("semanticSEOContent");
         if (contentEl) {
+          const gapBadges = safeArray(semantic?.semanticGaps || semantic?.missingEntities).map(gap => `<span class="badge badge-orange" style="margin:2px;">${escapeHtml(gap)}</span>`).join('');
           contentEl.innerHTML = `
-            <p><strong>Semantic NLP Relevance Grade:</strong> ${safeNumber(semantic.nlpScore)}/100</p>
-            <p><strong>Semantic Topic Match:</strong> ${safeNumber(semantic.topicCoverage)}%</p>
-            <p><strong>Gap Gaps:</strong> ${safeArray(semantic.semanticGaps).map(gap => `<span class="badge badge-orange" style="margin:2px;">${escapeHtml(gap)}</span>`).join('') || 'None'}</p>
+            <p><strong>Semantic NLP Relevance Grade:</strong> ${semantic?.nlpScore != null ? semantic.nlpScore + '/100' : 'Data unavailable'}</p>
+            <p><strong>Semantic Topic Match:</strong> ${semantic?.topicCoverage != null ? semantic.topicCoverage + '%' : 'Data unavailable'}</p>
+            <p><strong>Gap Entities:</strong></p>
+            <div style="margin-top:5px;">${gapBadges || 'No immediate semantic gaps identified'}</div>
           `;
         }
+      } else {
+        sCard.style.display = "none";
       }
     }
 
-    if (data.citationOpportunities) {
-      const oppCard = document.getElementById("citationOppCard");
-      if (oppCard) {
+    // AI Citation Opportunities
+    const oppCard = document.getElementById("citationOppCard");
+    if (oppCard) {
+      const opps = safeArray(safeGet(data, "citationOpportunities"));
+      if (opps.length > 0) {
         oppCard.style.display = "block";
         const contentEl = document.getElementById("citationOppContent");
         if (contentEl) {
-          contentEl.innerHTML = safeArray(data.citationOpportunities).map(o => `
+          contentEl.innerHTML = opps.map(o => `
             <div class="ai-box">
-              <strong>${escapeHtml(o.engine)} Engine Opportunity:</strong>
-              <p>${escapeHtml(o.issue)}</p>
-              <span class="badge badge-red" style="margin-top:5px;">Impact: ${escapeHtml(o.impact)}</span>
-              <p style="margin-top:5px; font-size:13px; color:var(--text-muted);">Fix Action: ${escapeHtml(o.fix)}</p>
+              <strong>${escapeHtml(o?.engine)} Engine Opportunity:</strong>
+              <p>${escapeHtml(o?.issue)}</p>
+              <span class="badge badge-red" style="margin-top:5px;">Impact: ${escapeHtml(o?.impact)}</span>
+              <p style="margin-top:5px; font-size:13px; color:var(--text-muted);">Fix Action: ${escapeHtml(o?.fix)}</p>
             </div>
           `).join('');
         }
+      } else {
+        oppCard.style.display = "none";
       }
     }
 
-    if (data.trustSignals) {
-      const trust = data.trustSignals;
-      const trCard = document.getElementById("trustSignalsCard");
-      if (trCard) {
+    // Trust Signal Scans
+    const trCard = document.getElementById("trustSignalsCard");
+    if (trCard) {
+      const trust = safeGet(data, "trustSignals");
+      if (trust) {
         trCard.style.display = "block";
         const contentEl = document.getElementById("trustSignalsContent");
         if (contentEl) {
           contentEl.innerHTML = `
-            <p><strong>Platform Trust Flow Score:</strong> ${safeNumber(trust.trustScore)}/100</p>
+            <p><strong>Platform Trust Flow Score:</strong> ${trust?.trustScore != null ? trust.trustScore + '/100' : 'Data unavailable'}</p>
             <ul>
-              <li>Active Contact channels: ${trust.hasContact ? '✓ Detected' : '✗ Unverified'}</li>
-              <li>Corporate About sections: ${trust.hasAbout ? '✓ Detected' : '✗ Unverified'}</li>
-              <li>Security SSL Layer (HTTPS): ${techAnalysis.isHttps ? '✓ Secure' : '✗ Insecure'}</li>
+              <li>Active Contact channels: ${trust?.hasContact ? '✓ Verified' : '✗ Unverified'}</li>
+              <li>Corporate About sections: ${trust?.hasAbout ? '✓ Verified' : '✗ Unverified'}</li>
+              <li>Terms of Service validation: ${trust?.hasTermsPage ? '✓ Verified' : '✗ Unverified'}</li>
+              <li>Social parameters index: ${safeArray(trust?.socialLinks).length > 0 ? '✓ Verified (' + safeArray(trust?.socialLinks).length + ' linked)' : '✗ Unverified'}</li>
             </ul>
           `;
         }
+      } else {
+        trCard.style.display = "none";
       }
     }
 
-    if (data.localSEO) {
-      const local = data.localSEO;
-      const lCard = document.getElementById("localSeoCard");
-      if (lCard) {
+    // Local SEO Analyzers
+    const lCard = document.getElementById("localSeoCard");
+    if (lCard) {
+      const local = safeGet(data, "localSEO");
+      if (local) {
         lCard.style.display = "block";
         const contentEl = document.getElementById("localSEOContent");
         if (contentEl) {
           contentEl.innerHTML = `
-            <p><strong>Local SEO Score:</strong> ${safeNumber(local.localScore)}/100</p>
-            <p><strong>NAP Alignment:</strong> ${local.hasNAP ? 'Verified' : 'Incomplete'}</p>
-            <p><strong>Google Maps Detected:</strong> ${local.mapDetected ? '✓ Yes' : '✗ No'}</p>
-            <p><strong>Local Business Schema:</strong> ${local.localBusinessSchemaDetected ? '✓ Detected' : '✗ Missing'}</p>
+            <p><strong>Local SEO Score:</strong> ${local?.localScore != null ? local.localScore + '/100' : 'Data unavailable'}</p>
+            <p><strong>NAP Consistency Alignment:</strong> ${escapeHtml(safeText(local?.napConsistency))}</p>
+            <p><strong>Google Maps Linkage:</strong> ${local?.mapDetected ? '✓ Connected' : '✗ Missing'}</p>
+            <p><strong>LocalBusiness JSON-LD:</strong> ${local?.localBusinessSchemaDetected ? '✓ Active' : '✗ Missing'}</p>
           `;
         }
+      } else {
+        lCard.style.display = "none";
       }
     }
 
@@ -1676,8 +1801,8 @@ function renderAllResults(data) {
     if (resultEl) {
       resultEl.innerHTML = `
         <div class="card" style="border-left:5px solid var(--accent-success);">
-          <h4>✅ Domain Analysis Complete</h4>
-          <p>SaaS scanning completed with no fatal thread errors. Baseline standards established successfully.</p>
+          <h4>✅ Domain Scan Matrix Parsed</h4>
+          <p>Structural indexes analyzed successfully. Click individual SaaS checklist options to perform comparison workflows.</p>
         </div>
       `;
     }
@@ -1693,9 +1818,6 @@ async function generateRoadmap() {
   const url = urlEl.value.trim();
   if (!url) return alert("Domain target required");
 
-  const roadmapBtn = document.getElementById("roadmapBtn");
-  if (roadmapBtn) roadmapBtn.disabled = true;
-
   showLoading("Generating Visibility Roadmap...", "Constructing chronological workflow and estimating optimization weights");
   try {
     const res = await fetch(`${window.API_BASE}/roadmap?url=${encodeURIComponent(url)}`);
@@ -1705,40 +1827,43 @@ async function generateRoadmap() {
 
     const roadCard = document.getElementById("roadmapCard");
     if (roadCard) {
-      roadCard.style.display = "block";
-      
-      const currentAIVisibility = safeNumber(data.currentAIVisibility || data.currentScore);
-      const potentialAIVisibility = safeNumber(data.potentialAIVisibility || data.potentialScore);
-      const totalRoadmapImpact = safeNumber(data.totalRoadmapImpact || 15);
+      const roadmapItems = safeArray(data?.roadmap);
+      if (roadmapItems.length > 0) {
+        roadCard.style.display = "block";
+        
+        const currentAIVisibility = safeNumber(data?.currentAIVisibility || data?.currentScore);
+        const potentialAIVisibility = safeNumber(data?.potentialAIVisibility || data?.potentialScore);
+        const totalRoadmapImpact = safeNumber(data?.totalRoadmapImpact);
 
-      const stepsEl = document.getElementById("roadmapSteps");
-      if (stepsEl) {
-        stepsEl.innerHTML = `
-          <div style="text-align:center; margin-bottom:20px;">
-            <span style="font-size:32px; font-weight:800; color:var(--accent-primary);">${currentAIVisibility}% → ${potentialAIVisibility}% Potential</span>
-            <p style="margin-top:6px; opacity:0.8;">Actionable SaaS Optimization Checklist (Total Roadmap Impact: +${totalRoadmapImpact}%)</p>
-          </div>
-          <div class="timeline">
-            ${safeArray(data.roadmap).map(step => `
-              <div class="timeline-item">
-                <div class="timeline-dot ${step.priority === 'CRITICAL' ? 'critical' : 'high'}"></div>
-                <div class="ai-box" style="margin-top:0;">
-                  <strong>Step ${step.step}: ${escapeHtml(step.task)}</strong>
-                  <span class="badge ${step.priority === 'CRITICAL' ? 'badge-red' : 'badge-orange'}" style="margin-left:8px;">${step.priority}</span>
-                  <p style="margin-top:6px;"><strong>Objective:</strong> ${escapeHtml(step.why)}</p>
-                  <p style="font-size:13px; color:var(--text-muted);">Impact value: +${step.impact}% | Implementation: ${step.effort}</p>
+        const stepsEl = document.getElementById("roadmapSteps");
+        if (stepsEl) {
+          stepsEl.innerHTML = `
+            <div style="text-align:center; margin-bottom:20px;">
+              <span style="font-size:32px; font-weight:800; color:var(--accent-primary);">${currentAIVisibility != null ? currentAIVisibility + '%' : 'Data unavailable'} → ${potentialAIVisibility != null ? potentialAIVisibility + '%' : 'Data unavailable'} Potential</span>
+              <p style="margin-top:6px; opacity:0.8;">Actionable SaaS Optimization Checklist (Total Roadmap Impact: +${totalRoadmapImpact ?? 0}%)</p>
+            </div>
+            <div class="timeline">
+              ${roadmapItems.map(step => `
+                <div class="timeline-item">
+                  <div class="timeline-dot ${step?.priority === 'CRITICAL' ? 'critical' : 'high'}"></div>
+                  <div class="ai-box" style="margin-top:0;">
+                    <strong>Step ${step?.step}: ${escapeHtml(step?.task)}</strong>
+                    <span class="badge ${step?.priority === 'CRITICAL' ? 'badge-red' : 'badge-orange'}" style="margin-left:8px;">${step?.priority}</span>
+                    <p style="margin-top:6px;"><strong>Objective:</strong> ${escapeHtml(step?.why)}</p>
+                    <p style="font-size:13px; color:var(--text-muted);">Impact value: +${step?.impact}% | Implementation: ${step?.effort}</p>
+                  </div>
                 </div>
-              </div>
-            `).join('')}
-          </div>
-        `;
+              `).join('')}
+            </div>
+          `;
+        }
+      } else {
+        roadCard.style.display = "none";
       }
     }
   } catch(err) {
     hideLoading();
     alert("Roadmap generation error: " + err.message);
-  } finally {
-    if (roadmapBtn) roadmapBtn.disabled = false;
   }
 }
 
@@ -1752,9 +1877,6 @@ async function keywordTheft() {
   const comp = compEl.value.trim();
   if (!url || !comp) return alert("Both targets required.");
 
-  const theftBtn = document.getElementById("theftBtn");
-  if (theftBtn) theftBtn.disabled = true;
-
   showLoading("Parsing Keyword Intelligence...", "Analyzing competitor semantic anchor texts and keyword clusters");
   try {
     const res = await fetch(`${window.API_BASE}/content-gap?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
@@ -1764,23 +1886,25 @@ async function keywordTheft() {
 
     const theftCard = document.getElementById("keywordTheftCard");
     if (theftCard) {
-      theftCard.style.display = "block";
-      const missingKeywords = safeArray(data.keywordGaps);
-      const resultsEl = document.getElementById("keywordTheftResults");
-      if (resultsEl) {
-        resultsEl.innerHTML = `
-          <p style="margin-bottom:12px;"><strong>High-Yield Opportunity Targets (Steal Metrics):</strong></p>
-          <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px;">
-            ${missingKeywords.length > 0 ? missingKeywords.map(k => `<span class="badge badge-purple" style="font-size:12px; padding:6px 12px;">${escapeHtml(k)}</span>`).join('') : '<span class="badge badge-green">No immediate theft opportunities identified.</span>'}
-          </div>
-        `;
+      const missingKeywords = safeArray(data?.keywordGap?.missingKeywords || data?.keywordGaps);
+      if (missingKeywords.length > 0) {
+        theftCard.style.display = "block";
+        const resultsEl = document.getElementById("keywordTheftResults");
+        if (resultsEl) {
+          resultsEl.innerHTML = `
+            <p style="margin-bottom:12px;"><strong>High-Yield Opportunity Targets (Steal Metrics):</strong></p>
+            <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px;">
+              ${missingKeywords.map(k => `<span class="badge badge-purple" style="font-size:12px; padding:6px 12px;">${escapeHtml(k)}</span>`).join('')}
+            </div>
+          `;
+        }
+      } else {
+        theftCard.style.display = "none";
       }
     }
   } catch(err) {
     hideLoading();
-    alert("Theft routine skipped: " + err.message);
-  } finally {
-    if (theftBtn) theftBtn.disabled = false;
+    alert("Theft routine failed: " + err.message);
   }
 }
 
@@ -1794,9 +1918,6 @@ async function gapAnalysis() {
   const comp = compEl.value.trim();
   if (!url || !comp) return alert("Both targets required.");
 
-  const gapBtn = document.getElementById("gapBtn");
-  if (gapBtn) gapBtn.disabled = true;
-
   showLoading("Finding Semantic Gaps...", "Cross-referencing domain taxonomies and comparing topical coverage percent");
   try {
     const res = await fetch(`${window.API_BASE}/content-gap?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
@@ -1806,42 +1927,48 @@ async function gapAnalysis() {
 
     const gapCard = document.getElementById("gapCard");
     if (gapCard) {
-      gapCard.style.display = "block";
-      const missingTopics = safeArray(data.headingGaps);
-      const gapContent = document.getElementById("gapContent");
-      if (gapContent) {
-        gapContent.innerHTML = `
-          <div class="grid-3" style="margin-bottom:20px;">
-            <div class="metric-box" style="background:#111827; border: 1px solid var(--accent-danger);">
-              <div class="metric-value" style="color:var(--accent-danger)">${missingTopics.length}</div>
-              <div class="metric-label">Missing Gaps</div>
+      const missingTopics = safeArray(data?.gapAnalysis?.missingTopics || data?.headingGaps);
+      if (missingTopics.length > 0) {
+        gapCard.style.display = "block";
+        const gapContent = document.getElementById("gapContent");
+        if (gapContent) {
+          gapContent.innerHTML = `
+            <div class="grid-3" style="margin-bottom:20px;">
+              <div class="metric-box" style="background:#111827; border: 1px solid var(--accent-danger);">
+                <div class="metric-value" style="color:var(--accent-danger)">${missingTopics.length}</div>
+                <div class="metric-label">Missing Gaps</div>
+              </div>
+              <div class="metric-box" style="background:#111827; border: 1px solid var(--accent-warning);">
+                <div class="metric-value" style="color:var(--accent-warning)">${data?.contentLengthDiff ?? 'Data unavailable'}</div>
+                <div class="metric-label">Content Diff (Words)</div>
+              </div>
+              <div class="metric-box" style="background:#111827; border: 1px solid var(--accent-success);">
+                <div class="metric-value" style="color:var(--accent-success)">${safeArray(data?.schemaGaps).length}</div>
+                <div class="metric-label">Schema Gaps</div>
+              </div>
             </div>
-            <div class="metric-box" style="background:#111827; border: 1px solid var(--accent-warning);">
-              <div class="metric-value" style="color:var(--accent-warning)">${safeNumber(data.contentLengthDiff)}</div>
-              <div class="metric-label">Content Diff (Words)</div>
-            </div>
-            <div class="metric-box" style="background:#111827; border: 1px solid var(--accent-success);">
-              <div class="metric-value" style="color:var(--accent-success)">${safeArray(data.schemaGaps).length}</div>
-              <div class="metric-label">Schema Gaps</div>
-            </div>
-          </div>
-          <p><strong>Topical Coverage Status:</strong> <span class="badge badge-purple">${escapeHtml(data.topicalCoverageStatus || "Topical Gaps Identified")}</span></p>
-          <p style="margin-top:15px;"><strong>Identified Crucial Topic Gaps (Click to highlight):</strong></p>
-          <ul style="list-style-type:none; padding-left:0;">
-            ${missingTopics.length > 0 ? missingTopics.map((topic, index) => `
-              <li onclick="this.style.color='var(--accent-success)'" style="cursor:pointer; padding:12px; background:var(--bg-body); border-radius:8px; margin-bottom:8px; border-left:3px solid var(--accent-danger); transition:0.2s; font-weight:${index < 3 ? 'bold' : 'normal'};">
-                ${index < 3 ? '🚨 [CRITICAL]' : '❌'} ${escapeHtml(topic)}
-              </li>
-            `).join('') : '<li>Perfect topical coverage! No gap discrepancies.</li>'}
-          </ul>
-        `;
+            <p><strong>Topical Coverage Status:</strong> <span class="badge badge-purple">${escapeHtml(safeText(data?.topicalCoverageStatus))}</span></p>
+            <p style="margin-top:15px;"><strong>Identified Crucial Topic Gaps:</strong></p>
+            <ul style="list-style-type:none; padding-left:0;">
+              ${missingTopics.map((topic, index) => `
+                <li onclick="this.style.color='var(--accent-success)'" style="cursor:pointer; padding:12px; background:var(--bg-body); border-radius:8px; margin-bottom:8px; border-left:3px solid var(--accent-danger); transition:0.2s; font-weight:${index < 3 ? 'bold' : 'normal'};">
+                  ${index < 3 ? '🚨 [CRITICAL]' : '❌'} ${escapeHtml(topic)}
+                </li>
+              `).join('')}
+            </ul>
+          `;
+        }
+      } else {
+        gapCard.style.display = "block";
+        const gapContent = document.getElementById("gapContent");
+        if (gapContent) {
+          gapContent.innerHTML = `<p>No topical gaps detected.</p>`;
+        }
       }
     }
   } catch(err) {
     hideLoading();
     alert("Gap analysis failure: " + err.message);
-  } finally {
-    if (gapBtn) gapBtn.disabled = false;
   }
 }
 
@@ -1855,9 +1982,6 @@ async function compareCompetitor() {
   const comp = compEl.value.trim();
   if (!url || !comp) return alert("Please specify both targets.");
 
-  const compareBtn = document.getElementById("compareBtn");
-  if (compareBtn) compareBtn.disabled = true;
-
   showLoading("Benchmarking Domains...", "Analyzing competitor SEO architectures and citation likelihood indexes");
   try {
     const res = await fetch(`${window.API_BASE}/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
@@ -1867,62 +1991,64 @@ async function compareCompetitor() {
 
     const compCard = document.getElementById("competitorCard");
     if (compCard) {
-      compCard.style.display = "block";
-      
-      const sites = safeArray(data.sites);
-      const userSite = sites[0] || {};
-      const compSite = sites[1] || {};
+      const sites = safeArray(data?.sites);
+      if (sites.length > 0) {
+        compCard.style.display = "block";
+        
+        const userSite = sites[0] || {};
+        const compSite = sites[1] || {};
 
-      let winnerHtml = `<span class="badge badge-green">${escapeHtml(data.winnerReason || "Live verification complete")}</span>`;
+        let winnerHtml = `<span class="badge badge-green">${escapeHtml(data?.winnerReason || "Live verification complete")}</span>`;
 
-      const detailsEl = document.getElementById("comparisonDetails");
-      if (detailsEl) {
-        detailsEl.innerHTML = `
-          <div style="margin-bottom:20px;">
-            <strong>AI Selection Winner:</strong> ${winnerHtml}
-          </div>
-          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-top:15px;">
-            <div class="ai-box" style="border-top:4px solid var(--accent-primary); margin-top:0;">
-              <h4 style="margin:0 0 10px 0;">${escapeHtml(cleanDomainBrand(userSite.url))} (You)</h4>
-              <p>Overall AI Score: <strong>${safeNumber(userSite.aiVisibilityScore)}%</strong></p>
-              <p>Technical SEO: <strong>${safeNumber(userSite.seoScore)}%</strong></p>
-              <p>AEO Score: <strong>${safeNumber(userSite.aeoScore)}%</strong></p>
+        const detailsEl = document.getElementById("comparisonDetails");
+        if (detailsEl) {
+          detailsEl.innerHTML = `
+            <div style="margin-bottom:20px;">
+              <strong>AI Selection Winner:</strong> ${winnerHtml}
             </div>
-            <div class="ai-box" style="border-top:4px solid var(--accent-danger); margin-top:0;">
-              <h4 style="margin:0 0 10px 0;">${escapeHtml(cleanDomainBrand(compSite.url))} (Competitor)</h4>
-              <p>Overall AI Score: <strong>${safeNumber(compSite.aiVisibilityScore)}%</strong></p>
-              <p>Technical SEO: <strong>${safeNumber(compSite.seoScore)}%</strong></p>
-              <p>AEO Score: <strong>${safeNumber(compSite.aeoScore)}%</strong></p>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-top:15px;">
+              <div class="ai-box" style="border-top:4px solid var(--accent-primary); margin-top:0;">
+                <h4 style="margin:0 0 10px 0;">${escapeHtml(cleanDomainBrand(userSite?.url))} (You)</h4>
+                <p>Overall AI Score: <strong>${userSite?.aiVisibilityScore != null ? userSite.aiVisibilityScore + '%' : 'Data unavailable'}</strong></p>
+                <p>Technical SEO: <strong>${userSite?.seoScore != null ? userSite.seoScore + '%' : 'Data unavailable'}</strong></p>
+                <p>AEO Score: <strong>${userSite?.aeoScore != null ? userSite.aeoScore + '%' : 'Data unavailable'}</strong></p>
+              </div>
+              <div class="ai-box" style="border-top:4px solid var(--accent-danger); margin-top:0;">
+                <h4 style="margin:0 0 10px 0;">${escapeHtml(cleanDomainBrand(compSite?.url))} (Competitor)</h4>
+                <p>Overall AI Score: <strong>${compSite?.aiVisibilityScore != null ? compSite.aiVisibilityScore + '%' : 'Data unavailable'}</strong></p>
+                <p>Technical SEO: <strong>${compSite?.seoScore != null ? compSite.seoScore + '%' : 'Data unavailable'}</strong></p>
+                <p>AEO Score: <strong>${compSite?.aeoScore != null ? compSite.aeoScore + '%' : 'Data unavailable'}</strong></p>
+              </div>
             </div>
-          </div>
-        `;
-      }
+          `;
+        }
 
-      const compCanvas = document.getElementById("comparisonChart");
-      if (compCanvas) {
-        if (comparisonChart) comparisonChart.destroy();
-        comparisonChart = new Chart(compCanvas, {
-          type: 'bar',
-          data: {
-            labels: sites.map(s => cleanDomainBrand(s.url)),
-            datasets: [{
-              label: "AI Visibility Score",
-              data: sites.map(s => safeNumber(s.aiVisibilityScore)),
-              backgroundColor: ["#3b82f6", "#ef4444"]
-            }]
-          },
-          options: {
-            responsive: true,
-            scales: { y: { beginAtZero: true, max: 100 } }
-          }
-        });
+        const compCanvas = document.getElementById("comparisonChart");
+        if (compCanvas) {
+          if (comparisonChart) comparisonChart.destroy();
+          comparisonChart = new Chart(compCanvas, {
+            type: 'bar',
+            data: {
+              labels: sites.map(s => cleanDomainBrand(s?.url)),
+              datasets: [{
+                label: "AI Visibility Score",
+                data: sites.map(s => safeNumber(s?.aiVisibilityScore)),
+                backgroundColor: ["#3b82f6", "#ef4444"]
+              }]
+            },
+            options: {
+              responsive: true,
+              scales: { y: { beginAtZero: true, max: 100 } }
+            }
+          });
+        }
+      } else {
+        compCard.style.display = "none";
       }
     }
   } catch(err) {
     hideLoading();
     alert("Error performing comparison: " + err.message);
-  } finally {
-    if (compareBtn) compareBtn.disabled = false;
   }
 }
 
@@ -1930,9 +2056,6 @@ async function compareCompetitor() {
 async function contentBrief() {
   const kwEl = document.getElementById("keyword");
   if (!kwEl || !kwEl.value.trim()) return alert("Please specify the target context keyword.");
-
-  const briefBtn = document.getElementById("briefBtn");
-  if (briefBtn) briefBtn.disabled = true;
 
   showLoading("Generating Content Brief...", "Synthesizing AI direct answers and recommended heading outlines");
   try {
@@ -1954,8 +2077,6 @@ async function contentBrief() {
     }
   } catch(e) {
     hideLoading();
-  } finally {
-    if (briefBtn) briefBtn.disabled = false;
   }
 }
 
@@ -1963,38 +2084,37 @@ async function contentBrief() {
 async function runAutopilot() {
   if (!lastScanData) return alert("Please run a standard scan audit first to populate data vector logs.");
   
-  const autopilotBtn = document.getElementById("autopilotBtn");
-  if (autopilotBtn) autopilotBtn.disabled = true;
-
   showLoading("Triggering AI Autopilot...", "Compiling programmatic recommendations and constructing action cards");
   try {
     hideLoading();
     const autoCard = document.getElementById("autopilotCard");
     if (autoCard) {
-      autoCard.style.display = "block";
-      const autopilotTasks = safeArray(lastScanData.aiAutopilot || (lastScanData.autopilot && lastScanData.autopilot.tasks) || []);
-      const autopilotResults = document.getElementById("autopilotResults");
-      if (autopilotResults) {
-        autopilotResults.innerHTML = `
-          <p style="margin-bottom:16px;">AI Autopilot parsed high-contrast optimization targets recursively:</p>
-          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
-            ${autopilotTasks.length > 0 ? autopilotTasks.map(t => `
-              <div class="ai-box" style="border-top: 4px solid ${t.priority === 'CRITICAL' ? 'var(--accent-danger)' : 'var(--accent-warning)'}; margin-top:0;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                  <strong>${escapeHtml(t.task)}</strong>
-                  <span class="badge ${t.priority === 'CRITICAL' ? 'badge-red' : 'badge-orange'}">${t.priority}</span>
+      const autopilotTasks = safeArray(lastScanData?.aiAutopilot || lastScanData?.autopilot?.tasks);
+      if (autopilotTasks.length > 0) {
+        autoCard.style.display = "block";
+        const autopilotResults = document.getElementById("autopilotResults");
+        if (autopilotResults) {
+          autopilotResults.innerHTML = `
+            <p style="margin-bottom:16px;">AI Autopilot parsed high-contrast optimization targets recursively:</p>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+              ${autopilotTasks.map(t => `
+                <div class="ai-box" style="border-top: 4px solid ${t?.priority === 'CRITICAL' ? 'var(--accent-danger)' : 'var(--accent-warning)'}; margin-top:0;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <strong>${escapeHtml(t?.task)}</strong>
+                    <span class="badge ${t?.priority === 'CRITICAL' ? 'badge-red' : 'badge-orange'}">${t?.priority}</span>
+                  </div>
+                  <p style="font-size:13px; color:var(--text-muted); margin:0;">Impact metric: +${t?.impact}% | Implementation: ${t?.effort}</p>
                 </div>
-                <p style="font-size:13px; color:var(--text-muted); margin:0;">Impact metric: +${t.impact}% | Implementation: ${t.effort}</p>
-              </div>
-            `).join('') : '<div class="ai-box" style="text-align:center;">No high priority items found. Optimization levels are currently maximum.</div>'}
-          </div>
-        `;
+              `).join('')}
+            </div>
+          `;
+        }
+      } else {
+        autoCard.style.display = "none";
       }
     }
   } catch(e) {
     hideLoading();
-  } finally {
-    if (autopilotBtn) autopilotBtn.disabled = false;
   }
 }
 
@@ -2002,15 +2122,13 @@ async function runAutopilot() {
 function saveLocalHistory(url, data) {
   try {
     let history = JSON.parse(localStorage.getItem('scanHistory') || '[]');
-    
-    // Fix log duplication issue: filter out duplicate previous logs with matching URLs
     history = history.filter(h => h.url.toLowerCase() !== url.toLowerCase());
 
     const record = {
       url: url,
-      score: data.overallAIVisibilityScore || data.score || 0,
-      seoScore: data.score || data.seoScore || 0,
-      aeoScore: data.aeoScore || 0,
+      score: data?.overallAIVisibilityScore || data?.score || 0,
+      seoScore: data?.score || data?.seoScore || 0,
+      aeoScore: data?.aeoScore || 0,
       timestamp: new Date().toISOString()
     };
     history.unshift(record);
@@ -2037,11 +2155,11 @@ function loadHistory() {
         ${history.map(h => `
           <div class="ai-box" style="display:flex; flex-direction:column; justify-content:space-between; margin-top:0;">
             <div>
-              <p><strong>Domain:</strong> ${escapeHtml(h.url)}</p>
-              <p>AI Score: <strong>${h.score}%</strong> | SEO: ${h.seoScore}% | AEO: ${h.aeoScore}%</p>
-              <small>Parsed Date: ${new Date(h.timestamp).toLocaleString()}</small>
+              <p><strong>Domain:</strong> ${escapeHtml(h?.url)}</p>
+              <p>AI Score: <strong>${h?.score ?? 'Data unavailable'}%</strong> | SEO: ${h?.seoScore ?? 'Data unavailable'}% | AEO: ${h?.aeoScore ?? 'Data unavailable'}%</p>
+              <small>Parsed Date: ${new Date(h?.timestamp).toLocaleString()}</small>
             </div>
-            <button onclick="retriggerAudit('${escapeHtml(h.url)}')" style="font-size:11px; padding:8px 14px; background:var(--accent-primary); margin-top:10px; width:100%;">Re-Audit</button>
+            <button onclick="retriggerAudit('${escapeHtml(h?.url)}')" style="font-size:11px; padding:8px 14px; background:var(--accent-primary); margin-top:10px; width:100%;">Re-Audit</button>
           </div>
         `).join('')}
       </div>

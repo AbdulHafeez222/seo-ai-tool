@@ -183,14 +183,15 @@ const fallbackRegistry = {
     return u.replace(/\s+/g, '');
   },
   isBlockedHTML: (html = "", status = 200) => {
-    if (!html || typeof html !== "string") return true;
+    if (html === undefined || html === null) return true;
+    const bodyStr = typeof html === "string" ? html : String(html);
 
-    const blockedStatuses = [401, 403, 429, 503];
+    const blockedStatuses = [202, 401, 403, 429, 503];
     if (blockedStatuses.includes(status)) {
       return true;
     }
 
-    const lowercaseHtml = html.toLowerCase();
+    const lowercaseHtml = bodyStr.toLowerCase();
     
     const strictBlockedPatterns = [
       "cf-browser-verification",
@@ -198,27 +199,22 @@ const fallbackRegistry = {
       "error code 1020",
       "verify you are human",
       "access denied",
-      "sucuri"
+      "sucuri",
+      "cloudflare",
+      "captcha",
+      "just a moment...",
+      "attention required",
+      "g-recaptcha",
+      "hcaptcha",
+      "challenge-form",
+      "turnstile",
+      "anti-bot",
+      "ray id",
+      "ddos protection"
     ];
 
     if (strictBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
       return true;
-    }
-
-    if (html.length < 5000) {
-      const shortBlockedPatterns = [
-        "security check",
-        "access denied",
-        "ddos protection",
-        "anti-bot",
-        "ray id",
-        "challenge-form",
-        "turnstile",
-        "captcha"
-      ];
-      if (shortBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
-        return true;
-      }
     }
 
     return false;
@@ -227,8 +223,8 @@ const fallbackRegistry = {
     const isBlocked = fallbackRegistry.isBlockedHTML(html, status);
     return {
       crawlBlocked: isBlocked,
-      reason: isBlocked ? "Request blocked by anti-bot detection or bad status code." : null,
-      crawlQuality: html.length > 5000 ? "High Quality" : "Low Content / Stub"
+      reason: isBlocked ? "Cloudflare or CAPTCHA protection detected." : null,
+      crawlQuality: isBlocked ? "BLOCKED" : (html.length > 5000 ? "High Quality" : "Low Content / Stub")
     };
   }
 };
@@ -319,7 +315,7 @@ export function classifyPage(html = "", status = 200) {
   const lowerHtml = html.toLowerCase();
   
   // Specific checks for blocked triggers
-  const blockedStatuses = [401, 403, 429, 503];
+  const blockedStatuses = [202, 401, 403, 429, 503];
   if (blockedStatuses.includes(status)) {
     return "BLOCKED_PAGE";
   }
@@ -327,7 +323,8 @@ export function classifyPage(html = "", status = 200) {
   const blockedPhrases = [
     "captcha", "cloudflare", "access denied", "verify you are human", "attention required",
     "cf-browser-verification", "__cf_chl_opt", "error code 1020", "ddos protection",
-    "anti-bot", "ray id", "challenge-form", "turnstile", "forbidden", "sucuri"
+    "anti-bot", "ray id", "challenge-form", "turnstile", "forbidden", "sucuri",
+    "just a moment...", "g-recaptcha", "hcaptcha"
   ];
   
   const containsBlockedPhrase = blockedPhrases.some(phrase => lowerHtml.includes(phrase));
@@ -427,7 +424,7 @@ export async function smartCrawl(url) {
   let type = classifyPage(html, status);
 
   // Fallback to Playwright if Axios gets blocked or JS execution is required
-  const isBlocked = type === "BLOCKED_PAGE" || [401, 403, 429].includes(status) || fallbackRegistry.isBlockedHTML(html, status);
+  const isBlocked = type === "BLOCKED_PAGE" || [202, 401, 403, 429].includes(status) || fallbackRegistry.isBlockedHTML(html, status);
 
   if (isBlocked || type === "JS_RENDER_REQUIRED") {
     console.log(`[CRAWL] Standard fetch blocked (Status: ${status}).`);
@@ -436,7 +433,7 @@ export async function smartCrawl(url) {
       const pwResult = await withRetry(() => fetchPlaywright(url), 1);
       if (pwResult && pwResult.html && pwResult.html.length >= 300) {
         let pwType = classifyPage(pwResult.html, pwResult.status);
-        if (pwType !== "BLOCKED_PAGE" && ![401, 403, 429].includes(pwResult.status)) {
+        if (pwType !== "BLOCKED_PAGE" && ![202, 401, 403, 429].includes(pwResult.status)) {
           html = pwResult.html;
           status = pwResult.status || 200;
           finalUrl = pwResult.finalUrl;
@@ -450,7 +447,7 @@ export async function smartCrawl(url) {
     }
   }
 
-  if (type !== "BLOCKED_PAGE" && ![401, 403, 429].includes(status)) {
+  if (type !== "BLOCKED_PAGE" && ![202, 401, 403, 429].includes(status)) {
     console.log(`[CRAWL] Analysis started`);
   } else {
     console.log(`[CRAWL] Fetch completed (status: ${status}, classification: ${type})`);
@@ -1178,6 +1175,9 @@ export function scanTrustSignals($, url) {
 }
 
 export function trackAIVisibilityTrend(url, currentScore, seoScore, aeoScore) {
+  if (currentScore === null || seoScore === null || aeoScore === null) {
+    return { labels: [], scores: [], seoScores: [], aeoScores: [], growthPercentage: 0 };
+  }
   const key = Buffer.from(url).toString('base64');
   if (!trendDB[key]) {
     trendDB[key] = [
@@ -1314,7 +1314,9 @@ export function aiReasoningEngine(data, seoScore, aeoScore, citationProbability)
   const missingEntities = safeArray(data?.missingEntities || data?.semanticGaps || []);
 
   let seoReasoning = "Your page features solid structural fundamentals.";
-  if (seoScore < 30) {
+  if (seoScore === null) {
+    seoReasoning = "Crawl blocked. Cannot calculate structural profiles.";
+  } else if (seoScore < 30) {
     seoReasoning = "Critical structural elements are missing or badly configured (missing meta tags, title length issues, or non-HTTPS URL).";
   } else if (seoScore < 70) {
     seoReasoning = "Strong structural base, but could be enhanced by fixing image alt tags, ensuring a canonical link, or speeding up loading performance.";
@@ -1323,14 +1325,18 @@ export function aiReasoningEngine(data, seoScore, aeoScore, citationProbability)
   }
 
   let aeoReasoning = "Ready to be referenced by core generative model architectures.";
-  if (aeoScore < 30) {
+  if (aeoScore === null) {
+    aeoReasoning = "Crawl blocked. Cannot calculate generative AI semantic features.";
+  } else if (aeoScore < 30) {
     aeoReasoning = "The document layout lacks LLM-friendly structural hooks like direct questions, list summaries, or JSON-LD FAQ/HowTo schemas.";
   } else if (aeoScore < 70) {
     aeoReasoning = "LLMs can parse the structure, but adding a high-contrast 'Answer Box' section and expanding Q&A schema blocks would significantly improve visibility.";
   }
 
   let citationLikelihood = "Moderate chance of selection as a reference source.";
-  if (citationProbability >= 80) {
+  if (citationProbability === null) {
+    citationLikelihood = "No active visibility calculations available due to index limitations.";
+  } else if (citationProbability >= 80) {
     citationLikelihood = "Highly Likely. Structured schema, rich topical density, and verifiable trust signals position this content for top-tier indexing.";
   } else if (citationProbability < 50) {
     citationLikelihood = "Low citation potential. High-performance models prefer pages containing marked schemas, clear list hierarchies, and explicit author attribution.";
@@ -1363,6 +1369,7 @@ export function fallbackSafePayload(url, err = null) {
     fallbackMode: true,
     analysisConfidence: 20,
     confidenceWarning: "Low confidence scan due to crawl limitations",
+    classification: "FAILED",
     
     analysis: {
       seo: {
@@ -1496,37 +1503,48 @@ export async function analyzeSingleUrl(url) {
     }
 
     // Intercept blocked crawler pages immediately
-    if (crawlResult.type === "BLOCKED_PAGE") {
-      let blockedReason = "Access Denied / Bot Protection Triggered";
+    const isBlocked = crawlResult.type === "BLOCKED_PAGE" || [202, 401, 403, 429, 503].includes(crawlResult.status) || fallbackRegistry.isBlockedHTML(html, crawlResult.status);
+
+    if (isBlocked) {
+      let blockedReason = "Cloudflare or CAPTCHA protection detected.";
       if (crawlResult.status === 403) {
-        blockedReason = "403 Forbidden detected";
+        blockedReason = "403 Forbidden detected. Cloudflare or CAPTCHA protection detected.";
       } else if (crawlResult.status === 401) {
-        blockedReason = "401 Unauthorized detected";
+        blockedReason = "401 Unauthorized detected. Cloudflare or CAPTCHA protection detected.";
       } else if (crawlResult.status === 429) {
-        blockedReason = "429 Too Many Requests rate limiting";
-      } else if (crawlResult.html && crawlResult.html.toLowerCase().includes("cloudflare")) {
-        blockedReason = "Cloudflare security challenge detected";
-      } else if (crawlResult.html && crawlResult.html.toLowerCase().includes("captcha")) {
-        blockedReason = "CAPTCHA verification block";
+        blockedReason = "429 Too Many Requests rate limiting. Cloudflare or CAPTCHA protection detected.";
+      } else if (crawlResult.status === 202) {
+        blockedReason = "202 Accepted pending challenge. Cloudflare or CAPTCHA protection detected.";
       }
 
-      console.error("[FALLBACK TRIGGERED] blocked page status. Reason:", blockedReason);
+      console.error("[CRAWL BLOCK VERIFIED] Reason:", blockedReason);
 
       return {
-        status: "blocked_page",
+        status: "success",
         success: false,
         crawlSuccess: false,
-        pageType: "BLOCKED_PAGE",
-        reason: blockedReason,
+        analysisStatus: "BLOCKED",
+        classification: "BLOCKED",
+        reason: "Cloudflare or CAPTCHA protection detected.",
         blockedReason: blockedReason,
-        recommendation: "Use Playwright fallback or configure proxy settings to bypass anti-bot protection.",
+        recommendation: "Target website is protected by Cloudflare or CAPTCHA.",
         crawlMethod: crawlResult.crawlMethod || "STANDARD_GET",
         httpStatus: crawlResult.status || 403,
         contentLength: crawlResult.contentLength || 0,
         resolvedUrl: crawlResult.finalUrl || normalizedUrl,
-        fallbackMode: true,
-        analysisConfidence: 20,
-        confidenceWarning: "Low confidence scan due to crawl limitations",
+        fallbackMode: false,
+        analysisConfidence: 0,
+        confidenceWarning: "Analysis Limited: Target website is protected by Cloudflare or CAPTCHA.",
+        seoScore: null,
+        aeoScore: null,
+        eeatScore: null,
+        citationScore: null,
+        currentAIVisibility: null,
+        potentialAIVisibility: null,
+        score: null,
+        citationProbability: null,
+        overallAIVisibilityScore: null,
+        pageType: "BLOCKED_PAGE",
         meta: {
           url: crawlResult.finalUrl || normalizedUrl,
           timestamp: new Date().toISOString()
@@ -1818,8 +1836,19 @@ export async function analyzeSingleUrl(url) {
       entityData = { brands: [], locations: [], services: [], people: [], organizations: [], products: [], entities: [], totalEntities: 0 };
     }
 
-    const crawlQuality = crawlResult.type === "VALID_CONTENT" ? "High Quality" : (crawlResult.type === "THIN_CONTENT" ? "Low Content / Stub" : "JavaScript Render Active");
-    const crawlBlocked = crawlResult.type === "BLOCKED_PAGE";
+    // Crawler Quality & Classification Configuration
+    let crawlQuality = "High Quality";
+    let classification = "SUCCESS";
+    if (html.length < 50) {
+      classification = "FAILED";
+      crawlQuality = "Crawl Failed";
+    } else if (crawlResult.type === "THIN_CONTENT" || wordCount < 150) {
+      classification = "PARTIAL";
+      crawlQuality = "Low Content / Stub";
+    } else if (crawlResult.type === "JS_RENDER_REQUIRED") {
+      classification = "PARTIAL";
+      crawlQuality = "JavaScript Render Active";
+    }
 
     // --------------------------------==================--------------------------------
     // 1. EXTRACT / CALCULATE FOUNDATIONAL METRICS FIRST
@@ -1836,8 +1865,8 @@ export async function analyzeSingleUrl(url) {
     }
     readabilityScore = safeNumber(readabilityScore, 50);
 
-    robotsExists = safeBoolean(html.includes("robots.txt"));
-    sitemapExists = safeBoolean(html.includes("sitemap.xml"));
+    robotsExists = html.includes("robots.txt") || false;
+    sitemapExists = html.includes("sitemap.xml") || false;
     canonicalExists = hasCanonical;
     faqSchemaExists = hasFAQ;
     organizationSchemaExists = safeBoolean(schemas?.Organization?.present);
@@ -1962,7 +1991,7 @@ export async function analyzeSingleUrl(url) {
     let analysisConfidence = clamp(confidenceFactors, 5, 100);
     isFallback = false;
 
-    if (crawlResult.status !== 200 || crawlResult.type === "BLOCKED_PAGE" || wordCount < 10) {
+    if (crawlResult.status !== 200 || wordCount < 10) {
       analysisConfidence = clamp(Math.round(analysisConfidence * 0.3), 5, 39);
       isFallback = true;
     }
@@ -2183,6 +2212,8 @@ export async function analyzeSingleUrl(url) {
       fallbackMode: isFallback,
       analysisConfidence,
       confidenceWarning,
+      analysisStatus: "SUCCESS",
+      classification: classification,
       
       // Crawl Diagnostics
       crawlMethod: crawlResult.crawlMethod || "STANDARD_GET",
@@ -2551,8 +2582,8 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
 
   try {
     const data = await analyzeSingleUrl(normalized);
-    if (data.status === "blocked_page") {
-      return res.status(403).json(data);
+    if (data.analysisStatus === "BLOCKED" || data.status === "blocked_page") {
+      return res.json(data);
     }
     if (data.status === "error") {
       return res.status(400).json(data);
@@ -2628,6 +2659,19 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
       });
     }
 
+    if (site1.analysisStatus === "BLOCKED" || site2.analysisStatus === "BLOCKED") {
+      return res.json({
+        status: "blocked_page",
+        success: false,
+        analysisStatus: "BLOCKED",
+        reason: "Comparison unavailable: One or both analysis engines encountered a blocked page.",
+        sites: [
+          { brand: site1.analysisStatus === "BLOCKED" ? "Blocked Site" : (site1.title || "Your Site"), url: normalizedUrl, pageType: site1.pageType || "VALID_CONTENT" },
+          { brand: site2.analysisStatus === "BLOCKED" ? "Blocked Site" : (site2.title || "Competitor Site"), url: normalizedComp, pageType: site2.pageType || "VALID_CONTENT" }
+        ]
+      });
+    }
+
     // DISALLOW COMPARISON ON FALLBACKS OR LOW CONFIDENCE PARAMETERS
     if (site1.fallbackMode || site2.fallbackMode || site1.analysisConfidence < 40 || site2.analysisConfidence < 40) {
       return res.status(200).json({
@@ -2638,18 +2682,6 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
         advantages: null,
         competitorAdvantage: null,
         winnerReason: "Crawl limitations prevent accurate data comparison."
-      });
-    }
-
-    if (site1.status === "blocked_page" || site2.status === "blocked_page") {
-      return res.status(403).json({
-        status: "blocked_page",
-        success: false,
-        reason: "Comparison unavailable: One or both analysis engines encountered a blocked page.",
-        sites: [
-          { brand: site1.status === "blocked_page" ? "Blocked Site" : (site1.title || "Your Site"), url: normalizedUrl, pageType: site1.pageType || "VALID_CONTENT" },
-          { brand: site2.status === "blocked_page" ? "Blocked Site" : (site2.title || "Competitor Site"), url: normalizedComp, pageType: site2.pageType || "VALID_CONTENT" }
-        ]
       });
     }
 
@@ -2739,10 +2771,11 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
       throw err;
     }
 
-    if (userData.status === "blocked_page" || compData.status === "blocked_page") {
-      return res.status(403).json({
-        status: "blocked_page",
+    if (userData.analysisStatus === "BLOCKED" || compData.analysisStatus === "BLOCKED" || userData.status === "blocked_page" || compData.status === "blocked_page") {
+      return res.status(200).json({
+        status: "success",
         success: false,
+        analysisStatus: "BLOCKED",
         error: "One or both pages failed validation due to bot blocking parameters."
       });
     }
@@ -2800,8 +2833,15 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
       throw err;
     }
 
-    if (data.status === "blocked_page") {
-      return res.status(403).json(data);
+    if (data.analysisStatus === "BLOCKED" || data.status === "blocked_page") {
+      return res.json({
+        status: "success",
+        analysisStatus: "BLOCKED",
+        currentScore: null,
+        potentialScore: null,
+        roadmap: [],
+        estimatedTime: "0 hours"
+      });
     }
 
     if (data.status === "error" || data?.stopProcessing) {

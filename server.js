@@ -12,12 +12,12 @@ const PORT = process.env.PORT || 10000;
 // ========== SECTION 1: IN-MEMORY CACHE & SAAS DB PARAMETERS ==============
 // =========================================================================
 const scanHistory = [];
-const trendDB = {}; // In-memory database for tracking historical scores
-const activeScans = new Map(); // Global thread-safe scanner request lock Map
+const trendDB = {}; // Physical historical score track
+const activeScans = new Map(); // Concurrency thread controller
 
 // SaaS Cache to prevent duplicate heavy crawling/scanning within 10 minutes
 const scanCache = new Map();
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache validation TTL
+const CACHE_TTL_MS = 10 * 60 * 1000;
 
 // SaaS User DB simulation (Stripe-ready schema mapping)
 const saasUsers = {
@@ -47,12 +47,12 @@ const PLAN_LIMITS = {
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from root and public directories
+// Serve static files
 app.use(express.static("."));
 app.use(express.static("public"));
 
 // =========================================================================
-// ========== SECTION 1.5: STABILITY HARDENING & REGISTRY =================
+// ========== SECTION 1.5: STABILITY HARDENING & SANITIZERS ===============
 // =========================================================================
 
 export const safeText = (input, fallback = "") => {
@@ -65,13 +65,9 @@ export const safeNumber = (v, fallback = 0) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
-export const safeBoolean = (v) => {
-  return Boolean(v);
-};
+export const safeBoolean = (v) => Boolean(v);
 
-export const safeArray = (v) => {
-  return Array.isArray(v) ? v : [];
-};
+export const safeArray = (v) => (Array.isArray(v) ? v : []);
 
 export const safeObject = (v, fallback = {}) => {
   return (v && typeof v === "object" && !Array.isArray(v)) ? v : fallback;
@@ -86,187 +82,106 @@ export const clamp = (num, min = 0, max = 100) => {
   return Math.min(max, Math.max(min, isNaN(val) ? 0 : val));
 };
 
-const fallbackRegistry = {
-  cleanDomainBrand: (url) => {
-    try {
-      const u = safeText(url);
-      if (!u) return "Brand Authority";
-      const parsed = new URL(u.match(/^https?:\/\//i) ? u : 'https://' + u);
-      const host = parsed.hostname.replace("www.", "");
-      const brand = host.split('.')[0] || 'Brand Authority';
-      return brand.charAt(0).toUpperCase() + brand.slice(1);
-    } catch {
-      return "Brand Authority";
-    }
-  },
-  cleanText: (input) => {
-    let text = safeText(input);
-    const badPatterns = [
-      /I\s*n\/a\s*L\s*0\s*LD\s*0\s*I\s*n\/a\s*whois\s*source/gi,
-      /Summary\s*report\s*Diagnosis\s*Density/gi,
-      /LD\s*0\s*I\s*n\/a/gi,
-      /In\/a/gi,
-      /0LD0/gi,
-      /whoissource/gi,
-      /Density00/gi,
-      /Diagnosis/gi,
-      /Summary report/gi,
-      /L0LD/gi
-    ];
-    for (const pattern of badPatterns) {
-      text = text.replace(pattern, "");
-    }
-    return text.replace(/\s+/g, " ").trim();
-  },
-  safeString: (input) => {
-    return fallbackRegistry.cleanText(
-      safeText(input)
-        .replace(/<[^>]*>/g, "")
-        .replace(/undefined|null/g, "")
-    );
-  },
-  safeArray: safeArray,
-  safeNumber: safeNumber,
-  safe: (fn, fallback = null) => {
-    try {
-      return typeof fn === "function" ? fn() : fallback;
-    } catch {
-      return fallback;
-    }
-  },
-  safeArraySlice: safeArraySlice,
-  clamp: clamp,
-  getKeywordDifficulty: (keyword) => {
-    const len = fallbackRegistry.safeString(keyword).length;
-    if (len < 10) return 10;
-    if (len < 18) return 30;
-    return 60;
-  },
-  getKeywordOpportunity: (keyword, hasFAQ, hasSchema) => {
-    let score = 10;
-    if (hasFAQ) score += 20;
-    if (hasSchema) score += 20;
-    if (fallbackRegistry.safeString(keyword).split(' ').length > 2) score += 20;
-    return fallbackRegistry.clamp(score);
-  },
-  tokenizeKeywords: (text = "") => {
-    const clean = String(text)
-      .toLowerCase()
-      .replace(/[^\w\s]/g, " ")
-      .split(/\s+/)
-      .filter(word => word && word.length > 3);
-      
-    const stopWords = ['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'under', 'from', 'with', 'your', 'this', 'that', 'were', 'been', 'have', 'more', 'some', 'them', 'then', 'also', 'here', 'homepage', 'navigation', 'contact', 'search'];
-    const freq = {};
-    
-    clean.forEach(tok => {
-      if (!stopWords.includes(tok)) {
-        freq[tok] = (freq[tok] || 0) + 1;
-      }
-    });
+export const cleanText = (input) => {
+  let text = safeText(input);
+  const badPatterns = [
+    /I\s*n\/a\s*L\s*0\s*LD\s*0\s*I\s*n\/a\s*whois\s*source/gi,
+    /Summary\s*report\s*Diagnosis\s*Density/gi,
+    /LD\s*0\s*I\s*n\/a/gi,
+    /In\/a/gi,
+    /0LD0/gi,
+    /whoissource/gi,
+    /Density00/gi,
+    /Diagnosis/gi,
+    /Summary report/gi,
+    /L0LD/gi
+  ];
+  for (const pattern of badPatterns) {
+    text = text.replace(pattern, "");
+  }
+  return text.replace(/\s+/g, " ").trim();
+};
 
-    const sorted = Object.keys(freq).sort((a, b) => freq[b] - freq[a]);
-    const finalKeywords = sorted.length > 0 ? sorted.slice(0, 15) : ["optimized", "framework", "intelligence", "analytics"];
-    return [...new Set(finalKeywords)];
-  },
-  safeRun: (fn, fallback = null) => {
-    try {
-      return fn();
-    } catch (e) {
-      return fallback;
-    }
-  },
-  normalizeUrl: (url) => {
-    let u = fallbackRegistry.safeString(url).trim().toLowerCase();
-    u = u.replace(/^(https?:\/\/)?(www\.)?/, "");
-    u = u.replace(/\/$/, "");
-    return u.replace(/\s+/g, '');
-  },
-  isBlockedHTML: (html = "", status = 200) => {
-    if (html === undefined || html === null) return true;
-    const bodyStr = typeof html === "string" ? html : String(html);
-
-    const blockedStatuses = [202, 401, 403, 429, 503];
-    if (blockedStatuses.includes(status)) {
-      return true;
-    }
-
-    const lowercaseHtml = bodyStr.toLowerCase();
-    const strictBlockedPatterns = [
-      "cf-browser-verification",
-      "__cf_chl_opt",
-      "error code 1020",
-      "verify you are human",
-      "access denied",
-      "sucuri",
-      "cloudflare",
-      "captcha",
-      "just a moment...",
-      "attention required",
-      "g-recaptcha",
-      "hcaptcha",
-      "challenge-form",
-      "turnstile",
-      "anti-bot",
-      "ray id",
-      "ddos protection"
-    ];
-
-    if (strictBlockedPatterns.some(p => lowercaseHtml.includes(p))) {
-      return true;
-    }
-
-    return false;
-  },
-  validateHtmlContent: (html = "", status = 200) => {
-    const isBlocked = fallbackRegistry.isBlockedHTML(html, status);
-    return {
-      crawlBlocked: isBlocked,
-      reason: isBlocked ? "Cloudflare or CAPTCHA protection detected." : null,
-      crawlQuality: isBlocked ? "BLOCKED" : (html.length > 5000 ? "High Quality" : "Low Content / Stub")
-    };
+export const cleanDomainBrand = (url) => {
+  try {
+    const u = safeText(url);
+    if (!u) return "Brand Authority";
+    const parsed = new URL(u.match(/^https?:\/\//i) ? u : 'https://' + u);
+    const host = parsed.hostname.replace("www.", "");
+    const brand = host.split('.')[0] || 'Brand Authority';
+    return brand.charAt(0).toUpperCase() + brand.slice(1);
+  } catch {
+    return "Brand Authority";
   }
 };
 
-// Expose polyfills globally
-globalThis.cleanDomainBrand = globalThis.cleanDomainBrand || fallbackRegistry.cleanDomainBrand;
-globalThis.cleanText = globalThis.cleanText || fallbackRegistry.cleanText;
-globalThis.safeString = globalThis.safeString || fallbackRegistry.safeString;
-globalThis.safeArray = globalThis.safeArray || fallbackRegistry.safeArray;
-globalThis.safeNumber = globalThis.safeNumber || fallbackRegistry.safeNumber;
-globalThis.safe = globalThis.safe || fallbackRegistry.safe;
-globalThis.safeArraySlice = globalThis.safeArraySlice || fallbackRegistry.safeArraySlice;
-globalThis.clamp = globalThis.clamp || fallbackRegistry.clamp;
-globalThis.getKeywordDifficulty = globalThis.getKeywordDifficulty || fallbackRegistry.getKeywordDifficulty;
-globalThis.getKeywordOpportunity = globalThis.getKeywordOpportunity || fallbackRegistry.getKeywordOpportunity;
-globalThis.tokenizeKeywords = globalThis.tokenizeKeywords || fallbackRegistry.tokenizeKeywords;
-globalThis.safeRun = globalThis.safeRun || fallbackRegistry.safeRun;
-globalThis.normalizeUrl = globalThis.normalizeUrl || fallbackRegistry.normalizeUrl;
-globalThis.isBlockedHTML = globalThis.isBlockedHTML || fallbackRegistry.isBlockedHTML;
-globalThis.validateHtmlContent = globalThis.validateHtmlContent || fallbackRegistry.validateHtmlContent;
+export const tokenizeKeywords = (text = "") => {
+  const clean = String(text)
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter(word => word && word.length > 3);
+      
+  const stopWords = ['about', 'would', 'their', 'there', 'other', 'which', 'these', 'first', 'under', 'from', 'with', 'your', 'this', 'that', 'were', 'been', 'have', 'more', 'some', 'them', 'then', 'also', 'here', 'homepage', 'navigation', 'contact', 'search'];
+  const freq = {};
+  
+  clean.forEach(tok => {
+    if (!stopWords.includes(tok)) {
+      freq[tok] = (freq[tok] || 0) + 1;
+    }
+  });
 
-// Explicit ES6 module exports
-export const cleanDomainBrand = globalThis.cleanDomainBrand;
-export const cleanText = globalThis.cleanText;
-export const safeString = globalThis.safeString;
-export const safe = globalThis.safe;
-export const getKeywordDifficulty = globalThis.getKeywordDifficulty;
-export const getKeywordOpportunity = globalThis.getKeywordOpportunity;
-export const tokenizeKeywords = globalThis.tokenizeKeywords;
-export const safeRun = globalThis.safeRun;
-export const normalizeUrl = globalThis.normalizeUrl;
-export const isBlockedHTML = globalThis.isBlockedHTML;
-export const validateHtmlContent = globalThis.validateHtmlContent;
+  const sorted = Object.keys(freq).sort((a, b) => freq[b] - freq[a]);
+  const finalKeywords = sorted.length > 0 ? sorted.slice(0, 15) : ["optimized", "framework", "intelligence", "analytics"];
+  return [...new Set(finalKeywords)];
+};
+
+export const normalizeUrl = (url) => {
+  let u = cleanText(safeText(url))
+    .replace(/^(https?:\/\/)?(www\.)?/, "")
+    .replace(/\/$/, "");
+  return u.replace(/\s+/g, '').toLowerCase();
+};
+
+export const isBlockedHTML = (html = "", status = 200) => {
+  if (html === undefined || html === null) return true;
+  const bodyStr = typeof html === "string" ? html : String(html);
+
+  const blockedStatuses = [202, 401, 403, 429, 503];
+  if (blockedStatuses.includes(status)) return true;
+
+  const lowercaseHtml = bodyStr.toLowerCase();
+  const strictBlockedPatterns = [
+    "cf-browser-verification",
+    "__cf_chl_opt",
+    "error code 1020",
+    "verify you are human",
+    "access denied",
+    "sucuri",
+    "cloudflare",
+    "captcha",
+    "just a moment...",
+    "attention required",
+    "g-recaptcha",
+    "hcaptcha",
+    "challenge-form",
+    "turnstile",
+    "anti-bot",
+    "ray id",
+    "ddos protection"
+  ];
+
+  return strictBlockedPatterns.some(p => lowercaseHtml.includes(p));
+};
 
 // =========================================================================
-// ========== SECTION 2: GLOBAL HIGH-PERFORMANCE SCRAPING ENGINE ===========
+// ========== SECTION 2: HIGH-PERFORMANCE BRIDGED CRAWLER ==================
 // =========================================================================
 
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 ];
 
 let globalBrowser = null;
@@ -280,78 +195,21 @@ async function getBrowserInstance() {
     });
     return globalBrowser;
   } catch (err) {
+    console.error("[CRAWL] Playwright framework binding unavailable:", err.message);
     return null;
   }
 }
 
-process.on("exit", async () => {
-  if (globalBrowser) {
-    try {
-      await globalBrowser.close();
-    } catch (e) {}
-  }
-});
-
-export async function withRetry(fn, retries = 2, delay = 1000) {
-  for (let i = 0; i <= retries; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      if (i === retries) throw err;
-      await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 2;
-    }
-  }
-}
-
-export function classifyPage(html = "", status = 200) {
-  if (!html || typeof html !== "string") return "BLOCKED_PAGE";
-  
-  const lowerHtml = html.toLowerCase();
-  const blockedStatuses = [202, 401, 403, 429, 503];
-  if (blockedStatuses.includes(status)) {
-    return "BLOCKED_PAGE";
-  }
-
-  const blockedPhrases = [
-    "captcha", "cloudflare", "access denied", "verify you are human", "attention required",
-    "cf-browser-verification", "__cf_chl_opt", "error code 1020", "ddos protection",
-    "anti-bot", "ray id", "challenge-form", "turnstile", "forbidden", "sucuri",
-    "just a moment...", "g-recaptcha", "hcaptcha"
-  ];
-  
-  if (blockedPhrases.some(phrase => lowerHtml.includes(phrase))) {
-    return "BLOCKED_PAGE";
-  }
-
-  if (html.length < 2000) {
-    if (lowerHtml.includes("javascript is required") || lowerHtml.includes("enable javascript") || lowerHtml.includes("<div id=\"app\"") || lowerHtml.includes("<div id=\"root\"")) {
-      return "JS_RENDER_REQUIRED";
-    }
-    return "THIN_CONTENT";
-  }
-
-  return "VALID_CONTENT";
-}
-
-async function fetchAxios(url, options = {}) {
+async function fetchAxios(url) {
   const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-  const headers = {
-    "User-Agent": ua,
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
-    "Referer": "https://www.google.com/",
-    "Upgrade-Insecure-Requests": "1",
-    "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
-    ...options.headers
-  };
-
   const response = await axios.get(url, {
-    headers,
-    timeout: 20000,
+    headers: {
+      "User-Agent": ua,
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Connection": "keep-alive"
+    },
+    timeout: 15000,
     maxRedirects: 5,
     validateStatus: () => true,
     httpsAgent: new https.Agent({ rejectUnauthorized: false })
@@ -366,24 +224,21 @@ async function fetchAxios(url, options = {}) {
 }
 
 async function fetchPlaywright(url) {
-  let browser = await getBrowserInstance();
+  const browser = await getBrowserInstance();
   if (!browser) return null;
+  const context = await browser.newContext({
+    userAgent: USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
+  });
+  const page = await context.newPage();
   try {
-    const context = await browser.newContext({
-      userAgent: USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
-    });
-    const page = await context.newPage();
-    try {
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-      const content = await page.content();
-      const finalUrl = page.url() || url;
-      return { html: content, status: 200, finalUrl, headers: { "content-type": "text/html" } };
-    } finally {
-      await page.close();
-      await context.close();
-    }
-  } catch (err) {
-    return null;
+    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
+    const content = await page.content();
+    const status = response ? response.status() : 200;
+    const finalUrl = page.url() || url;
+    return { html: content, status, finalUrl };
+  } finally {
+    await page.close();
+    await context.close();
   }
 }
 
@@ -391,200 +246,166 @@ export async function smartCrawl(url) {
   let result = null;
   let crawlMethod = "STANDARD_GET";
   let status = 500;
-  console.log(`[CRAWL] Starting scan: ${url}`);
+  
   try {
     result = await withRetry(() => fetchAxios(url), 1);
     status = result?.status || 500;
   } catch (err) {
-    console.error(`[CRAWL] Standard Axios fetch threw error: ${err.message}`);
+    console.error(`[CRAWL] Axios direct pull failed on target: ${url}`, err.message);
   }
 
   let html = result?.html || "";
   let finalUrl = result?.finalUrl || url;
-  let type = classifyPage(html, status);
+  
+  let state = "SUCCESS";
+  if (!html || html.length < 200) {
+    state = "FAILED";
+  } else if (isBlockedHTML(html, status)) {
+    state = "BLOCKED";
+  } else if (html.length < 1500) {
+    state = "INCOMPLETE_CRAWL";
+  }
 
-  const isBlocked = type === "BLOCKED_PAGE" || [202, 401, 403, 429].includes(status) || fallbackRegistry.isBlockedHTML(html, status);
-
-  if (isBlocked || type === "JS_RENDER_REQUIRED") {
-    console.log(`[CRAWL] Standard fetch blocked or dynamic (Status: ${status}). Switched to Playwright...`);
+  if (state === "BLOCKED" || state === "INCOMPLETE_CRAWL" || html.includes("javascript is required") || html.includes("enable javascript")) {
+    console.log(`[CRAWL] Standard execution blocked or incomplete. Upgrading protocol to Headless Browser...`);
     try {
-      const pwResult = await withRetry(() => fetchPlaywright(url), 1);
+      const pwResult = await fetchPlaywright(url);
       if (pwResult && pwResult.html && pwResult.html.length >= 300) {
-        let pwType = classifyPage(pwResult.html, pwResult.status);
-        if (pwType !== "BLOCKED_PAGE" && ![202, 401, 403, 429].includes(pwResult.status)) {
+        const pwBlocked = isBlockedHTML(pwResult.html, pwResult.status);
+        if (!pwBlocked) {
           html = pwResult.html;
-          status = pwResult.status || 200;
+          status = pwResult.status;
           finalUrl = pwResult.finalUrl;
-          type = pwType;
+          state = pwResult.html.length < 1500 ? "INCOMPLETE_CRAWL" : "SUCCESS";
           crawlMethod = "PLAYWRIGHT_RENDERED";
-          console.log(`[CRAWL] Playwright success`);
+        } else {
+          state = "BLOCKED";
         }
       }
     } catch (pwErr) {
-      console.error("[CRAWL] Playwright fallback failed:", pwErr.message);
+      console.error("[CRAWL] Headless fallback failed:", pwErr.message);
     }
   }
 
-  return { 
-    html, 
-    finalUrl, 
-    type, 
-    status, 
-    crawlMethod, 
-    contentLength: html.length,
-    headers: result?.headers || {}
+  return {
+    html,
+    finalUrl,
+    state,
+    status,
+    crawlMethod,
+    contentLength: html.length
   };
 }
 
-export function regexFallbackParser(html, url) {
-  const result = {
-    title: "",
-    metaDescription: "",
-    h1: "",
-    h2s: [],
-    h3s: []
-  };
-
-  try {
-    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    if (titleMatch) result.title = titleMatch[1].trim();
-
-    const descMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([\s\S]*?)["']/i) || 
-                      html.match(/<meta\s+content=["']([\s\S]*?)["']\s+name=["']description["']/i);
-    if (descMatch) result.metaDescription = descMatch[1].trim();
-
-    const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-    if (h1Match) result.h1 = h1Match[1].trim();
-
-    const h2Matches = [...html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
-    result.h2s = h2Matches.map(m => m[1].replace(/<[^>]*>/g, "").trim()).filter(Boolean);
-
-    const h3Matches = [...html.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/gi)];
-    result.h3s = h3Matches.map(m => m[1].replace(/<[^>]*>/g, "").trim()).filter(Boolean);
-  } catch (e) {}
-
-  return result;
+export async function withRetry(fn, retries = 2, delay = 1000) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i === retries) throw err;
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2;
+    }
+  }
 }
 
 // =========================================================================
-// ========== SECTION 3: SEO, E-E-A-T & STRUCTURAL AUDIT ENGINES ===========
+// ========== SECTION 3: DETERMINISTIC STRUCTURAL EXTRACTORS =================
 // =========================================================================
 
 export function detectAllSchemas($, html) {
   const schemas = {
-    FAQPage: { present: false, count: 0, data: [], recommended: false },
-    HowTo: { present: false, count: 0, data: [], recommended: false },
-    Article: { present: false, count: 0, data: [], recommended: true },
-    Organization: { present: false, count: 0, data: [], recommended: true },
-    LocalBusiness: { present: false, count: 0, data: [], recommended: false },
-    BreadcrumbList: { present: false, count: 0, data: [], recommended: false },
-    WebSite: { present: false, count: 0, data: [], recommended: true },
-    Product: { present: false, count: 0, data: [], recommended: false },
-    Person: { present: false, count: 0, data: [], recommended: false }
+    FAQPage: { present: false, data: [] },
+    HowTo: { present: false, data: [] },
+    Article: { present: false, data: [] },
+    Organization: { present: false, data: [] },
+    LocalBusiness: { present: false, data: [] },
+    BreadcrumbList: { present: false, data: [] },
+    WebSite: { present: false, data: [] },
+    Product: { present: false, data: [] },
+    Person: { present: false, data: [] }
   };
 
   try {
-    $('script[type="application/ld+json"]').each((i, el) => {
+    $('script[type="application/ld+json"]').each((_, el) => {
       try {
         const raw = $(el).html();
         if (!raw) return;
         const json = JSON.parse(raw);
         const items = Array.isArray(json) ? json : [json];
-        const processItem = (item) => {
+        const parseItem = (item) => {
           if (!item) return;
           if (item['@graph'] && Array.isArray(item['@graph'])) {
-            item['@graph'].forEach(processItem);
+            item['@graph'].forEach(parseItem);
             return;
           }
-          if (item['@type']) {
-            const types = Array.isArray(item['@type']) ? item['@type'] : [item['@type']];
-            const uniqueTypesInBlock = [...new Set(types)];
-            uniqueTypesInBlock.forEach(type => {
-              if (schemas[type]) {
-                schemas[type].present = true;
-                if (!schemas[type].data.some(existing => JSON.stringify(existing) === JSON.stringify(item))) {
-                  schemas[type].count = 1;
-                  schemas[type].data.push(item);
-                }
-              }
-            });
+          const type = String(item['@type'] || '');
+          if (schemas[type]) {
+            schemas[type].present = true;
+            schemas[type].data.push(item);
           }
         };
-        items.forEach(processItem);
+        items.forEach(parseItem);
       } catch (e) {}
     });
-
-    const bodyText = $('body').text().toLowerCase();
-    if (!schemas.LocalBusiness.present && (bodyText.includes('service') || bodyText.includes('contact'))) {
-      schemas.LocalBusiness.recommended = true;
-    }
-    if (!schemas.HowTo.present && (bodyText.includes('step') || bodyText.includes('how to'))) {
-      schemas.HowTo.recommended = true;
-    }
-  } catch (e) {}
+  } catch (err) {}
 
   return schemas;
 }
 
-export function getBrandNameEnhanced(url, $, title, schemas) {
-  let brand = "";
-  const genericServiceKeywords = [
-    "seo", "search engine optimization", "web design", "digital marketing", "web development", 
-    "content writing", "copywriting", "social media marketing", "ecommerce", "shopify", 
-    "branding", "analytics", "enterprise software", "ai integration", "consulting", 
-    "software development", "product strategy", "ui/ux design", "cloud hosting", "cybersecurity",
-    "expert digital systems", "home", "homepage", "services", "contact", "about", "about us", "privacy policy"
-  ];
-
-  const isGeneric = (name) => {
-    if (!name) return true;
-    const lower = name.toLowerCase().trim();
-    if (lower.length <= 1 || lower.length > 60) return true;
-    return genericServiceKeywords.some(kw => lower === kw || lower.includes("expert digital systems") || lower === "brand authority" || lower === "unknown");
+export function extractStructuredData($, html, url) {
+  const meta = {
+    title: cleanText($("title").text() || $('meta[property="og:title"]').attr("content") || ""),
+    description: cleanText($('meta[name="description"]').attr("content") || $('meta[property="og:description"]').attr("content") || ""),
+    canonical: safeText($('link[rel="canonical"]').attr("href")),
+    robots: safeText($('meta[name="robots"]').attr("content") || "index, follow"),
+    h1: cleanText($("h1").first().text()),
+    h2s: [...new Set($("h2").map((_, el) => cleanText($(el).text())).get().filter(Boolean))],
+    h3s: [...new Set($("h3").map((_, el) => cleanText($(el).text())).get().filter(Boolean))],
+    bodyText: cleanText($("p, li, h2, h3, h4, td, span, article").map((_, el) => $(el).text()).get().join(" ")),
+    images: [],
+    favicon: safeText($('link[rel="icon"], link[rel="shortcut icon"]').attr("href")),
+    ogTitle: safeText($('meta[property="og:title"]').attr("content")),
+    ogDescription: safeText($('meta[property="og:description"]').attr("content")),
+    ogImage: safeText($('meta[property="og:image"]').attr("content")),
+    hasLastModified: false,
+    lastModified: null,
+    hasFacebook: false,
+    hasLinkedIn: false,
+    hasYouTube: false,
+    hasTwitter: false,
+    email: null,
+    phone: null
   };
 
-  if (schemas?.Organization?.present && schemas?.Organization?.data?.length > 0) {
-    const orgName = schemas.Organization.data[0]?.name;
-    if (orgName && typeof orgName === 'string' && !isGeneric(orgName)) {
-      brand = cleanText(orgName);
+  $("img").each((_, el) => {
+    const src = $(el).attr("src");
+    const alt = $(el).attr("alt");
+    if (src) {
+      meta.images.push({ src, alt: alt ? cleanText(alt) : null });
     }
+  });
+
+  const dateStr = safeText($('meta[property="article:modified_time"]').attr('content') || $('meta[property="article:published_time"]').attr('content'));
+  if (dateStr) {
+    meta.hasLastModified = true;
+    meta.lastModified = new Date(dateStr).toLocaleDateString();
   }
 
-  if (!brand) {
-    const ogSiteName = $('meta[property="og:site_name"]').attr("content") || $('meta[name="application-name"]').attr("content");
-    if (ogSiteName && typeof ogSiteName === 'string' && !isGeneric(ogSiteName)) {
-      brand = cleanText(ogSiteName);
-    }
-  }
+  $("a").each((_, el) => {
+    const href = safeText($(el).attr("href")).toLowerCase();
+    if (href.includes("facebook.com")) meta.hasFacebook = true;
+    if (href.includes("linkedin.com")) meta.hasLinkedIn = true;
+    if (href.includes("youtube.com")) meta.hasYouTube = true;
+    if (href.includes("twitter.com") || href.includes("x.com")) meta.hasTwitter = true;
+  });
 
-  if (!brand) {
-    const logoAlt = $('img[src*="logo" i]').attr('alt') || $('img[class*="logo" i]').attr('alt') || $('img[id*="logo" i]').attr('alt');
-    if (logoAlt && typeof logoAlt === 'string' && !isGeneric(logoAlt)) {
-      brand = cleanText(logoAlt);
-    }
-  }
+  const emailMatch = meta.bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const phoneMatch = meta.bodyText.match(/[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/);
+  meta.email = emailMatch ? emailMatch[0] : null;
+  meta.phone = phoneMatch ? phoneMatch[0] : null;
 
-  if (!brand && title && !isGeneric(title)) {
-    const parts = title.split(/[|\-\u2013\u2014]/);
-    const possibleBrand = parts[parts.length - 1]?.trim() || parts[0]?.trim();
-    if (possibleBrand && !isGeneric(possibleBrand)) {
-      brand = cleanText(possibleBrand);
-    }
-  }
-
-  if (!brand) {
-    try {
-      const domain = new URL(url).hostname.replace("www.", "");
-      const hostBrand = domain.split('.')[0];
-      if (hostBrand && hostBrand !== 'localhost') {
-        brand = hostBrand.charAt(0).toUpperCase() + hostBrand.slice(1);
-      }
-    } catch {
-      brand = "Brand Authority";
-    }
-  }
-
-  return brand || "Brand Authority";
+  return meta;
 }
 
 export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas) {
@@ -602,7 +423,7 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
   }
 
   try {
-    $('script[type="application/ld+json"]').each((i, el) => {
+    $('script[type="application/ld+json"]').each((_, el) => {
       try {
         const raw = $(el).html();
         if (!raw) return;
@@ -691,6 +512,67 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
     entities: structuredEntitiesList,
     totalEntities: structuredEntitiesList.length
   };
+}
+
+export function getBrandNameEnhanced(url, $, title, schemas) {
+  let brand = "";
+  const genericServiceKeywords = [
+    "seo", "search engine optimization", "web design", "digital marketing", "web development", 
+    "content writing", "copywriting", "social media marketing", "ecommerce", "shopify", 
+    "branding", "analytics", "enterprise software", "ai integration", "consulting", 
+    "software development", "product strategy", "ui/ux design", "cloud hosting", "cybersecurity",
+    "expert digital systems", "home", "homepage", "services", "contact", "about", "about us", "privacy policy"
+  ];
+
+  const isGeneric = (name) => {
+    if (!name) return true;
+    const lower = name.toLowerCase().trim();
+    if (lower.length <= 1 || lower.length > 60) return true;
+    return genericServiceKeywords.some(kw => lower === kw || lower.includes("expert digital systems") || lower === "brand authority" || lower === "unknown");
+  };
+
+  if (schemas?.Organization?.present && schemas?.Organization?.data?.length > 0) {
+    const orgName = schemas.Organization.data[0]?.name;
+    if (orgName && typeof orgName === 'string' && !isGeneric(orgName)) {
+      brand = cleanText(orgName);
+    }
+  }
+
+  if (!brand) {
+    const ogSiteName = $('meta[property="og:site_name"]').attr("content") || $('meta[name="application-name"]').attr("content");
+    if (ogSiteName && typeof ogSiteName === 'string' && !isGeneric(ogSiteName)) {
+      brand = cleanText(ogSiteName);
+    }
+  }
+
+  if (!brand) {
+    const logoAlt = $('img[src*="logo" i]').attr('alt') || $('img[class*="logo" i]').attr('alt') || $('img[id*="logo" i]').attr('alt');
+    if (logoAlt && typeof logoAlt === 'string' && !isGeneric(logoAlt)) {
+      brand = cleanText(logoAlt);
+    }
+  }
+
+  if (!brand && title && !isGeneric(title)) {
+    const parts = title.split(/[|\-\u2013\u2014]/);
+    const possibleBrand = parts[parts.length - 1]?.trim() || parts[0]?.trim();
+    if (possibleBrand && !isGeneric(possibleBrand)) {
+      brand = cleanText(possibleBrand);
+    }
+  }
+
+  if (!brand) {
+    try {
+      const domain = new URL(url).hostname.replace("www.", "");
+      const hostBrand = domain.split('.')[0];
+      if (hostBrand && hostBrand !== 'localhost') {
+        brand = hostBrand.charAt(0).toUpperCase() + hostBrand.slice(1);
+      }
+    } catch {
+      brand = "Brand Authority";
+    }
+  }
+
+  return brand || "Brand Authority";
 }
 
 export function analyzeInternalLinks($, url, h2s) {
@@ -1253,21 +1135,30 @@ export function calculateCentralScores(signals) {
     readabilityScore,
     semanticSEO,
     citationProbability,
-    eeatScore
+    eeatScore,
+    state
   } = signals;
 
-  // Requirement 4: Score calculation executes ONLY when crawl signals exist
-  if (!title || !metaDescription || !h1 || !bodyText || wordCount < 50 || !internalLinkData) {
+  // Requirement 14 & 3: Stop validation if state is blocked/insufficient/thin
+  if (
+    state === "BLOCKED" || 
+    state === "FAILED" || 
+    !title || 
+    !metaDescription || 
+    !h1 || 
+    wordCount < 100 || 
+    !internalLinkData
+  ) {
     return null;
   }
 
   // Pure dynamic signal-based math
   let titleQuality = title.trim().length > 5 ? (title.length <= 60 ? 20 : 10) : 0;
   let metaQuality = metaDescription.trim().length > 20 ? (metaDescription.length <= 160 ? 20 : 10) : 0;
-  let headingQuality = (h1Count === 1 ? 5 : 0) + (h2Count >= 2 ? 5 : 0) + (h3Count >= 2 ? 5 : 0);
+  let headingQuality = (h1Count === 1 ? 10 : 0) + (h2Count >= 2 ? 5 : 0) + (h3Count >= 2 ? 5 : 0);
   let lengthFactor = wordCount >= 1500 ? 15 : (wordCount >= 800 ? 10 : (wordCount >= 500 ? 5 : 0));
   let linkFactor = clamp(Math.min(10, internalLinkData.totalInternalLinks));
-  let imgFactor = clamp(totalImages > 0 ? Math.round(((totalImages - imagesWithoutAlt) / totalImages) * 10) : 0);
+  let imgFactor = clamp(totalImages > 0 ? Math.round(((totalImages - imagesWithoutAlt) / totalImages) * 10) : 10);
   let schemaFactor = clamp(uniqueSchemas.length * 3);
   let entityFactor = clamp(Math.round((semanticSEO?.entityCoverage || 0) / 10));
 
@@ -1407,7 +1298,7 @@ export async function analyzeSingleUrl(url) {
     else if (crawlResult.status === 429) blockedReason = "429 Too Many Requests rate limiting. Cloudflare or CAPTCHA protection detected.";
     else if (crawlResult.status === 202) blockedReason = "202 Accepted pending challenge. Cloudflare or CAPTCHA protection detected.";
 
-    return {
+    const blockedResultPayload = {
       status: "success",
       success: false,
       crawlSuccess: false,
@@ -1443,6 +1334,8 @@ export async function analyzeSingleUrl(url) {
         timestamp: new Date().toISOString()
       }
     };
+    scanCache.set(cacheKey, { cachedAt: Date.now(), payload: blockedResultPayload });
+    return blockedResultPayload;
   }
 
   // Loaded successfully. Parse content:
@@ -1459,9 +1352,9 @@ export async function analyzeSingleUrl(url) {
   const bodyText = cleanText($("p, li, h2, h3, h4, td, span, article").map((i, el) => $(el).text()).get().join(" "));
   const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 0;
 
-  // Requirement 3: If signals are missing, classify as blocked/insufficient structure
-  if (!title || !metaDescription || !h1 || wordCount < 50) {
-    return {
+  // Requirement 14 & 3: Validate required crawl parameters
+  if (!title || !metaDescription || !h1 || wordCount < 100) {
+    const thinResultPayload = {
       status: "success",
       success: false,
       crawlSuccess: true,
@@ -1495,6 +1388,8 @@ export async function analyzeSingleUrl(url) {
         timestamp: new Date().toISOString()
       }
     };
+    scanCache.set(cacheKey, { cachedAt: Date.now(), payload: thinResultPayload });
+    return thinResultPayload;
   }
 
   const schemas = detectAllSchemas($, html);
@@ -1568,7 +1463,7 @@ export async function analyzeSingleUrl(url) {
   const trustSignals = scanTrustSignals($, normalizedUrl);
   const trustScore = safeNumber(trustSignals?.trustScore, 0);
 
-  const eeatData = analyzeEEATAdvanced($, bodyText, hasAuthor, trustSignals.hasAbout, trustSignals.hasContact, trustSignals.hasPrivacyPolicy, hasLinkedIn, hasFacebook, isHttps, hasLastModified, schemas, trustSignals.hasTermsPage, trustSignals.socialLinks);
+  const eeatData = analyzeEEATAdvanced($, bodyText, hasAuthor, trustSignals.hasAbout, trustSignals.hasContact, trustSignals.hasPrivacyPolicy, hasLinkedIn, hasFacebook, normalizedUrl.startsWith("https://"), hasLastModified, schemas, trustSignals.hasTermsPage, trustSignals.socialLinks);
   const eeatScore = safeNumber(eeatData?.score, 0);
 
   const localSEO = analyzeLocalSEO($, bodyText, schemas, hasEmail, hasPhone);
@@ -1653,7 +1548,8 @@ export async function analyzeSingleUrl(url) {
     readabilityScore,
     semanticSEO,
     citationProbability,
-    eeatScore
+    eeatScore,
+    state: crawlResult.state
   });
 
   const seoScore = calculatedSignalsScores?.seoScore || 0;
@@ -2004,15 +1900,7 @@ function authenticateAndRateLimit(req, res, next) {
     const targetUrl = req.query.url || "https://example.com";
     const fallbackResponse = fallbackSafePayload(targetUrl);
     fallbackResponse.warning = `You reached the limit of ${limit} scans/day for plan '${user.plan.toUpperCase()}'.`;
-    return res.json({
-      status: "success",
-      seoScore: null,
-      aeoScore: null,
-      eeatScore: null,
-      citationScore: null,
-      data: fallbackResponse,
-      ...fallbackResponse
-    });
+    return res.json(fallbackResponse);
   }
 
   next();
@@ -2072,30 +1960,10 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
     if (data.success && req.user) {
       req.user.scansToday++;
     }
-    res.json({
-      status: "success",
-      seoScore: data.seoScore,
-      aeoScore: data.aeoScore,
-      eeatScore: data.eeatScore,
-      citationScore: data.citationScore,
-      audit: data.analysis || {},
-      suggestions: data.roadmap || [],
-      data: data,
-      ...data
-    });
+    res.json(data);
   } catch (err) {
     const fb = fallbackSafePayload(normalized, err);
-    res.json({
-      status: "error",
-      message: "safe fallback activated",
-      seoScore: null,
-      aeoScore: null,
-      eeatScore: null,
-      citationScore: null,
-      audit: {},
-      suggestions: [],
-      ...fb
-    });
+    res.json(fb);
   } finally {
     activeScans.delete(cacheKey);
   }
@@ -2138,11 +2006,7 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
         sites: [
           { brand: "Blocked Site", url: normalizedUrl, pageType: site1.pageType || "BLOCKED_PAGE" },
           { brand: "Blocked Site", url: normalizedComp, pageType: site2.pageType || "BLOCKED_PAGE" }
-        ],
-        advantages: null,
-        competitorAdvantage: null,
-        winner: null,
-        winnerReason: "Comparison not applicable: Deep crawl blocked."
+        ]
       });
     }
 
@@ -2162,9 +2026,9 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
       req.user.scansToday = Math.min(PLAN_LIMITS[req.user.plan], req.user.scansToday + 2);
     }
 
-    const seoAdvantage = (site1?.score || 0) - (site2?.score || 0);
+    const seoAdvantage = (site1?.seoScore || 0) - (site2?.seoScore || 0);
     const aeoAdvantage = (site1?.aeoScore || 0) - (site2?.aeoScore || 0);
-    const eeatAdvantage = (site1?.breakdown?.eeatScore || 0) - (site2?.breakdown?.eeatScore || 0);
+    const eeatAdvantage = (site1?.eeatScore || 0) - (site2?.eeatScore || 0);
     const citationAdvantage = (site1?.citationProbability || 0) - (site2?.citationProbability || 0);
     const trustAdvantage = (site1?.aiTrustScore || 0) - (site2?.aiTrustScore || 0);
 
@@ -2216,13 +2080,12 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
       analyzeSingleUrl(normalizedComp)
     ]);
 
-    if (userData.analysisStatus === "BLOCKED" || compData.analysisStatus === "BLOCKED") {
+    if (userData.analysisStatus === "BLOCKED" || compData.analysisStatus === "BLOCKED" || userData.status === "blocked_page" || compData.status === "blocked_page") {
       return res.status(200).json({
         status: "success",
         success: false,
         analysisStatus: "BLOCKED",
-        error: "One or both pages failed validation due to bot blocking parameters or insufficient content.",
-        gapAnalysis: null
+        error: "One or both pages failed validation due to bot blocking parameters."
       });
     }
 

@@ -1161,6 +1161,7 @@ export function calculateScores(crawlData) {
     aeoScore,
     overallAIVisibilityScore,
     answerClarity,
+    schemaPresence,
     featuredSnippetChance: clamp(Math.round((hasDirectAnswer ? 50 : 0) + (wordCount > 500 ? 30 : 0) + ((uniqueSchemas?.length || 0) > 0 ? 20 : 0)))
   };
 }
@@ -1454,17 +1455,18 @@ export async function analyzeSingleUrl(url) {
     readabilityScore,
     semanticSEO,
     eeatScore,
-    citationProbability,
-    mobileViewport
+    citationProbability
   });
 
   const seoScore = calculatedScores.seoScore;
   const aeoScore = calculatedScores.aeoScore;
   const overallAIVisibilityScore = calculatedScores.overallAIVisibilityScore;
+  const answerClarity = calculatedScores.answerClarity;
+  const schemaPresence = calculatedScores.schemaPresence;
+  const featuredSnippetChance = calculatedScores.featuredSnippetChance;
 
   const seoStatus = seoScore >= 80 ? "Excellent" : seoScore >= 50 ? "Good" : "Needs Work";
   const aeoStatus = aeoScore >= 80 ? "Excellent" : aeoScore >= 50 ? "Good" : "Needs Work";
-  const featuredSnippetChance = calculatedScores.featuredSnippetChance;
 
   const criticalIssues = [];
   const importantIssues = [];
@@ -1909,7 +1911,6 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
       simulation: site1.simulation
     });
   } catch (err) {
-    console.error(err.stack);
     res.status(500).json({
       success: false,
       status: "ERROR",

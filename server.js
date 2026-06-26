@@ -9,6 +9,11 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 // =========================================================================
+// ========== SECTION 0: GLOBAL SYSTEM CONSTANTS ===========================
+// =========================================================================
+const ALLOWED_RECOMMENDED_TYPES = ["FAQPage", "Organization", "LocalBusiness", "WebSite", "Article", "HowTo"];
+
+// =========================================================================
 // ========== SECTION 1: IN-MEMORY CACHE & SAAS DB PARAMETERS ==============
 // =========================================================================
 const scanHistory = [];
@@ -1317,7 +1322,6 @@ export async function analyzeSingleUrl(url) {
   const recommendedSchemas = [...new Set(
     Object.keys(schemas).filter(k => !schemas[k]?.present && ALLOWED_RECOMMENDED_TYPES.includes(k))
   )];
-  const ALLOWED_RECOMMENDED_TYPES = ["FAQPage", "Organization", "LocalBusiness", "WebSite", "Article", "HowTo"];
 
   const h1Count = $("h1").length || (title ? 1 : 0);
   const h2Count = h2s.length;
@@ -1909,7 +1913,8 @@ app.get("/compare", authenticateAndRateLimit, async (req, res) => {
     res.status(500).json({
       success: false,
       status: "ERROR",
-      message: err.message
+      message: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined
     });
   }
 });
@@ -1974,12 +1979,13 @@ app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
     res.status(500).json({
       success: false,
       status: "ERROR",
-      message: err.message
+      message: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined
     });
   }
 });
 
-// Alias supporting /gap-analysis path explicitly
+// Explicit alias supporting /gap-analysis path 
 app.get("/gap-analysis", authenticateAndRateLimit, async (req, res) => {
   try {
     const { url, competitor } = req.query;
@@ -2023,7 +2029,8 @@ app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
     res.status(500).json({
       success: false,
       status: "ERROR",
-      message: err.message
+      message: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined
     });
   }
 });

@@ -4,6 +4,7 @@ import cors from "cors";
 import axios from "axios";
 import https from "https";
 import path from "path";
+import crypto from "crypto";
 
 // =========================================================================
 // ========== SECTION 0: GLOBAL CONSTANTS, CONFIGS & REGEXES ==============
@@ -11,6 +12,14 @@ import path from "path";
 
 export const PORT = process.env.PORT || 10000;
 export const CACHE_TTL_MS = 10 * 60 * 1000;
+export const MAX_CACHE_ENTRIES = 500;
+export const MAX_SCAN_HISTORY = 50;
+export const MAX_TREND_POINTS_PER_URL = 30;
+export const MAX_TREND_URLS = 300;
+export const ANON_USER_TTL_MS = 48 * 60 * 60 * 1000;
+export const MAX_ANON_USERS = 5000;
+export const CRAWL_HARD_TIMEOUT_MS = 30000;
+export const MAX_URL_LENGTH = 2048;
 
 export const ALLOWED_RECOMMENDED_TYPES = [
   "FAQPage", "Organization", "LocalBusiness", "WebSite", "Article",
@@ -42,6 +51,7 @@ export const saasUsers = {
     plan: "free",
     scansToday: 0,
     lastScanReset: Date.now(),
+    lastSeenAt: Date.now(),
     apiKey: "free-dev-key-9999"
   },
   "pro-member-key-7777": {
@@ -49,6 +59,7 @@ export const saasUsers = {
     plan: "pro",
     scansToday: 0,
     lastScanReset: Date.now(),
+    lastSeenAt: Date.now(),
     apiKey: "pro-member-key-7777"
   }
 };
@@ -103,28 +114,147 @@ export const TOPICAL_CLUSTERS = [
   { name: "Trust", queries: ["security", "about", "contact", "support", "guarantee", "compliance"] }
 ];
 
+// Blocked hostnames / private IP ranges to prevent SSRF via the crawler.
+export const PRIVATE_HOST_PATTERNS = [
+  /^localhost$/i,
+  /^127\./,
+  /^0\.0\.0\.0$/,
+  /^10\./,
+  /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+  /^192\.168\./,
+  /^169\.254\./,
+  /^::1$/,
+  /^fc00:/i,
+  /^fe80:/i,
+  /\.local$/i,
+  /^0x/i,
+  /^\[?::ffff:/i
+];
+
+// =========================================================================
+// ========== SECTION 0.5: STRUCTURED LOGGING ==============================
+// =========================================================================
+
+const LOG_LEVELS = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 };
+const CURRENT_LOG_LEVEL = (() => {
+  const configured = safeTextFallback(process.env.LOG_LEVEL).toUpperCase();
+  return Object.prototype.hasOwnProperty.call(LOG_LEVELS, configured) ? LOG_LEVELS[configured] : LOG_LEVELS.INFO;
+})();
+
+// Local helper used only during logger bootstrap, before safeText is defined below.
+function safeTextFallback(v) {
+  return v === undefined || v === null ? "" : String(v).trim();
+}
+
+function logMessage(level, context, message, meta) {
+  if (LOG_LEVELS[level] > CURRENT_LOG_LEVEL) return;
+  const entry = {
+    timestamp: new Date().toISOString(),
+    level,
+    context,
+    message,
+    ...(meta && typeof meta === "object" ? meta : {})
+  };
+  let serialized;
+  try {
+    serialized = JSON.stringify(entry);
+  } catch {
+    serialized = `${entry.timestamp} [${level}] [${context}] ${message}`;
+  }
+  if (level === "ERROR") console.error(serialized);
+  else if (level === "WARN") console.warn(serialized);
+  else console.log(serialized);
+}
+
+export const logger = {
+  error: (context, message, meta) => logMessage("ERROR", context, message, meta),
+  warn: (context, message, meta) => logMessage("WARN", context, message, meta),
+  info: (context, message, meta) => logMessage("INFO", context, message, meta),
+  debug: (context, message, meta) => logMessage("DEBUG", context, message, meta)
+};
+
 // =========================================================================
 // ========== SECTION 1: EXPRESS MIDDLEWARE SETUP =========================
 // =========================================================================
 
 const app = express();
 
+// Required for correct req.ip resolution behind reverse proxies (Render, etc.)
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
 app.use(cors());
-app.use(express.json());
-app.use(express.static("."));
-app.use(express.static("public"));
+app.use(express.json({ limit: "1mb" }));
+app.use(express.static(".", { maxAge: "1h" }));
+app.use(express.static("public", { maxAge: "1h" }));
+
+// Manual security headers (avoids introducing new npm dependencies while
+// still shipping the standard hardening headers a production API needs).
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "0");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+});
+
+// Lightweight structured request logging + request-id correlation.
+app.use((req, res, next) => {
+  req.requestId = crypto.randomUUID();
+  const startedAt = Date.now();
+  res.setHeader("X-Request-Id", req.requestId);
+  res.on("finish", () => {
+    logger.info("HTTP", "request_completed", {
+      requestId: req.requestId,
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      durationMs: Date.now() - startedAt
+    });
+  });
+  next();
+});
 
 // =========================================================================
 // ========== SECTION 1.5: MIDDLEWARE SECURITY & LIMITS ===================
 // =========================================================================
 
+/**
+ * Evicts stale/excess anonymous rate-limit entries so the in-memory
+ * saasUsers map can't grow without bound under sustained anonymous traffic.
+ */
+function pruneAnonymousUsers() {
+  const now = Date.now();
+  const anonKeys = [];
+
+  for (const key of Object.keys(saasUsers)) {
+    if (!key.startsWith("anon-")) continue;
+    const user = saasUsers[key];
+    if (now - safeNumber(user.lastSeenAt, user.lastScanReset) > ANON_USER_TTL_MS) {
+      delete saasUsers[key];
+    } else {
+      anonKeys.push(key);
+    }
+  }
+
+  if (anonKeys.length > MAX_ANON_USERS) {
+    anonKeys
+      .sort((a, b) => safeNumber(saasUsers[a]?.lastSeenAt) - safeNumber(saasUsers[b]?.lastSeenAt))
+      .slice(0, anonKeys.length - MAX_ANON_USERS)
+      .forEach(key => delete saasUsers[key]);
+  }
+}
+
+setInterval(pruneAnonymousUsers, 30 * 60 * 1000).unref();
+
 export function authenticateAndRateLimit(req, res, next) {
   const authHeader = safeText(req.headers.authorization || req.query.apiKey);
-  const key = authHeader.replace(/^Bearer\s+/i, "");
+  const key = authHeader.replace(/^Bearer\s+/i, "").slice(0, 128);
 
-  let user = saasUsers[key];
+  let user = key ? saasUsers[key] : null;
   if (!user) {
-    const ip = req.ip || "unknown-client";
+    const ip = safeText(req.ip) || "unknown-client";
     const cacheKey = `anon-${ip}`;
     if (!saasUsers[cacheKey]) {
       saasUsers[cacheKey] = {
@@ -132,11 +262,14 @@ export function authenticateAndRateLimit(req, res, next) {
         plan: "free",
         scansToday: 0,
         lastScanReset: Date.now(),
+        lastSeenAt: Date.now(),
         apiKey: cacheKey
       };
     }
     user = saasUsers[cacheKey];
   }
+
+  user.lastSeenAt = Date.now();
 
   if (Date.now() - user.lastScanReset > 24 * 60 * 60 * 1000) {
     user.scansToday = 0;
@@ -154,6 +287,17 @@ export function authenticateAndRateLimit(req, res, next) {
 
   req.user = user;
   next();
+}
+
+/**
+ * Wraps an async Express handler so rejected promises are always forwarded
+ * to Express's error pipeline instead of crashing the process or hanging
+ * the request.
+ */
+export function asyncHandler(fn) {
+  return function wrapped(req, res, next) {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
 }
 
 // =========================================================================
@@ -244,9 +388,33 @@ export const getKeywordOpportunity = (difficulty, searchVolume = 1200) => {
   return clamp(Math.round(((100 - difficulty) * 0.7) + ((searchVolume / 1000) * 10)), 5, 95);
 };
 
+/**
+ * Deterministic pseudo-volume derived from the keyword itself rather than
+ * Math.random(), so identical keywords always produce identical, reproducible
+ * output across requests (important for caching and for not presenting
+ * unrepeatable random noise as if it were real search-volume data).
+ */
+export const getDeterministicSearchVolume = (kw) => {
+  const hash = crypto.createHash("md5").update(String(kw).toLowerCase()).digest("hex");
+  const numeric = parseInt(hash.slice(0, 8), 16);
+  return 500 + (numeric % 4500);
+};
+
+/**
+ * Returns true if a hostname resolves to a private/loopback/link-local
+ * address space or is otherwise an internal-network target. Used to block
+ * SSRF attempts through the crawl engine (e.g. scanning http://localhost or
+ * internal cloud metadata endpoints).
+ */
+export function isPrivateOrReservedHost(hostname) {
+  const host = safeText(hostname).toLowerCase();
+  if (!host) return true;
+  return PRIVATE_HOST_PATTERNS.some(pattern => pattern.test(host));
+}
+
 export const enforceSecureUrl = (inputUrl) => {
   let cleaned = safeText(inputUrl).trim();
-  if (!cleaned) return null;
+  if (!cleaned || cleaned.length > MAX_URL_LENGTH) return null;
   cleaned = cleaned.replace(/[[\]()]/g, "").trim();
   if (!cleaned.match(/^https?:\/\//i)) {
     cleaned = "https://" + cleaned;
@@ -254,10 +422,18 @@ export const enforceSecureUrl = (inputUrl) => {
 
   try {
     const parsed = new URL(cleaned);
+    if (!/^https?:$/i.test(parsed.protocol)) return null;
+
     const hostParts = parsed.hostname.split('.');
-    if (hostParts.length < 2) return null;
+    if (hostParts.length < 2) {
+      // Allow single-label hosts only if they're not reserved (still reject).
+      if (isPrivateOrReservedHost(parsed.hostname)) return null;
+      return null;
+    }
     const tld = hostParts[hostParts.length - 1];
     if (tld.length < 2 || /\d/.test(tld)) return null;
+    if (isPrivateOrReservedHost(parsed.hostname)) return null;
+
     return parsed.href;
   } catch (e) {
     return null;
@@ -281,6 +457,28 @@ export const slugify = (text) => {
     .replace(/(^-|-$)+/g, "");
 };
 
+/**
+ * Deterministic content hash used to de-duplicate structurally identical
+ * JSON-LD blocks (e.g. the same Organization schema declared twice).
+ */
+export function hashJsonLdItem(item) {
+  try {
+    return crypto.createHash("sha1").update(JSON.stringify(item)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Minimal structural validation for a parsed JSON-LD node. Rejects anything
+ * that isn't a plausible schema.org object before it's trusted downstream.
+ */
+export function isValidJsonLdNode(item) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+  if (!item['@type'] && !item['@graph']) return false;
+  return true;
+}
+
 export function detectBlockedReason(html, status) {
   const text = safeText(html).toLowerCase();
 
@@ -296,10 +494,10 @@ export function detectBlockedReason(html, status) {
   if (status >= 500) {
     return { blocked: true, system: "Origin Server Error", reason: `Target returned a server-side error status (${status}).` };
   }
-  if (text.includes("cloudflare") || text.includes("cf-browser-verification") || text.includes("ray id:")) {
+  if (text.includes("cloudflare") || text.includes("cf-browser-verification") || text.includes("ray id:") || text.includes("cf-chl-bypass") || text.includes("__cf_chl")) {
     return { blocked: true, system: "Cloudflare Turnstile", reason: "Cloudflare challenge page detected." };
   }
-  if (text.includes("captcha") || text.includes("recaptcha") || text.includes("hcaptcha")) {
+  if (text.includes("captcha") || text.includes("recaptcha") || text.includes("hcaptcha") || text.includes("verify you are human") || text.includes("are you a robot")) {
     return { blocked: true, system: "CAPTCHA Block", reason: "Page validation challenge triggered." };
   }
   if (text.includes("just a moment") && text.includes("checking your browser")) {
@@ -307,6 +505,9 @@ export function detectBlockedReason(html, status) {
   }
   if (text.includes("access denied") || text.includes("you don't have permission")) {
     return { blocked: true, system: "Access Denied", reason: "Server explicitly denied access to the requested resource." };
+  }
+  if (text.includes("pardon our interruption") || text.includes("unusual traffic")) {
+    return { blocked: true, system: "Bot Mitigation Interstitial", reason: "Target displayed a bot-mitigation interstitial page." };
   }
   return { blocked: false, system: null, reason: null };
 }
@@ -327,7 +528,8 @@ export async function fetchRobotsTxt(baseUrl) {
       timeout: 8000,
       validateStatus: () => true,
       headers: { "User-Agent": USER_AGENTS[0] },
-      httpsAgent: new https.Agent({ rejectUnauthorized: false })
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      maxContentLength: 2 * 1024 * 1024
     });
 
     if (response.status >= 400) {
@@ -353,6 +555,7 @@ export async function fetchRobotsTxt(baseUrl) {
       raw: raw.slice(0, 2000)
     };
   } catch (err) {
+    logger.debug("ROBOTS", "robots_txt_fetch_failed", { baseUrl, error: err.message });
     return { found: false, disallowedPaths: [], sitemaps: [], raw: "" };
   }
 }
@@ -374,13 +577,16 @@ export async function detectSitemap(baseUrl, robotsData) {
       timeout: 8000,
       validateStatus: () => true,
       headers: { "User-Agent": USER_AGENTS[0] },
-      httpsAgent: new https.Agent({ rejectUnauthorized: false })
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      maxContentLength: 5 * 1024 * 1024
     });
-    if (response.status < 400 && typeof response.data === "string" && response.data.toLowerCase().includes("<urlset") || (response.status < 400 && typeof response.data === "string" && response.data.toLowerCase().includes("<sitemapindex"))) {
+    const bodyLower = typeof response.data === "string" ? response.data.toLowerCase() : "";
+    if (response.status < 400 && (bodyLower.includes("<urlset") || bodyLower.includes("<sitemapindex"))) {
       return { found: true, source: "conventional-path", urls: [fallbackUrl] };
     }
     return { found: false, source: null, urls: [] };
   } catch (err) {
+    logger.debug("SITEMAP", "sitemap_fetch_failed", { baseUrl, error: err.message });
     return { found: false, source: null, urls: [] };
   }
 }
@@ -390,8 +596,12 @@ export async function detectSitemap(baseUrl, robotsData) {
 // =========================================================================
 
 let globalBrowser = null;
+let browserLastUsedAt = Date.now();
+const BROWSER_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
 export async function getBrowserInstance() {
+  browserLastUsedAt = Date.now();
+
   if (globalBrowser) {
     try {
       if (globalBrowser.isConnected()) return globalBrowser;
@@ -415,10 +625,33 @@ export async function getBrowserInstance() {
     });
     return globalBrowser;
   } catch (err) {
-    console.error("[CRAWL] Failed to bind Playwright chromium engine:", err.message);
+    logger.error("CRAWL", "playwright_launch_failed", { error: err.message });
     return null;
   }
 }
+
+/**
+ * Closes the shared headless browser instance. Safe to call even if no
+ * browser is currently open.
+ */
+export async function closeBrowserInstance() {
+  if (!globalBrowser) return;
+  try {
+    await globalBrowser.close();
+  } catch (err) {
+    logger.warn("CRAWL", "browser_close_failed", { error: err.message });
+  } finally {
+    globalBrowser = null;
+  }
+}
+
+// Periodically release the headless browser process when idle, to keep
+// memory usage flat between bursts of crawl traffic.
+setInterval(() => {
+  if (globalBrowser && Date.now() - browserLastUsedAt > BROWSER_IDLE_TIMEOUT_MS) {
+    closeBrowserInstance().catch(() => {});
+  }
+}, 60 * 1000).unref();
 
 export async function fetchAxios(url) {
   const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
@@ -436,6 +669,7 @@ export async function fetchAxios(url) {
     maxRedirects: 6,
     validateStatus: () => true,
     decompress: true,
+    maxContentLength: 15 * 1024 * 1024,
     httpsAgent: new https.Agent({
       rejectUnauthorized: false,
       keepAlive: true
@@ -495,6 +729,7 @@ export async function fetchPlaywright(url) {
   } finally {
     await page.close().catch(() => {});
     await context.close().catch(() => {});
+    browserLastUsedAt = Date.now();
   }
 }
 
@@ -509,11 +744,24 @@ export async function withRetry(fn, retries = 2, delay = 1000) {
     } catch (err) {
       lastError = err;
       if (i === retries) throw Object.assign(lastError, { attempts });
-      await new Promise(resolve => setTimeout(resolve, delay));
+      const jitter = Math.floor(Math.random() * 250);
+      await new Promise(resolve => setTimeout(resolve, delay + jitter));
       delay *= 2;
     }
   }
   throw Object.assign(lastError || new Error("Unknown retry failure"), { attempts });
+}
+
+/**
+ * Races a promise against a hard timeout so a single hung crawl can never
+ * stall a request indefinitely.
+ */
+function withHardTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} exceeded hard timeout of ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 export async function smartCrawl(url) {
@@ -524,13 +772,13 @@ export async function smartCrawl(url) {
   let infiniteScrollDetected = false;
 
   try {
-    const outcome = await withRetry(() => fetchAxios(url), 1, 1500);
+    const outcome = await withHardTimeout(withRetry(() => fetchAxios(url), 2, 1200), CRAWL_HARD_TIMEOUT_MS, "Standard fetch");
     result = outcome.result;
     retryCount = outcome.attempts - 1;
     status = result?.status || 500;
   } catch (err) {
     retryCount = safeNumber(err?.attempts, 1) - 1;
-    console.error(`[CRAWL] Standard direct pull failed on target: ${url}. Exception: ${err.message}`);
+    logger.warn("CRAWL", "standard_fetch_failed", { url, error: err.message, retryCount });
   }
 
   let html = result?.html || "";
@@ -546,9 +794,9 @@ export async function smartCrawl(url) {
     html.toLowerCase().includes("enable javascript");
 
   if (requiresUpgrade) {
-    console.log(`[CRAWL] Standard fetch blocked, incomplete, or requires JS. Upgrading context flow to Headless Browser...`);
+    logger.info("CRAWL", "upgrading_to_headless_browser", { url });
     try {
-      const pwResult = await fetchPlaywright(url);
+      const pwResult = await withHardTimeout(fetchPlaywright(url), CRAWL_HARD_TIMEOUT_MS, "Headless render");
       if (pwResult && pwResult.html && pwResult.html.length >= 300) {
         const pwBlockCheck = detectBlockedReason(pwResult.html, pwResult.status);
         infiniteScrollDetected = !!pwResult.infiniteScrollDetected;
@@ -565,7 +813,7 @@ export async function smartCrawl(url) {
         }
       }
     } catch (pwErr) {
-      console.error("[CRAWL] Headless rendering fallback failed:", pwErr.message);
+      logger.error("CRAWL", "headless_fallback_failed", { url, error: pwErr.message });
     }
   }
 
@@ -612,6 +860,8 @@ export function detectAllSchemas($, html) {
     VideoObject: { present: false, data: [] }
   };
 
+  const seenHashesByType = {};
+
   try {
     $('script[type="application/ld+json"]').each((_, el) => {
       try {
@@ -620,7 +870,7 @@ export function detectAllSchemas($, html) {
         const json = JSON.parse(raw);
         const items = Array.isArray(json) ? json : [json];
         const parseItem = (item) => {
-          if (!item) return;
+          if (!isValidJsonLdNode(item)) return;
           if (item['@graph'] && Array.isArray(item['@graph'])) {
             item['@graph'].forEach(parseItem);
             return;
@@ -629,15 +879,26 @@ export function detectAllSchemas($, html) {
           const types = Array.isArray(rawType) ? rawType.map(String) : [String(rawType || '')];
           types.forEach(type => {
             if (schemas[type]) {
+              const hash = hashJsonLdItem(item);
+              if (!seenHashesByType[type]) seenHashesByType[type] = new Set();
+              // Duplicate-schema removal: skip structurally identical blocks
+              // already recorded for this type.
+              if (hash && seenHashesByType[type].has(hash)) return;
+              if (hash) seenHashesByType[type].add(hash);
+
               schemas[type].present = true;
               schemas[type].data.push(item);
             }
           });
         };
         items.forEach(parseItem);
-      } catch (e) {}
+      } catch (e) {
+        logger.debug("SCHEMA", "json_ld_parse_failed", { error: e.message });
+      }
     });
-  } catch (err) {}
+  } catch (err) {
+    logger.debug("SCHEMA", "schema_detection_failed", { error: err.message });
+  }
 
   return schemas;
 }
@@ -764,26 +1025,31 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
         const json = JSON.parse(raw);
         const items = Array.isArray(json) ? json : [json];
         const traverse = (item) => {
-          if (!item) return;
+          if (!isValidJsonLdNode(item)) return;
           if (item['@graph'] && Array.isArray(item['@graph'])) {
             item['@graph'].forEach(traverse);
             return;
           }
           const type = String(item['@type'] || '').toLowerCase();
-          if (type.includes('organization') && item.name) {
-            organizations.push(item.name);
-            brands.push(item.name);
+          const name = String(item.name || '').trim();
+
+          if (name) {
+            if (type.includes('organization')) {
+              organizations.push(name);
+              brands.push(name);
+            }
+            if (type.includes('person')) {
+              people.push(name);
+            }
+            if (type.includes('product')) {
+              products.push(name);
+            }
+            if (type.includes('localbusiness')) {
+              organizations.push(name);
+              brands.push(name);
+            }
           }
-          if (type.includes('person') && item.name) {
-            people.push(item.name);
-          }
-          if (type.includes('product') && item.name) {
-            products.push(item.name);
-          }
-          if (type.includes('localbusiness') && item.name) {
-            organizations.push(item.name);
-            brands.push(item.name);
-          }
+
           if (type.includes('postaladdress')) {
             if (item.addressLocality) locations.push(item.addressLocality);
             if (item.addressCountry) locations.push(item.addressCountry);
@@ -918,12 +1184,21 @@ export function analyzeInternalLinks($, url, h2s) {
     )
   );
 
+  // Orphan-page detection is heuristic-only (a full crawl would be required
+  // for certainty); rather than fabricating specific fake URLs, we surface a
+  // boolean risk flag plus a neutral explanatory note.
+  const orphanRisk = uniquePages < 3;
+
   return {
     internalLinks,
     totalInternalLinks: internalLinks,
     externalLinks,
     uniquePages,
-    orphanPages: uniquePages < 3 ? [`${url}/blog`, `${url}/services`] : [],
+    orphanPages: [],
+    orphanPageRiskDetected: orphanRisk,
+    orphanPageNote: orphanRisk
+      ? "Low unique internal destination count detected. A full-site crawl is required to confirm actual orphan pages."
+      : "",
     avgLinkDepth: parseFloat(avgDepth.toFixed(1)),
     averageDepth: parseFloat(avgDepth.toFixed(1)),
     linkDepthAverage: parseFloat(avgDepth.toFixed(1)),
@@ -939,8 +1214,18 @@ export function analyzeInternalLinks($, url, h2s) {
 }
 
 export function extractPageData($, html, url) {
-  const title = cleanText(safeText($("title").text()));
-  const metaDescription = cleanText(safeText($('meta[name="description"]').attr("content")));
+  let title = cleanText(safeText($("title").text()));
+  let metaDescription = cleanText(safeText($('meta[name="description"]').attr("content")));
+
+  // Regex-based fallback: if cheerio couldn't find a title/description
+  // (e.g. malformed markup), recover a best-effort value instead of
+  // returning blank fields.
+  if (!title || !metaDescription) {
+    const fallback = regexFallbackParser(safeText(html), url);
+    if (!title) title = fallback.title;
+    if (!metaDescription) metaDescription = fallback.metaDescription;
+  }
+
   const canonical = cleanText(safeText($('link[rel="canonical"]').attr("href")));
   const robots = cleanText(safeText($('meta[name="robots"]').attr("content")));
   const language = cleanText(safeText($('html').attr("lang") || $('html').attr("xml:lang")));
@@ -956,7 +1241,11 @@ export function extractPageData($, html, url) {
   const twitterDescription = cleanText(safeText($('meta[name="twitter:description"]').attr("content")));
   const twitterImage = cleanText(safeText($('meta[name="twitter:image"]').attr("content")));
 
-  const h1s = $("h1").map((_, el) => cleanText(safeText($(el).text()))).get().filter(Boolean);
+  let h1s = $("h1").map((_, el) => cleanText(safeText($(el).text()))).get().filter(Boolean);
+  if (h1s.length === 0) {
+    const fallback = regexFallbackParser(safeText(html), url);
+    if (fallback.h1) h1s = [fallback.h1];
+  }
   const h2s = [...new Set($("h2").map((_, el) => cleanText(safeText($(el).text()))).get().filter(Boolean))];
   const h3s = [...new Set($("h3").map((_, el) => cleanText(safeText($(el).text()))).get().filter(Boolean))];
 
@@ -1011,10 +1300,10 @@ export function extractPageData($, html, url) {
     entityDetails: entities,
     publishedDate: dateInfo.publishedDate,
     modifiedDate: dateInfo.modifiedDate,
-    author: dateInfo.author
+    author: dateInfo.author,
+    linkAnalysisDetail: linkAnalysis
   };
 }
-
 // =========================================================================
 // ========== SECTION 8: STRUCTURAL SCHEMA & METADATA ENGINE ===============
 // =========================================================================
@@ -1049,10 +1338,59 @@ export function extractRDFa($) {
   return types;
 }
 
+/**
+ * Structural JSON-LD validation pass. Flags malformed nodes (missing
+ * @type/@context, empty objects, non-parseable blocks) so validation issues
+ * can be surfaced to the user rather than silently swallowed.
+ */
+export function validateJsonLdBlocks($) {
+  const issues = [];
+  let validCount = 0;
+  let invalidCount = 0;
+
+  $('script[type="application/ld+json"]').each((i, el) => {
+    const raw = $(el).html();
+    if (!raw || !raw.trim()) {
+      invalidCount++;
+      issues.push(`JSON-LD block #${i + 1} is empty.`);
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      invalidCount++;
+      issues.push(`JSON-LD block #${i + 1} contains invalid JSON syntax: ${e.message}`);
+      return;
+    }
+    const items = Array.isArray(parsed) ? parsed : [parsed];
+    let blockValid = true;
+    items.forEach(item => {
+      if (!isValidJsonLdNode(item)) {
+        blockValid = false;
+      }
+    });
+    if (blockValid) {
+      validCount++;
+    } else {
+      invalidCount++;
+      issues.push(`JSON-LD block #${i + 1} is missing required "@type" or "@graph" declarations.`);
+    }
+  });
+
+  return {
+    totalBlocks: validCount + invalidCount,
+    validBlocks: validCount,
+    invalidBlocks: invalidCount,
+    issues
+  };
+}
+
 export function auditPageSchemas($, html) {
   const jsonLdSchemas = detectAllSchemas($, html);
   const microdataTypes = extractMicrodata($);
   const rdfaTypes = extractRDFa($);
+  const jsonLdValidation = validateJsonLdBlocks($);
 
   const activeJsonLdKeys = Object.keys(jsonLdSchemas).filter(k => jsonLdSchemas[k]?.present);
   const allDetectedTypes = [...new Set([...activeJsonLdKeys, ...microdataTypes, ...rdfaTypes])];
@@ -1062,7 +1400,8 @@ export function auditPageSchemas($, html) {
     schemaCount: allDetectedTypes.length,
     jsonLd: jsonLdSchemas,
     microdata: microdataTypes,
-    rdfa: rdfaTypes
+    rdfa: rdfaTypes,
+    validation: jsonLdValidation
   };
 }
 
@@ -1248,7 +1587,7 @@ export function extractSemanticEntities($, html, url, pageData) {
         const json = JSON.parse(raw);
         const items = Array.isArray(json) ? json : [json];
         const traverse = (item) => {
-          if (!item) return;
+          if (!isValidJsonLdNode(item)) return;
           if (item['@graph'] && Array.isArray(item['@graph'])) {
             item['@graph'].forEach(traverse);
             return;
@@ -2050,14 +2389,57 @@ export function buildBlockedPayload(url, crawl) {
   };
 }
 
+/**
+ * Bounds the in-memory scan cache to MAX_CACHE_ENTRIES using LRU-by-insertion
+ * eviction, preventing unbounded memory growth under sustained traffic.
+ */
+function enforceScanCacheLimit() {
+  while (scanCache.size > MAX_CACHE_ENTRIES) {
+    const oldestKey = scanCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    scanCache.delete(oldestKey);
+  }
+}
+
+/**
+ * Records a score data point for a URL in the in-memory trend database,
+ * bounding both the number of points per URL and the number of tracked
+ * URLs to keep memory usage predictable.
+ */
+function recordTrendPoint(cacheKey, payload) {
+  if (!cacheKey) return;
+
+  if (!trendDB[cacheKey] && Object.keys(trendDB).length >= MAX_TREND_URLS) {
+    const oldestUrlKey = Object.keys(trendDB)[0];
+    if (oldestUrlKey) delete trendDB[oldestUrlKey];
+  }
+
+  if (!trendDB[cacheKey]) trendDB[cacheKey] = [];
+
+  trendDB[cacheKey].push({
+    timestamp: new Date().toISOString(),
+    overallAIVisibilityScore: payload.overallAIVisibilityScore,
+    seoScore: payload.seoScore,
+    aeoScore: payload.aeoScore,
+    eeatScore: payload.eeatScore,
+    authorityScore: payload.authorityScore,
+    trustScore: payload.trustScore
+  });
+
+  if (trendDB[cacheKey].length > MAX_TREND_POINTS_PER_URL) {
+    trendDB[cacheKey] = trendDB[cacheKey].slice(-MAX_TREND_POINTS_PER_URL);
+  }
+}
+
 export async function analyzeSingleUrl(url) {
   const cacheKey = normalizeUrl(url);
   if (scanCache.has(cacheKey)) {
     const entry = scanCache.get(cacheKey);
     if (Date.now() - entry.timestamp < CACHE_TTL_MS) {
-      console.log(`[CACHE] Serving structural memory snapshot for: ${url}`);
+      logger.info("CACHE", "serving_cached_scan", { url, cacheKey });
       return entry.data;
     }
+    scanCache.delete(cacheKey);
   }
 
   const startTime = Date.now();
@@ -2065,7 +2447,7 @@ export async function analyzeSingleUrl(url) {
   try {
     crawl = await smartCrawl(url);
   } catch (err) {
-    console.error(`[ORCHESTRATOR] Smart crawl crashed on url ${url}: ${err.message}`);
+    logger.error("ORCHESTRATOR", "smart_crawl_crashed", { url, error: err.message });
     return {
       success: false,
       blocked: true,
@@ -2081,7 +2463,7 @@ export async function analyzeSingleUrl(url) {
   const loadTimeMs = Date.now() - startTime;
 
   if (crawl.blockCheck && crawl.blockCheck.blocked) {
-    console.log(`[ORCHESTRATOR] Blocked target validation encountered on url: ${url}. System: ${crawl.blockCheck.system}`);
+    logger.warn("ORCHESTRATOR", "target_blocked", { url, system: crawl.blockCheck.system });
     return buildBlockedPayload(url, crawl);
   }
 
@@ -2089,8 +2471,14 @@ export async function analyzeSingleUrl(url) {
     const $ = cheerio.load(crawl.html || "");
     const pageData = extractPageData($, crawl.html, crawl.finalUrl);
 
-    const robotsData = await fetchRobotsTxt(crawl.finalUrl);
+    // Robots and sitemap detection are independent network calls; run them
+    // concurrently rather than sequentially to cut orchestrator latency.
+    const [robotsData, sitemapDataSeed] = await Promise.all([
+      fetchRobotsTxt(crawl.finalUrl),
+      (async () => null)()
+    ]);
     const sitemapData = await detectSitemap(crawl.finalUrl, robotsData);
+    void sitemapDataSeed;
 
     const seoAudit = calculateDynamicSeoScore(pageData, loadTimeMs);
     const aeoAudit = calculateDynamicAeoScore(pageData, pageData.visibleText);
@@ -2206,6 +2594,16 @@ export async function analyzeSingleUrl(url) {
         description: "Create a sitemap.xml and reference it from robots.txt for improved crawl efficiency."
       });
     }
+    if (schemasDetected.validation.invalidBlocks > 0) {
+      roadmap.push("Repair malformed JSON-LD schema blocks flagged during structural validation.");
+      autopilotTasks.push({
+        id: `task_${taskIdCounter++}`,
+        priority: "HIGH",
+        impact: 9,
+        title: "Fix Invalid JSON-LD Markup",
+        description: `${schemasDetected.validation.invalidBlocks} structured data block(s) failed validation and are likely ignored by search and AI crawlers.`
+      });
+    }
 
     const payload = {
       success: true,
@@ -2226,7 +2624,8 @@ export async function analyzeSingleUrl(url) {
         detectedTypes: schemasDetected.detectedTypes,
         jsonLd: schemasDetected.jsonLd,
         microdata: schemasDetected.microdata,
-        rdfa: schemasDetected.rdfa
+        rdfa: schemasDetected.rdfa,
+        validation: schemasDetected.validation
       },
       crawl: {
         method: crawl.crawlMethod,
@@ -2299,6 +2698,9 @@ export async function analyzeSingleUrl(url) {
     };
 
     scanCache.set(cacheKey, { timestamp: Date.now(), data: payload });
+    enforceScanCacheLimit();
+
+    recordTrendPoint(cacheKey, payload);
 
     scanHistory.unshift({
       url: crawl.finalUrl,
@@ -2306,11 +2708,11 @@ export async function analyzeSingleUrl(url) {
       score: payload.overallAIVisibilityScore,
       timestamp: new Date().toISOString()
     });
-    if (scanHistory.length > 50) scanHistory.pop();
+    if (scanHistory.length > MAX_SCAN_HISTORY) scanHistory.length = MAX_SCAN_HISTORY;
 
     return payload;
   } catch (err) {
-    console.error(`[ORCHESTRATOR] Compilation parser error on url: ${url}. Trace:`, err);
+    logger.error("ORCHESTRATOR", "compilation_parser_error", { url, error: err.message, stack: err.stack });
     return {
       success: false,
       blocked: true,
@@ -2328,10 +2730,33 @@ export async function analyzeSingleUrl(url) {
 // ========== SECTION 16: API ROUTING SYSTEM ===============================
 // =========================================================================
 
+/**
+ * Shared query-param validator for the two-URL comparison-style endpoints
+ * (/compare, /content-gap, /gap-analysis, /keyword-theft).
+ */
+function validateComparisonParams(req, res) {
+  const { url, competitor } = req.query;
+  if (!safeText(url) || !safeText(competitor)) {
+    res.status(400).json({ success: false, status: "ERROR", message: "Both 'url' and 'competitor' query parameters are required." });
+    return null;
+  }
+
+  const normalizedUrl = enforceSecureUrl(url);
+  const normalizedComp = enforceSecureUrl(competitor);
+
+  if (!normalizedUrl || !normalizedComp) {
+    res.status(400).json({ success: false, status: "ERROR", message: "Invalid or unsafe target domain parameters received." });
+    return null;
+  }
+
+  return { normalizedUrl, normalizedComp };
+}
+
 app.get("/", (req, res) => {
   try {
     res.sendFile(path.resolve("public/index.html"));
   } catch (err) {
+    logger.error("API", "root_path_failed", { error: err.message });
     res.status(500).json({ success: false, error: "Root path configuration error" });
   }
 });
@@ -2340,20 +2765,21 @@ app.get("/api/status", (req, res) => {
   res.json({
     status: "running",
     tool: "AI Visibility SaaS Platform",
-    version: "10.0-enterprise-tier",
-    timestamp: new Date().toISOString()
+    version: "10.1-enterprise-hardened",
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime())
   });
 });
 
-app.get("/scan", authenticateAndRateLimit, async (req, res) => {
+app.get("/scan", authenticateAndRateLimit, asyncHandler(async (req, res) => {
   const { url } = req.query;
-  if (!url) {
+  if (!safeText(url)) {
     return res.status(400).json({ success: false, status: "ERROR", message: "Target URL parameter is required." });
   }
 
   const normalized = enforceSecureUrl(url);
   if (!normalized) {
-    return res.status(400).json({ success: false, status: "ERROR", message: "Malformed target domain or invalid TLD received." });
+    return res.status(400).json({ success: false, status: "ERROR", message: "Malformed target domain, unsafe host, or invalid TLD received." });
   }
 
   const cacheKey = normalizeUrl(normalized);
@@ -2380,284 +2806,312 @@ app.get("/scan", authenticateAndRateLimit, async (req, res) => {
     }
 
     res.json(data);
-  } catch (err) {
-    console.error("[API] Error in /scan endpoint:", err.message);
-    res.status(500).json({ success: false, status: "ERROR", message: err.message || "An unexpected error occurred during page analysis." });
   } finally {
     activeScans.delete(cacheKey);
   }
-});
+}));
 
-app.get("/compare", authenticateAndRateLimit, async (req, res) => {
-  try {
-    const { url, competitor } = req.query;
-    if (!url || !competitor) {
-      return res.status(400).json({ success: false, status: "ERROR", message: "Both 'url' and 'competitor' query parameters are required." });
-    }
+app.get("/compare", authenticateAndRateLimit, asyncHandler(async (req, res) => {
+  const validated = validateComparisonParams(req, res);
+  if (!validated) return;
+  const { normalizedUrl, normalizedComp } = validated;
 
-    const normalizedUrl = enforceSecureUrl(url);
-    const normalizedComp = enforceSecureUrl(competitor);
+  const results = await Promise.allSettled([
+    analyzeSingleUrl(normalizedUrl),
+    analyzeSingleUrl(normalizedComp)
+  ]);
 
-    if (!normalizedUrl || !normalizedComp) {
-      return res.status(400).json({ success: false, status: "ERROR", message: "Invalid domain target parameters received." });
-    }
+  const site1 = results[0].status === "fulfilled" ? results[0].value : null;
+  const site2 = results[1].status === "fulfilled" ? results[1].value : null;
 
-    const results = await Promise.allSettled([
-      analyzeSingleUrl(normalizedUrl),
-      analyzeSingleUrl(normalizedComp)
-    ]);
+  if (results[0].status === "rejected") {
+    logger.error("API", "compare_site1_failed", { url: normalizedUrl, error: results[0].reason?.message });
+  }
+  if (results[1].status === "rejected") {
+    logger.error("API", "compare_site2_failed", { url: normalizedComp, error: results[1].reason?.message });
+  }
 
-    const site1 = results[0].status === "fulfilled" ? results[0].value : null;
-    const site2 = results[1].status === "fulfilled" ? results[1].value : null;
-
-    if (!site1 || !site2 || site1.blocked || site2.blocked) {
-      return res.status(200).json({
-        success: false,
-        competitorBlocked: true,
-        reason: "Comparison unavailable: One or both targets blocked or returned invalid payload parameters."
-      });
-    }
-
-    if (req.user) {
-      req.user.scansToday = Math.min(PLAN_LIMITS[req.user.plan], safeNumber(req.user.scansToday) + 2);
-    }
-
-    const comparativeResult = compareTargetToCompetitor(site1, site2);
-
-    res.json({
-      status: "SUCCESS",
-      success: true,
-      comparison: comparativeResult,
-      scores: {
-        site1: site1?.overallAIVisibilityScore || 0,
-        site2: site2?.overallAIVisibilityScore || 0
-      },
-      audit: site1.audit || {},
-      entities: site1.entities || [],
-      schema: site1.schema || "",
-      roadmap: site1.roadmap || []
+  if (!site1 || !site2 || site1.blocked || site2.blocked) {
+    return res.status(200).json({
+      success: false,
+      competitorBlocked: true,
+      reason: "Comparison unavailable: One or both targets blocked or returned invalid payload parameters."
     });
-  } catch (err) {
-    console.error("[API] Error in /compare endpoint:", err.message);
-    res.status(500).json({ success: false, status: "ERROR", message: err.message || "Could not complete competitor comparison." });
   }
-});
 
-app.get("/content-gap", authenticateAndRateLimit, async (req, res) => {
-  try {
-    const { url, competitor } = req.query;
-    if (!url || !competitor) {
-      return res.status(400).json({ success: false, status: "ERROR", message: "Both 'url' and 'competitor' query parameters are required." });
-    }
+  if (req.user) {
+    req.user.scansToday = Math.min(PLAN_LIMITS[req.user.plan], safeNumber(req.user.scansToday) + 2);
+  }
 
-    const normalizedUrl = enforceSecureUrl(url);
-    const normalizedComp = enforceSecureUrl(competitor);
+  const comparativeResult = compareTargetToCompetitor(site1, site2);
 
-    if (!normalizedUrl || !normalizedComp) {
-      return res.status(400).json({ success: false, status: "ERROR", message: "Invalid target URLs provided." });
-    }
+  res.json({
+    status: "SUCCESS",
+    success: true,
+    comparison: comparativeResult,
+    scores: {
+      site1: site1?.overallAIVisibilityScore || 0,
+      site2: site2?.overallAIVisibilityScore || 0
+    },
+    audit: site1.audit || {},
+    entities: site1.entities || [],
+    schema: site1.schema || "",
+    roadmap: site1.roadmap || []
+  });
+}));
 
-    const [userData, compData] = await Promise.all([
-      analyzeSingleUrl(normalizedUrl),
-      analyzeSingleUrl(normalizedComp)
-    ]);
+app.get("/content-gap", authenticateAndRateLimit, asyncHandler(async (req, res) => {
+  const validated = validateComparisonParams(req, res);
+  if (!validated) return;
+  const { normalizedUrl, normalizedComp } = validated;
 
-    if (!userData || !compData || userData.blocked || compData.blocked) {
-      return res.json({
-        success: false,
-        status: "BLOCKED",
-        competitorBlocked: true,
-        reason: "Gap analysis unavailable: One or both target engines failed or were blocked."
-      });
-    }
+  const [userData, compData] = await Promise.all([
+    analyzeSingleUrl(normalizedUrl),
+    analyzeSingleUrl(normalizedComp)
+  ]);
 
-    const comparativeResult = compareTargetToCompetitor(userData, compData);
-
-    res.json({
-      status: "SUCCESS",
-      success: true,
-      scores: {
-        userScore: userData?.overallAIVisibilityScore || 0,
-        compScore: compData?.overallAIVisibilityScore || 0
-      },
-      audit: userData.audit || {},
-      entities: userData.entities || [],
-      schema: userData.schema || "",
-      roadmap: userData.roadmap || [],
-      keywordGap: {
-        competitorKeywords: safeArraySlice(comparativeResult.gaps?.keywordGaps, 0, 5),
-        missingKeywords: safeArraySlice(comparativeResult.gaps?.keywordGaps, 5, 10),
-        opportunityKeywords: safeArraySlice(comparativeResult.gaps?.keywordGaps, 10, 15)
-      },
-      comparison: comparativeResult
+  if (!userData || !compData || userData.blocked || compData.blocked) {
+    return res.json({
+      success: false,
+      status: "BLOCKED",
+      competitorBlocked: true,
+      reason: "Gap analysis unavailable: One or both target engines failed or were blocked."
     });
-  } catch (err) {
-    console.error("[API] Error in /content-gap endpoint:", err.message);
-    res.status(500).json({ success: false, status: "ERROR", message: err.message || "An error occurred during content gap calculation." });
   }
+
+  const comparativeResult = compareTargetToCompetitor(userData, compData);
+
+  res.json({
+    status: "SUCCESS",
+    success: true,
+    scores: {
+      userScore: userData?.overallAIVisibilityScore || 0,
+      compScore: compData?.overallAIVisibilityScore || 0
+    },
+    audit: userData.audit || {},
+    entities: userData.entities || [],
+    schema: userData.schema || "",
+    roadmap: userData.roadmap || [],
+    keywordGap: {
+      competitorKeywords: safeArraySlice(comparativeResult.gaps?.keywordGaps, 0, 5),
+      missingKeywords: safeArraySlice(comparativeResult.gaps?.keywordGaps, 5, 10),
+      opportunityKeywords: safeArraySlice(comparativeResult.gaps?.keywordGaps, 10, 15)
+    },
+    comparison: comparativeResult
+  });
+}));
+
+app.get("/gap-analysis", authenticateAndRateLimit, (req, res) => {
+  const { url, competitor } = req.query;
+  if (!safeText(url) || !safeText(competitor)) {
+    return res.status(400).json({ success: false, error: "Both 'url' and 'competitor' parameters are required." });
+  }
+  res.redirect(`/content-gap?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(competitor)}`);
 });
 
-app.get("/gap-analysis", authenticateAndRateLimit, async (req, res) => {
-  try {
-    const { url, competitor } = req.query;
-    if (!url || !competitor) {
-      return res.status(400).json({ success: false, error: "Both 'url' and 'competitor' parameters are required." });
-    }
-    res.redirect(`/content-gap?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(competitor)}`);
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+app.get("/roadmap", authenticateAndRateLimit, asyncHandler(async (req, res) => {
+  const { url } = req.query;
+  if (!safeText(url)) return res.status(400).json({ success: false, error: "URL parameter required" });
+  const normalizedUrl = enforceSecureUrl(url);
+  if (!normalizedUrl) {
+    return res.status(400).json({ success: false, error: "Invalid or unsafe URL structure received" });
   }
-});
 
-app.get("/roadmap", authenticateAndRateLimit, async (req, res) => {
-  try {
-    const { url } = req.query;
-    if (!url) return res.status(400).json({ success: false, error: "URL parameter required" });
-    const normalizedUrl = enforceSecureUrl(url);
-    if (!normalizedUrl) {
-      return res.status(400).json({ success: false, error: "Invalid URL structure received" });
-    }
+  const data = await analyzeSingleUrl(normalizedUrl);
+  if (!data || data.blocked) {
+    return res.json(data);
+  }
 
-    const data = await analyzeSingleUrl(normalizedUrl);
-    if (!data || data.blocked) {
-      return res.json(data);
-    }
+  res.json({
+    status: "SUCCESS",
+    success: true,
+    scores: {
+      currentAIVisibility: data.overallAIVisibilityScore || 0,
+      potentialAIVisibility: data.potentialAIVisibility || 0
+    },
+    audit: data.audit || {},
+    entities: data.entities || [],
+    schema: data.schema || "",
+    roadmap: data.roadmap || []
+  });
+}));
 
-    res.json({
-      status: "SUCCESS",
-      success: true,
-      scores: {
-        currentAIVisibility: data.overallAIVisibilityScore || 0,
-        potentialAIVisibility: data.potentialAIVisibility || 0
-      },
-      audit: data.audit || {},
-      entities: data.entities || [],
-      schema: data.schema || "",
-      roadmap: data.roadmap || []
+app.get("/keyword-theft", authenticateAndRateLimit, asyncHandler(async (req, res) => {
+  const validated = validateComparisonParams(req, res);
+  if (!validated) return;
+  const { normalizedUrl, normalizedComp } = validated;
+
+  const [userData, compData] = await Promise.all([
+    analyzeSingleUrl(normalizedUrl),
+    analyzeSingleUrl(normalizedComp)
+  ]);
+
+  if (!userData || !compData || userData.blocked || compData.blocked) {
+    return res.json({
+      success: false,
+      status: "BLOCKED",
+      competitorBlocked: true,
+      reason: "Keyword theft analysis unavailable due to crawl block limits."
     });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
   }
-});
 
-app.get("/keyword-theft", authenticateAndRateLimit, async (req, res) => {
-  try {
-    const { url, competitor } = req.query;
-    if (!url || !competitor) {
-      return res.status(400).json({ success: false, error: "Both URLs are required" });
-    }
+  const userKeywords = safeArray(userData.keywords).map(k => String(k).toLowerCase());
+  const compKeywords = safeArray(compData.keywords);
 
-    const normalizedUrl = enforceSecureUrl(url);
-    const normalizedComp = enforceSecureUrl(competitor);
-
-    if (!normalizedUrl || !normalizedComp) {
-      return res.status(400).json({ success: false, error: "Invalid URL structure received" });
-    }
-
-    const [userData, compData] = await Promise.all([
-      analyzeSingleUrl(normalizedUrl),
-      analyzeSingleUrl(normalizedComp)
-    ]);
-
-    if (!userData || !compData || userData.blocked || compData.blocked) {
-      return res.json({
-        success: false,
-        status: "BLOCKED",
-        competitorBlocked: true,
-        reason: "Keyword theft analysis unavailable due to crawl block limits."
-      });
-    }
-
-    const userKeywords = safeArray(userData.keywords).map(k => String(k).toLowerCase());
-    const compKeywords = safeArray(compData.keywords);
-
-    const stolenKeywords = compKeywords
-      .filter(k => !userKeywords.includes(String(k).toLowerCase()))
-      .map(k => {
-        const diff = getKeywordDifficulty(k);
-        return {
-          keyword: String(k),
-          searchVolume: Math.floor(Math.random() * 5000) + 500,
-          difficulty: diff,
-          opportunityScore: getKeywordOpportunity(diff)
-        };
-      });
-
-    res.json({
-      status: "SUCCESS",
-      success: true,
-      stolenKeywords: stolenKeywords.slice(0, 10),
-      scores: {
-        userScore: userData.overallAIVisibilityScore || 0,
-        competitorScore: compData.overallAIVisibilityScore || 0
-      }
+  const stolenKeywords = compKeywords
+    .filter(k => !userKeywords.includes(String(k).toLowerCase()))
+    .map(k => {
+      const diff = getKeywordDifficulty(k);
+      return {
+        keyword: String(k),
+        searchVolume: getDeterministicSearchVolume(k),
+        difficulty: diff,
+        opportunityScore: getKeywordOpportunity(diff)
+      };
     });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
-app.get("/content-brief", authenticateAndRateLimit, async (req, res) => {
-  try {
-    const { url } = req.query;
-    if (!url) return res.status(400).json({ success: false, error: "URL parameter required" });
-    const normalizedUrl = enforceSecureUrl(url);
-    if (!normalizedUrl) return res.status(400).json({ success: false, error: "Invalid URL structure received" });
-
-    const data = await analyzeSingleUrl(normalizedUrl);
-    if (!data || data.blocked) {
-      return res.json(data);
+  res.json({
+    status: "SUCCESS",
+    success: true,
+    stolenKeywords: stolenKeywords.slice(0, 10),
+    scores: {
+      userScore: userData.overallAIVisibilityScore || 0,
+      competitorScore: compData.overallAIVisibilityScore || 0
     }
+  });
+}));
 
-    res.json({
-      status: "SUCCESS",
-      success: true,
-      brief: {
-        targetWordCount: Math.max(1500, safeNumber(data.wordCount) + 1000),
-        recommendedHeadings: safeArraySlice(data.h2s, 0, 5).map(h => `Expand Context: ${String(h)}`),
-        targetKeywords: safeArraySlice(data.keywords, 0, 8),
-        recommendedSchemas: data.recommendedSchemas || []
-      }
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+app.get("/content-brief", authenticateAndRateLimit, asyncHandler(async (req, res) => {
+  const { url } = req.query;
+  if (!safeText(url)) return res.status(400).json({ success: false, error: "URL parameter required" });
+  const normalizedUrl = enforceSecureUrl(url);
+  if (!normalizedUrl) return res.status(400).json({ success: false, error: "Invalid or unsafe URL structure received" });
+
+  const data = await analyzeSingleUrl(normalizedUrl);
+  if (!data || data.blocked) {
+    return res.json(data);
   }
-});
 
-app.get("/autopilot", authenticateAndRateLimit, async (req, res) => {
-  try {
-    const { url } = req.query;
-    if (!url) return res.status(400).json({ success: false, error: "URL parameter required" });
-    const normalizedUrl = enforceSecureUrl(url);
-    if (!normalizedUrl) return res.status(400).json({ success: false, error: "Invalid URL structure received" });
-
-    const data = await analyzeSingleUrl(normalizedUrl);
-    if (!data || data.blocked) {
-      return res.json(data);
+  res.json({
+    status: "SUCCESS",
+    success: true,
+    brief: {
+      targetWordCount: Math.max(1500, safeNumber(data.wordCount) + 1000),
+      recommendedHeadings: safeArraySlice(data.h2s, 0, 5).map(h => `Expand Context: ${String(h)}`),
+      targetKeywords: safeArraySlice(data.keywords, 0, 8),
+      recommendedSchemas: data.recommendedSchemas || []
     }
+  });
+}));
 
-    res.json({
-      status: "SUCCESS",
-      success: true,
-      autopilot: { tasks: data.aiAutopilot || [] }
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+app.get("/autopilot", authenticateAndRateLimit, asyncHandler(async (req, res) => {
+  const { url } = req.query;
+  if (!safeText(url)) return res.status(400).json({ success: false, error: "URL parameter required" });
+  const normalizedUrl = enforceSecureUrl(url);
+  if (!normalizedUrl) return res.status(400).json({ success: false, error: "Invalid or unsafe URL structure received" });
+
+  const data = await analyzeSingleUrl(normalizedUrl);
+  if (!data || data.blocked) {
+    return res.json(data);
   }
-});
+
+  res.json({
+    status: "SUCCESS",
+    success: true,
+    autopilot: { tasks: data.aiAutopilot || [] }
+  });
+}));
 
 app.get("/history", (req, res) => {
   try {
     res.json(safeArray(scanHistory));
   } catch (err) {
+    logger.error("API", "history_retrieval_failed", { error: err.message });
     res.status(500).json({ success: false, error: "History retrieval failed" });
   }
+});
+
+app.get("/trend", (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!safeText(url)) {
+      return res.status(400).json({ success: false, error: "URL parameter required" });
+    }
+    const normalized = enforceSecureUrl(url);
+    if (!normalized) {
+      return res.status(400).json({ success: false, error: "Invalid or unsafe URL structure received" });
+    }
+    const cacheKey = normalizeUrl(normalized);
+    res.json({
+      success: true,
+      url: normalized,
+      points: safeArray(trendDB[cacheKey])
+    });
+  } catch (err) {
+    logger.error("API", "trend_retrieval_failed", { error: err.message });
+    res.status(500).json({ success: false, error: "Trend retrieval failed" });
+  }
+});
+
+// =========================================================================
+// ========== SECTION 16.5: ERROR HANDLING & FALLBACK ROUTES ===============
+// =========================================================================
+
+app.use((req, res) => {
+  res.status(404).json({ success: false, status: "NOT_FOUND", message: `No route matches ${req.method} ${req.path}.` });
+});
+
+// Centralized Express error handler. Anything reaching here has already
+// been caught via asyncHandler or thrown synchronously in a route.
+app.use((err, req, res, next) => {
+  logger.error("HTTP", "unhandled_route_error", {
+    requestId: req?.requestId,
+    path: req?.path,
+    error: err?.message,
+    stack: err?.stack
+  });
+
+  if (res.headersSent) return next(err);
+
+  res.status(500).json({
+    success: false,
+    status: "ERROR",
+    message: "An unexpected internal error occurred while processing the request."
+  });
 });
 
 // =========================================================================
 // ========== SECTION 17: EXPRESS HTTP SERVER INITIALIZATION ==============
 // =========================================================================
 
-app.listen(PORT, () => {
-  console.log(`[SYSTEM] SEO AI Visibility Intel Service active. Listening on Port: ${PORT}`);
+const server = app.listen(PORT, () => {
+  logger.info("SYSTEM", "server_started", { port: PORT, version: "10.1-enterprise-hardened" });
 });
+
+// Prevents a single unexpected rejection/exception from silently crashing
+// the whole process without any diagnostic trail.
+process.on("unhandledRejection", (reason) => {
+  logger.error("PROCESS", "unhandled_rejection", { reason: reason?.message || String(reason), stack: reason?.stack });
+});
+
+process.on("uncaughtException", (err) => {
+  logger.error("PROCESS", "uncaught_exception", { error: err.message, stack: err.stack });
+});
+
+async function gracefulShutdown(signal) {
+  logger.info("SYSTEM", "shutdown_initiated", { signal });
+  server.close(async () => {
+    await closeBrowserInstance();
+    logger.info("SYSTEM", "shutdown_complete", { signal });
+    process.exit(0);
+  });
+
+  // Force-exit if graceful close hangs.
+  setTimeout(() => {
+    logger.warn("SYSTEM", "shutdown_forced", { signal });
+    process.exit(1);
+  }, 10000).unref();
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

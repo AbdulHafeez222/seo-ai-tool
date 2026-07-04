@@ -2875,7 +2875,7 @@ export async function analyzeSingleUrl(url) {
     ]);
     const sitemapData = await detectSitemap(crawl.finalUrl, robotsData);
     void sitemapDataSeed;
-
+  const schemasDetected = auditPageSchemas($, crawl.html);
    const seoAudit = await calculateDynamicSeoScore(pageData, loadTimeMs, {
   robotsData,
   sitemapData,
@@ -2907,7 +2907,7 @@ export async function analyzeSingleUrl(url) {
     const authorityAudit = calculateDynamicAuthority(enrichedPageData);
     const trustAudit = scanDynamicTrustSignals($, crawl.html, crawl.finalUrl, enrichedPageData);
 
-    const schemasDetected = auditPageSchemas($, crawl.html);
+    
     const schemaBlock = buildSchemaRecommendations(schemasDetected.detectedTypes, pageData.title, pageData.metaDescription, crawl.finalUrl);
     const imageSeoAudit = calculateImageSeoScore(pageData);
     const internalLinkAudit = calculateInternalLinkScoreDetailed(pageData.linkAnalysisDetail);

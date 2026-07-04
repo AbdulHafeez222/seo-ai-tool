@@ -1222,19 +1222,20 @@ export function extractDatesAndAuthor($, schemas) {
 }
 
 export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription, bodyText, url, schemas) {
-  const brands = [];
-  const locations = [];
-  const services = [];
-  const people = [];
-  const organizations = [];
-  const products = [];
+  const verified = {
+    brands: [], organizations: [], people: [], products: [],
+    software: [], locations: []
+  };
+  const candidates = {
+    services: [], locations: []
+  };
 
   const brandName = getBrandNameEnhanced(url, $, title, schemas);
   if (brandName && brandName !== "Brand Authority") {
-    brands.push(brandName);
-    organizations.push(brandName);
+    verified.brands.push({ name: brandName, source: "meta/title/domain-derived" });
   }
 
+  // Verified entities: only from structured data the page itself declares.
   try {
     $('script[type="application/ld+json"]').each((_, el) => {
       try {
@@ -1250,27 +1251,26 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
           }
           const type = String(item['@type'] || '').toLowerCase();
           const name = String(item.name || '').trim();
+          if (!name) return;
 
-          if (name) {
-            if (type.includes('organization')) {
-              organizations.push(name);
-              brands.push(name);
-            }
-            if (type.includes('person')) {
-              people.push(name);
-            }
-            if (type.includes('product')) {
-              products.push(name);
-            }
-            if (type.includes('localbusiness')) {
-              organizations.push(name);
-              brands.push(name);
-            }
+          if (type.includes('organization') || type.includes('localbusiness')) {
+            verified.organizations.push({ name, source: "json-ld", schemaType: item['@type'] });
+            verified.brands.push({ name, source: "json-ld", schemaType: item['@type'] });
           }
-
+          if (type.includes('person')) {
+            verified.people.push({ name, source: "json-ld", schemaType: item['@type'], jobTitle: safeText(item.jobTitle) || null });
+          }
+          if (type.includes('product')) {
+            verified.products.push({ name, source: "json-ld", schemaType: item['@type'] });
+          }
+          if (type.includes('softwareapplication') || type.includes('webapplication')) {
+            verified.software.push({ name, source: "json-ld", schemaType: item['@type'] });
+          }
           if (type.includes('postaladdress')) {
-            if (item.addressLocality) locations.push(item.addressLocality);
-            if (item.addressCountry) locations.push(item.addressCountry);
+            const locality = safeText(item.addressLocality);
+            const country = safeText(item.addressCountry);
+            if (locality) verified.locations.push({ name: locality, source: "json-ld", type: "locality" });
+            if (country) verified.locations.push({ name: country, source: "json-ld", type: "country" });
           }
         };
         items.forEach(traverse);
@@ -1278,53 +1278,95 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
     });
   } catch (err) {}
 
+  // Verified via microdata (itemtype/itemprop) as a second structured-data source.
+  try {
+    $('[itemscope][itemtype*="schema.org"]').each((_, el) => {
+      const itemType = safeText($(el).attr('itemtype'));
+      const nameEl = $(el).find('[itemprop="name"]').first();
+      const name = safeText(nameEl.text());
+      if (!name) return;
+      const typeLower = itemType.toLowerCase();
+      if (typeLower.includes('organization')) verified.organizations.push({ name, source: "microdata", schemaType: itemType });
+      if (typeLower.includes('person')) verified.people.push({ name, source: "microdata", schemaType: itemType });
+      if (typeLower.includes('product')) verified.products.push({ name, source: "microdata", schemaType: itemType });
+    });
+  } catch (err) {}
+
+  // Candidate entities: pattern-matched against known service/city lists.
+  // Explicitly NOT presented as "verified" — the page never declared these,
+  // we're inferring them from keyword co-occurrence in visible text only.
   const combinedText = [title, h1, ...safeArray(h2s), ...safeArray(h3s), metaDescription, bodyText].join(" ");
 
   SERVICE_PATTERNS.forEach(srv => {
     if (new RegExp(`\\b${srv}\\b`, 'i').test(combinedText)) {
-      services.push(srv);
+      candidates.services.push({ name: srv, source: "keyword-match", confidence: "unverified" });
     }
   });
 
   CITY_PATTERNS.forEach(city => {
     if (new RegExp(`\\b${city}\\b`, 'i').test(combinedText)) {
-      locations.push(city);
+      candidates.locations.push({ name: city, source: "keyword-match", confidence: "unverified" });
     }
   });
 
-  const cleanList = (arr, fallback = []) => {
-    const result = [...new Set(safeArray(arr).map(x => safeText(x).trim()).filter(x => x.length > 1))].map(cleanText).filter(Boolean);
-    return result.length > 0 ? result.slice(0, 10) : fallback;
+  const dedupeByName = (arr) => {
+    const seen = new Set();
+    return arr.filter(item => {
+      const key = item.name.toLowerCase().trim();
+      if (!key || key.length <= 1 || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 10);
   };
 
-  const finalBrands = cleanList(brands, [brandName || "Brand Authority"]);
-  const finalOrgs = cleanList(organizations, [brandName || "Brand Authority"]);
-  const finalLocations = cleanList(locations, ["Global Domain Context"]);
-  const finalServices = cleanList(services, ["Digital Framework Optimizations"]);
-  const finalPeople = cleanList(people, ["Industry Specialist"]);
-  const finalProducts = cleanList(products, ["Service Platform Matrix"]);
+  const finalVerified = {
+    brands: dedupeByName(verified.brands),
+    organizations: dedupeByName(verified.organizations),
+    people: dedupeByName(verified.people),
+    products: dedupeByName(verified.products),
+    software: dedupeByName(verified.software),
+    locations: dedupeByName(verified.locations)
+  };
+  const finalCandidates = {
+    services: dedupeByName(candidates.services),
+    locations: dedupeByName(candidates.locations)
+  };
 
-  const structuredEntitiesList = [...new Set([
-    ...finalBrands,
-    ...finalServices,
-    ...finalLocations,
-    ...finalPeople,
-    ...finalOrgs,
-    ...finalProducts
-  ])];
+  const verifiedCount = Object.values(finalVerified).reduce((sum, arr) => sum + arr.length, 0);
+  const candidateCount = Object.values(finalCandidates).reduce((sum, arr) => sum + arr.length, 0);
+
+  // Backward-compatible flat name lists for existing frontend fields
+  // (brands/organizations/services/locations/people/products as plain
+  // string arrays), now sourced only from verified data where possible,
+  // falling back to a neutral placeholder rather than a fabricated name.
+  const namesOnly = (arr, fallback) => arr.length > 0 ? arr.map(i => i.name) : fallback;
 
   return {
-    brands: finalBrands,
-    locations: finalLocations,
-    services: finalServices,
-    people: finalPeople,
-    organizations: finalOrgs,
-    products: finalProducts,
-    entities: structuredEntitiesList,
-    totalEntities: structuredEntitiesList.length
+    // New verified/candidate structure — the source of truth going forward.
+    verified: finalVerified,
+    candidates: finalCandidates,
+    verifiedEntityCount: verifiedCount,
+    candidateEntityCount: candidateCount,
+
+    // Legacy flat fields preserved for existing payload/frontend compatibility.
+    brands: namesOnly(finalVerified.brands, [brandName || "Brand Authority"]),
+    organizations: namesOnly(finalVerified.organizations, [brandName || "Brand Authority"]),
+    locations: namesOnly([...finalVerified.locations], namesOnly(finalCandidates.locations, ["Global Domain Context"])),
+    services: namesOnly(finalCandidates.services, ["Digital Framework Optimizations"]),
+    people: namesOnly(finalVerified.people, ["Industry Specialist"]),
+    products: namesOnly(finalVerified.products, ["Service Platform Matrix"]),
+    entities: [...new Set([
+      ...namesOnly(finalVerified.brands, []),
+      ...namesOnly(finalCandidates.services, []),
+      ...namesOnly(finalVerified.locations, []),
+      ...namesOnly(finalVerified.people, []),
+      ...namesOnly(finalVerified.organizations, []),
+      ...namesOnly(finalVerified.products, []),
+      ...namesOnly(finalVerified.software, [])
+    ])],
+    totalEntities: verifiedCount + candidateCount
   };
 }
-
 export function analyzeInternalLinks($, url, h2s) {
   let baseHostname = "";
   let baseProto = "https:";
@@ -1486,6 +1528,7 @@ export function extractPageData($, html, url) {
 
   const schemas = detectAllSchemas($, html);
   const entities = extractEntitiesV2($, html, title, h1s[0] || "", h2s, h3s, metaDescription, bodyText, url, schemas);
+entities.totalEntityCount = entities.verifiedEntityCount + entities.candidateEntityCount;
   const linkAnalysis = analyzeInternalLinks($, url, h2s);
   const dateInfo = extractDatesAndAuthor($, schemas);
 
@@ -2380,47 +2423,67 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
 
 export function analyzeEEATAdvanced($, bodyText, pageData) {
   const text = safeText(bodyText).toLowerCase();
-
-  const factors = [];
-  const issues = [];
+  const metrics = [];
 
   const hasAuthor = $('meta[name="author"]').length > 0 || $('[rel="author"]').length > 0 || $('[itemprop="author"]').length > 0 || Boolean(pageData?.author);
-  if (hasAuthor) {
-    factors.push("Verified author attribution on page metadata.");
-  } else {
-    issues.push("Missing explicit author profile references or author schema markup.");
-  }
+  metrics.push(buildMetric({
+    name: "Author Attribution",
+    raw: hasAuthor ? 15 : 0, max: 15, weight: 15,
+    reason: hasAuthor ? "Author metadata or byline detected." : "No author attribution found.",
+    evidence: hasAuthor ? `Author: ${safeText(pageData?.author, "detected via meta/rel/itemprop attribute")}.` : "No <meta name=\"author\">, [rel=author], or [itemprop=author] element found.",
+    recommendation: "Add a named author with a byline and, ideally, a linked author bio page."
+  }));
 
-  let hasAbout = false;
-  let hasContact = false;
-  let hasPrivacy = false;
-  let hasTerms = false;
-
+  let hasAbout = false, hasContact = false, hasPrivacy = false, hasTerms = false;
   $("a").each((_, el) => {
     const href = safeText($(el).attr("href")).toLowerCase();
     const textContext = safeText($(el).text()).toLowerCase();
-
     if (href.includes("about") || textContext.includes("about us") || textContext.includes("our story")) hasAbout = true;
     if (href.includes("contact") || textContext.includes("contact us") || textContext.includes("support")) hasContact = true;
     if (href.includes("privacy") || textContext.includes("privacy policy")) hasPrivacy = true;
     if (href.includes("terms") || textContext.includes("terms of service") || textContext.includes("terms and conditions")) hasTerms = true;
   });
 
-  if (hasAbout) factors.push("Active 'About' bio page or organizational profile linked.");
-  else issues.push("Missing dedicated 'About Us' section. Hinders corporate identity validation.");
+  metrics.push(buildMetric({
+    name: "About Page",
+    raw: hasAbout ? 10 : 0, max: 10, weight: 10,
+    reason: hasAbout ? "About/organizational profile link detected." : "No About Us section linked from this page.",
+    evidence: `Anchor scan for 'about'/'about us'/'our story': ${hasAbout ? "match found" : "no match"}.`,
+    recommendation: "Link a dedicated About Us page describing the organization, its people, and its mission."
+  }));
 
-  if (hasContact) factors.push("Active 'Contact Us' page or support channel discovered.");
-  else issues.push("Missing direct 'Contact' path. Generative models prefer websites with transparent access channels.");
+  metrics.push(buildMetric({
+    name: "Contact Page",
+    raw: hasContact ? 10 : 0, max: 10, weight: 10,
+    reason: hasContact ? "Contact/support link detected." : "No Contact Us path found.",
+    evidence: `Anchor scan for 'contact'/'contact us'/'support': ${hasContact ? "match found" : "no match"}.`,
+    recommendation: "Link a Contact page with a real business email, phone number, or support channel."
+  }));
 
-  if (hasPrivacy) factors.push("Active 'Privacy Policy' documentation page linked.");
-  else issues.push("Missing standard 'Privacy Policy' compliance pages.");
+  metrics.push(buildMetric({
+    name: "Privacy Policy",
+    raw: hasPrivacy ? 10 : 0, max: 10, weight: 10,
+    reason: hasPrivacy ? "Privacy Policy link detected." : "No Privacy Policy found.",
+    evidence: `Anchor scan for 'privacy'/'privacy policy': ${hasPrivacy ? "match found" : "no match"}.`,
+    recommendation: "Publish and link a Privacy Policy page — required for compliance and expected for trust signals."
+  }));
 
-  if (hasTerms) factors.push("Active 'Terms of Service' agreements linked.");
-  else issues.push("Missing transactional or organizational 'Terms of Service' blocks.");
+  metrics.push(buildMetric({
+    name: "Terms of Service",
+    raw: hasTerms ? 10 : 0, max: 10, weight: 10,
+    reason: hasTerms ? "Terms of Service link detected." : "No Terms of Service found.",
+    evidence: `Anchor scan for 'terms'/'terms of service'/'terms and conditions': ${hasTerms ? "match found" : "no match"}.`,
+    recommendation: "Publish and link a Terms of Service page defining usage rules and liability."
+  }));
 
   const organizationDetected = safeArray(pageData?.schema?.detectedTypes).some(t => String(t).toLowerCase() === "organization");
-  if (organizationDetected) factors.push("Structured 'Organization' schema mapped on page scripts.");
-  else issues.push("Missing structured 'Organization' schema tag mapping corporate metadata.");
+  metrics.push(buildMetric({
+    name: "Organization Schema",
+    raw: organizationDetected ? 10 : 0, max: 10, weight: 10,
+    reason: organizationDetected ? "Organization structured data detected." : "No Organization JSON-LD schema detected.",
+    evidence: organizationDetected ? "Organization type present in detected schema types." : "No Organization entry in detected schema types.",
+    recommendation: "Add Organization JSON-LD with name, logo, url, and sameAs social profile links."
+  }));
 
   let externalRefLinksCount = 0;
   $("a[href^='http']").each((_, el) => {
@@ -2431,60 +2494,69 @@ export function analyzeEEATAdvanced($, bodyText, pageData) {
       } catch {}
     }
   });
-  if (externalRefLinksCount > 2) {
-    factors.push("Outbound references to authoritative external platforms present.");
-  } else {
-    issues.push("Low outbound citation volume. Backing assertions with authoritative references improves expertise.");
-  }
+  metrics.push(buildMetric({
+    name: "Outbound Authority Citations",
+    raw: clamp(externalRefLinksCount, 0, 3) * 3.33,
+    max: 10, weight: 10,
+    reason: externalRefLinksCount > 2 ? "Outbound references to external platforms present." : "Low outbound citation volume.",
+    evidence: `${externalRefLinksCount} outbound external link(s) detected.`,
+    recommendation: "Cite authoritative external sources to support factual claims."
+  }));
 
   const credentialTerms = ["certified", "certificate", "ph.d", "doctor", "bachelor", "master of", "diploma", "accredited"];
-  const matchesCredentials = credentialTerms.some(term => text.includes(term));
-  if (matchesCredentials) factors.push("Implicit educational or professional credential terms matched in text.");
-  else issues.push("No explicit professional or academic credential attributes highlighted in content.");
+  const matchedCredentials = credentialTerms.filter(term => text.includes(term));
+  metrics.push(buildMetric({
+    name: "Credentials & Expertise Signals",
+    raw: matchedCredentials.length > 0 ? 10 : 0, max: 10, weight: 10,
+    reason: matchedCredentials.length > 0 ? "Professional/academic credential terms detected." : "No credential terms detected in visible text.",
+    evidence: matchedCredentials.length > 0 ? `Matched terms: ${matchedCredentials.join(", ")}.` : "No 'certified/accredited/Ph.D.' style terms found.",
+    recommendation: "State relevant certifications, degrees, or professional experience where applicable."
+  }));
 
   const yearsInBusinessTerms = ["founded in", "established in", "years in business", "est. 19", "est. 20", "years of experience", "celebrating our"];
-  const matchesYears = yearsInBusinessTerms.some(term => text.includes(term));
-  if (matchesYears) factors.push("Brand legacy or years in business parameters detected.");
-  else issues.push("No brand establishment date or timeline milestones located.");
+  const matchedYears = yearsInBusinessTerms.filter(term => text.includes(term));
+  metrics.push(buildMetric({
+    name: "Business Longevity Signals",
+    raw: matchedYears.length > 0 ? 5 : 0, max: 5, weight: 5,
+    reason: matchedYears.length > 0 ? "Business founding/tenure language detected." : "No business tenure signals detected.",
+    evidence: matchedYears.length > 0 ? `Matched phrases: ${matchedYears.join(", ")}.` : "No 'founded in/established in/years in business' phrasing found.",
+    recommendation: "Mention founding year or years of operating experience to reinforce established credibility."
+  }));
 
   const isHttps = pageData?.resolvedUrl ? pageData.resolvedUrl.startsWith("https://") : false;
-  if (isHttps) factors.push("Secure connection validated (HTTPS/SSL encryption active).");
-  else issues.push("Insecure page connection context (HTTP). Compromises trust ratings completely.");
+  metrics.push(buildMetric({
+    name: "HTTPS Security",
+    raw: isHttps ? 5 : 0, max: 5, weight: 5,
+    reason: isHttps ? "Secure HTTPS connection verified." : "Page served over insecure HTTP.",
+    evidence: `Resolved URL scheme: ${safeText(pageData?.resolvedUrl).split("://")[0] || "unknown"}.`,
+    recommendation: "Serve the page over HTTPS with a valid TLS certificate."
+  }));
 
-  if (pageData?.modifiedDate) factors.push("Explicit last-modified timestamp found for freshness verification.");
-  else issues.push("No last-modified timestamp detected. Freshness signal unavailable to crawlers.");
+  metrics.push(buildMetric({
+    name: "Content Freshness Timestamp",
+    raw: pageData?.modifiedDate ? 5 : 0, max: 5, weight: 5,
+    reason: pageData?.modifiedDate ? "Last-modified timestamp detected." : "No last-modified timestamp detected.",
+    evidence: pageData?.modifiedDate ? `Last modified: ${pageData.modifiedDate}.` : "No article:modified_time meta tag or dateModified schema property found.",
+    recommendation: "Expose a dateModified value via meta tags or Article/BlogPosting schema to signal freshness."
+  }));
 
-  let score = 10;
-
-  if (hasAuthor) score += 15;
-  if (hasAbout) score += 10;
-  if (hasContact) score += 10;
-  if (hasPrivacy) score += 10;
-  if (hasTerms) score += 10;
-  if (organizationDetected) score += 10;
-  if (externalRefLinksCount > 0) score += Math.min(10, externalRefLinksCount * 2);
-  if (matchesCredentials) score += 10;
-  if (matchesYears) score += 5;
-  if (isHttps) score += 10;
-  if (pageData?.modifiedDate) score += 5;
-
-  const eeatScore = clamp(score, 10, 100);
+  const result = aggregateMetrics(metrics);
 
   return {
-    score: eeatScore,
-    status: eeatScore >= 80 ? "High Trust (Enterprise Ready)" : eeatScore >= 50 ? "Verified Authority" : "Shallow Authority Profile",
-    factors: [...new Set(factors)],
-    issues: [...new Set(issues)],
+    score: result.score,
+    status: result.score >= 80 ? "High Trust (Enterprise Ready)" : result.score >= 50 ? "Verified Authority" : "Shallow Authority Profile",
+    metrics: result.metrics,
+    passedMetrics: result.passedMetrics,
+    failedMetrics: result.failedMetrics,
+    totalExpectedImprovement: result.totalExpectedImprovement,
+    // Backward-compatible fields for the existing frontend contract.
+    factors: result.metrics.filter(m => m.passed).map(m => m.reason),
+    issues: result.metrics.filter(m => !m.passed).map(m => m.reason),
     auditMetrics: {
-      hasAuthor,
-      hasAbout,
-      hasContact,
-      hasPrivacy,
-      hasTerms,
-      organizationDetected,
-      externalRefLinksCount,
-      matchesCredentials,
-      matchesYears,
+      hasAuthor, hasAbout, hasContact, hasPrivacy, hasTerms,
+      organizationDetected, externalRefLinksCount,
+      matchesCredentials: matchedCredentials.length > 0,
+      matchesYears: matchedYears.length > 0,
       isHttps
     }
   };
@@ -2495,98 +2567,101 @@ export function analyzeEEATAdvanced($, bodyText, pageData) {
 // =========================================================================
 
 export function calculateDynamicAuthority(pageData) {
-  let score = 15;
-  const factors = [];
-  const suggestions = [];
+  const metrics = [];
 
   const coveredClusters = pageData?.topicalAuthority?.clusters?.filter(c => c.status === "Active") || [];
-  const clusterCoveragePercent = pageData?.topicalAuthority?.coveragePercent || 0;
-
-  if (clusterCoveragePercent > 0) {
-    const clusterPoints = Math.round((clusterCoveragePercent / 100) * 25);
-    score += clusterPoints;
-    factors.push(`Covers ${coveredClusters.length} main intent query clusters (+${clusterPoints} points).`);
-  } else {
-    suggestions.push("Introduce subheadings targeting informational, commercial, and transactional user intent.");
-  }
+  const clusterCoveragePercent = safeNumber(pageData?.topicalAuthority?.coveragePercent);
+  metrics.push(buildMetric({
+    name: "Topical Intent Coverage",
+    raw: Math.round((clusterCoveragePercent / 100) * 25), max: 25, weight: 25,
+    reason: clusterCoveragePercent > 0 ? `Covers ${coveredClusters.length} of ${safeArray(pageData?.topicalAuthority?.clusters).length} intent clusters.` : "No intent clusters (informational/commercial/transactional/trust) covered.",
+    evidence: `Measured intent cluster coverage: ${clusterCoveragePercent}%.`,
+    recommendation: "Add subheadings addressing informational, commercial, and transactional user intent for this topic."
+  }));
 
   const entityCount = safeNumber(pageData?.entityDetails?.totalEntityCount || pageData?.entities?.length);
-  if (entityCount > 15) {
-    score += 15;
-    factors.push("High NLP entity representation (+15 points).");
-  } else if (entityCount > 5) {
-    score += 8;
-    factors.push("Moderate entity candidate volume (+8 points).");
-  } else {
-    suggestions.push("Integrate prominent industry-specific nouns, concepts, and service entities.");
-  }
+  metrics.push(buildMetric({
+    name: "Entity Representation",
+    raw: entityCount > 15 ? 15 : entityCount > 5 ? 8 : 0, max: 15, weight: 15,
+    reason: entityCount > 15 ? "High named-entity representation." : entityCount > 5 ? "Moderate entity representation." : "Low entity representation.",
+    evidence: `${entityCount} distinct verified entities detected.`,
+    recommendation: "Reference more specific brands, products, people, or locations relevant to the topic."
+  }));
 
   const internalLinks = safeNumber(pageData?.links?.internal || pageData?.internalLinks);
-  if (internalLinks > 10) {
-    score += 15;
-    factors.push("Robust internal link profile (+15 points).");
-  } else if (internalLinks > 2) {
-    score += 8;
-    factors.push("Standard internal link connectivity (+8 points).");
-  } else {
-    suggestions.push("Add internal links referencing related guides or transactional services to improve flow.");
-  }
+  metrics.push(buildMetric({
+    name: "Internal Link Authority Flow",
+    raw: internalLinks > 10 ? 15 : internalLinks > 2 ? 8 : 0, max: 15, weight: 15,
+    reason: internalLinks > 10 ? "Robust internal link profile." : internalLinks > 2 ? "Standard internal link connectivity." : "Weak internal link connectivity.",
+    evidence: `${internalLinks} internal link(s) detected on this page.`,
+    recommendation: "Add internal links to related guides or transactional pages to distribute authority."
+  }));
 
   const schemasCount = safeNumber(pageData?.schema?.schemaCount || pageData?.schemaCount);
-  if (schemasCount >= 3) {
-    score += 15;
-    factors.push("Comprehensive multi-schema structured framework (+15 points).");
-  } else if (schemasCount > 0) {
-    score += 8;
-    factors.push("Standard schema structured metadata mapped (+8 points).");
-  } else {
-    suggestions.push("Deploy missing recommended schemas like WebSite, FAQPage, or Organization.");
-  }
+  metrics.push(buildMetric({
+    name: "Structured Data Depth",
+    raw: schemasCount >= 3 ? 15 : schemasCount > 0 ? 8 : 0, max: 15, weight: 15,
+    reason: schemasCount >= 3 ? "Comprehensive multi-schema structured data." : schemasCount > 0 ? "Basic structured data present." : "No structured data present.",
+    evidence: `${schemasCount} distinct schema type(s) detected.`,
+    recommendation: "Deploy additional relevant schemas (WebSite, FAQPage, Organization, BreadcrumbList)."
+  }));
 
   const brand = safeText(pageData?.competitor?.winner || pageData?.title);
-  const isGenericTitle = brand.toLowerCase().includes("home") || brand.toLowerCase().includes("brand authority");
-  if (brand && !isGenericTitle) {
-    score += 15;
-    factors.push("Distinct non-generic brand profile established (+15 points).");
-  } else {
-    suggestions.push("Refine title tags and meta descriptions to highlight your unique brand identity.");
-  }
+  const isGenericTitle = brand.toLowerCase().includes("home") || brand.toLowerCase().includes("brand authority") || !brand;
+  metrics.push(buildMetric({
+    name: "Distinct Brand Identity",
+    raw: !isGenericTitle ? 15 : 0, max: 15, weight: 15,
+    reason: !isGenericTitle ? "Distinct, non-generic brand identity established in title." : "Title reads as generic rather than brand-distinct.",
+    evidence: `Extracted title/brand text: "${brand || 'none'}".`,
+    recommendation: "Refine the title tag to clearly reflect a unique brand or product identity, not a generic label."
+  }));
 
-  const authorityScore = clamp(score, 10, 100);
+  const words = safeNumber(pageData?.wordCount);
+  metrics.push(buildMetric({
+    name: "Content Depth for Authority",
+    raw: words >= 1200 ? 15 : words >= 600 ? 8 : 0, max: 15, weight: 15,
+    reason: words >= 1200 ? "Substantial content depth supports authority signals." : words >= 600 ? "Moderate content depth." : "Thin content undermines authority signals.",
+    evidence: `Measured word count: ${words}.`,
+    recommendation: "Expand coverage depth — authoritative pages typically exceed 1,200 words on cornerstone topics."
+  }));
+
+  const result = aggregateMetrics(metrics);
 
   return {
-    authorityScore,
-    status: authorityScore >= 80 ? "Topical Leader" : authorityScore >= 50 ? "Competitor" : "Emerging Voice",
-    factors,
-    suggestions: [...new Set(suggestions)]
+    authorityScore: result.score,
+    status: result.score >= 80 ? "Topical Leader" : result.score >= 50 ? "Competitor" : "Emerging Voice",
+    metrics: result.metrics,
+    passedMetrics: result.passedMetrics,
+    failedMetrics: result.failedMetrics,
+    totalExpectedImprovement: result.totalExpectedImprovement,
+    factors: result.metrics.filter(m => m.passed).map(m => m.reason),
+    suggestions: result.metrics.filter(m => !m.passed).map(m => m.recommendation)
   };
 }
 
 export function scanDynamicTrustSignals($, html, url, pageData) {
   const text = $('body').text().toLowerCase();
-
-  let score = 10;
-  const factors = [];
-  const issues = [];
+  const metrics = [];
 
   const isHttps = url.startsWith("https://");
-  if (isHttps) {
-    score += 20;
-    factors.push("SSL Security validation active (HTTPS context).");
-  } else {
-    issues.push("Page is missing modern SSL encryption (HTTP standard).");
-  }
+  metrics.push(buildMetric({
+    name: "HTTPS Security",
+    raw: isHttps ? 20 : 0, max: 20, weight: 20,
+    reason: isHttps ? "SSL/HTTPS validated." : "Page served over insecure HTTP.",
+    evidence: `URL scheme: ${url.split("://")[0] || "unknown"}.`,
+    recommendation: "Serve the page over HTTPS with a valid TLS certificate."
+  }));
 
   const hasContact = pageData?.entityDetails?.emails?.length > 0 || pageData?.entityDetails?.phones?.length > 0;
-  if (hasContact) {
-    score += 15;
-    factors.push("Direct contact methods verified (Email/Phone elements on DOM).");
-  } else {
-    issues.push("No explicit contact channels found in text or headers.");
-  }
+  metrics.push(buildMetric({
+    name: "Direct Contact Methods",
+    raw: hasContact ? 15 : 0, max: 15, weight: 15,
+    reason: hasContact ? "Email or phone contact detected in page content." : "No email or phone contact detected.",
+    evidence: `Emails detected: ${safeArray(pageData?.entityDetails?.emails).length}. Phones detected: ${safeArray(pageData?.entityDetails?.phones).length}.`,
+    recommendation: "Publish a visible email address and/or phone number on the page."
+  }));
 
-  let hasPrivacy = false;
-  let hasTerms = false;
+  let hasPrivacy = false, hasTerms = false;
   $("a").each((_, el) => {
     const href = safeText($(el).attr("href")).toLowerCase();
     const textCtx = safeText($(el).text()).toLowerCase();
@@ -2594,55 +2669,72 @@ export function scanDynamicTrustSignals($, html, url, pageData) {
     if (href.includes("terms") || textCtx.includes("terms") || href.includes("tos")) hasTerms = true;
   });
 
-  if (hasPrivacy) {
-    score += 15;
-    factors.push("Privacy Policy safety documentation verified.");
-  } else {
-    issues.push("Missing Privacy Policy disclosure documentation link.");
-  }
+  metrics.push(buildMetric({
+    name: "Privacy Policy Disclosure",
+    raw: hasPrivacy ? 15 : 0, max: 15, weight: 15,
+    reason: hasPrivacy ? "Privacy Policy link detected." : "No Privacy Policy disclosure found.",
+    evidence: `Anchor scan for 'privacy': ${hasPrivacy ? "match found" : "no match"}.`,
+    recommendation: "Publish a Privacy Policy page describing data handling practices."
+  }));
 
-  if (hasTerms) {
-    score += 10;
-    factors.push("Terms of Service operations compliance validated.");
-  } else {
-    issues.push("Missing formal Terms of Service framework.");
-  }
+  metrics.push(buildMetric({
+    name: "Terms of Service Disclosure",
+    raw: hasTerms ? 10 : 0, max: 10, weight: 10,
+    reason: hasTerms ? "Terms of Service found." : "No formal Terms of Service found.",
+    evidence: `Anchor scan for 'terms'/'tos': ${hasTerms ? "match found" : "no match"}.`,
+    recommendation: "Publish a Terms of Service page defining usage rules."
+  }));
 
   const hasLocalBusinessSchema = safeArray(pageData?.schema?.detectedTypes).some(t => String(t).toLowerCase() === "localbusiness");
   const matchesAddressText = text.includes("address") || text.includes("suite") || text.includes("postal") || /\b\d{5}\b/.test(text);
   const hasNAP = hasLocalBusinessSchema || (hasContact && matchesAddressText);
-  if (hasNAP) {
-    score += 15;
-    factors.push("Local NAP (Name, Address, Phone) consistency indicators verified.");
-  } else {
-    issues.push("Incomplete physical address (NAP) parameters.");
-  }
+  metrics.push(buildMetric({
+    name: "NAP Consistency",
+    raw: hasNAP ? 15 : 0, max: 15, weight: 15,
+    reason: hasNAP ? "Name/Address/Phone signals verified." : "Incomplete physical address (NAP) parameters.",
+    evidence: `LocalBusiness schema: ${hasLocalBusinessSchema}. Address pattern in text: ${matchesAddressText}.`,
+    recommendation: "Publish a consistent Name, Address, and Phone number, ideally backed by LocalBusiness schema."
+  }));
 
   const reviewsTerms = ["review", "testimonial", "star rating", "happy clients", "verified buyer", "rated"];
   const matchesReviews = reviewsTerms.some(term => text.includes(term)) || $('.review, .testimonial').length > 0;
-  if (matchesReviews) {
-    score += 15;
-    factors.push("Social proof review or testimonial clusters detected.");
-  } else {
-    issues.push("No client reviews or testimonial snippets discovered on content body.");
-  }
+  metrics.push(buildMetric({
+    name: "Social Proof Signals",
+    raw: matchesReviews ? 15 : 0, max: 15, weight: 15,
+    reason: matchesReviews ? "Review or testimonial content detected." : "No review or testimonial content detected.",
+    evidence: `Review-related keyword or .review/.testimonial element match: ${matchesReviews}.`,
+    recommendation: "Display customer reviews or testimonials, ideally backed by Review/AggregateRating schema."
+  }));
 
   const socialProfilesCount = safeNumber(pageData?.entityDetails?.socialProfiles?.length);
-  if (socialProfilesCount > 0) {
-    const socialPoints = Math.min(10, socialProfilesCount * 3);
-    score += socialPoints;
-    factors.push(`Identified ${socialProfilesCount} verified external social channel links (+${socialPoints} points).`);
-  } else {
-    issues.push("No verified social networks profiles connected to the document.");
-  }
+  metrics.push(buildMetric({
+    name: "Verified Social Presence",
+    raw: clamp(socialProfilesCount, 0, 3) / 3 * 10, max: 10, weight: 10,
+    reason: socialProfilesCount > 0 ? `${socialProfilesCount} social profile link(s) detected.` : "No social profile links detected.",
+    evidence: `Social platforms detected: ${safeArray(pageData?.entityDetails?.socialProfiles).join(", ") || "none"}.`,
+    recommendation: "Link verified social media profiles (LinkedIn, Twitter/X, Facebook, Instagram)."
+  }));
 
-  const trustScore = clamp(score, 10, 100);
+  const securityHeaderScore = safeNumber(pageData?.securityHeaders?.score);
+  metrics.push(buildMetric({
+    name: "Security Headers",
+    raw: securityHeaderScore, max: 10, weight: 10,
+    reason: securityHeaderScore >= 8 ? "Strong security header configuration." : securityHeaderScore > 0 ? "Partial security header configuration." : "No modern security headers detected on the response.",
+    evidence: pageData?.securityHeaders?.present?.length > 0 ? `Present headers: ${pageData.securityHeaders.present.join(", ")}.` : "No CSP, HSTS, X-Frame-Options, or X-Content-Type-Options headers detected.",
+    recommendation: "Add HSTS, Content-Security-Policy, X-Frame-Options, and X-Content-Type-Options response headers."
+  }));
+
+  const result = aggregateMetrics(metrics);
 
   return {
-    trustScore,
-    status: trustScore >= 80 ? "SaaS Enterprise Trusted" : trustScore >= 50 ? "Verified Profile" : "Unverified Identity Framework",
-    factors,
-    issues: [...new Set(issues)]
+    trustScore: result.score,
+    status: result.score >= 80 ? "SaaS Enterprise Trusted" : result.score >= 50 ? "Verified Profile" : "Unverified Identity Framework",
+    metrics: result.metrics,
+    passedMetrics: result.passedMetrics,
+    failedMetrics: result.failedMetrics,
+    totalExpectedImprovement: result.totalExpectedImprovement,
+    factors: result.metrics.filter(m => m.passed).map(m => m.reason),
+    issues: result.metrics.filter(m => !m.passed).map(m => m.reason)
   };
 }
 export function calculateImageSeoScore(pageData) {

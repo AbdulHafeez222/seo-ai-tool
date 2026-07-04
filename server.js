@@ -330,7 +330,41 @@ export const clamp = (num, min = 0, max = 100) => {
   const val = Number(num);
   return Math.min(max, Math.max(min, isNaN(val) ? 0 : val));
 };
+export function buildMetric({ name, raw, max, weight, reason, evidence, recommendation }) {
+  const safeMax = max > 0 ? max : 1;
+  const clampedRaw = clamp(raw, 0, safeMax);
+  const ratio = clampedRaw / safeMax;
+  const contribution = Math.round(ratio * weight * 100) / 100;
+  const passed = ratio >= 1;
 
+  return {
+    metric: name,
+    rawValue: clampedRaw,
+    maxValue: safeMax,
+    weight,
+    contribution,
+    passed,
+    reason,
+    evidence: safeText(evidence, "No supporting evidence captured for this metric."),
+    recommendation: passed ? null : safeText(recommendation, `Improve ${name.toLowerCase()} to recover lost points.`),
+    expectedImprovement: passed ? 0 : Math.round((weight - contribution) * 100) / 100
+  };
+}
+export function aggregateMetrics(metrics) {
+  const totalWeight = metrics.reduce((sum, m) => sum + m.weight, 0) || 100;
+  const totalContribution = metrics.reduce((sum, m) => sum + m.contribution, 0);
+  const score = clamp(Math.round((totalContribution / totalWeight) * 100));
+
+  return {
+    score,
+    status: score >= 80 ? "Optimized" : score >= 50 ? "Satisfactory" : "Critical Improvements Needed",
+    auditPassed: score >= 80,
+    metrics,
+    passedMetrics: metrics.filter(m => m.passed).map(m => m.metric),
+    failedMetrics: metrics.filter(m => !m.passed).map(m => m.metric),
+    totalExpectedImprovement: Math.round(metrics.reduce((s, m) => s + m.expectedImprovement, 0) * 100) / 100
+  };
+}
 export const cleanText = (input) => {
   let text = safeText(input);
   for (const pattern of BAD_PATTERNS) {
@@ -751,7 +785,45 @@ export async function withRetry(fn, retries = 2, delay = 1000) {
   }
   throw Object.assign(lastError || new Error("Unknown retry failure"), { attempts });
 }
+export async function sampleBrokenLinks(baseUrl, linkMap, sampleSize = 8) {
+  const paths = Object.keys(safeObject(linkMap)).slice(0, sampleSize);
+  if (paths.length === 0) {
+    return { checked: 0, broken: 0, brokenUrls: [], sampleRate: 0 };
+  }
 
+  let origin;
+  try {
+    origin = new URL(baseUrl).origin;
+  } catch {
+    return { checked: 0, broken: 0, brokenUrls: [], sampleRate: 0 };
+  }
+
+  const checks = paths.map(async (p) => {
+    const target = p.startsWith("http") ? p : `${origin}/${p.replace(/^\/*/, "")}`;
+    try {
+      const res = await axios.head(target, {
+        timeout: 5000,
+        maxRedirects: 4,
+        validateStatus: () => true,
+        httpsAgent: new https.Agent({ rejectUnauthorized: false })
+      });
+      return { url: target, ok: res.status < 400, status: res.status };
+    } catch (err) {
+      return { url: target, ok: false, status: 0 };
+    }
+  });
+
+  const results = await Promise.allSettled(checks);
+  const resolved = results.map(r => r.status === "fulfilled" ? r.value : { ok: false, status: 0, url: "unknown" });
+  const broken = resolved.filter(r => !r.ok);
+
+  return {
+    checked: resolved.length,
+    broken: broken.length,
+    brokenUrls: broken.map(b => ({ url: b.url, status: b.status })),
+    sampleRate: paths.length > 0 ? Math.round((resolved.length / Object.keys(linkMap).length) * 100) : 0
+  };
+}
 /**
  * Races a promise against a hard timeout so a single hung crawl can never
  * stall a request indefinitely.
@@ -1230,7 +1302,8 @@ export function extractPageData($, html, url) {
   const robots = cleanText(safeText($('meta[name="robots"]').attr("content")));
   const language = cleanText(safeText($('html').attr("lang") || $('html').attr("xml:lang")));
   const charset = cleanText(safeText($('meta[charset]').attr("charset")));
-
+  const viewportContent = cleanText(safeText($('meta[name="viewport"]').attr("content")));
+  const hasResponsiveViewport = /width\s*=\s*device-width/i.test(viewportContent);
   const ogTitle = cleanText(safeText($('meta[property="og:title"]').attr("content")));
   const ogDescription = cleanText(safeText($('meta[property="og:description"]').attr("content")));
   const ogImage = cleanText(safeText($('meta[property="og:image"]').attr("content")));
@@ -1249,11 +1322,19 @@ export function extractPageData($, html, url) {
   const h2s = [...new Set($("h2").map((_, el) => cleanText(safeText($(el).text()))).get().filter(Boolean))];
   const h3s = [...new Set($("h3").map((_, el) => cleanText(safeText($(el).text()))).get().filter(Boolean))];
 
-  const images = $("img").map((_, el) => ({
-    src: safeText($(el).attr("src")),
-    alt: safeText($(el).attr("alt"))
-  })).get();
-
+    const images = $("img").map((_, el) => {
+    const src = safeText($(el).attr("src"));
+    const ext = (src.split("?")[0].split(".").pop() || "").toLowerCase();
+    return {
+      src,
+      alt: safeText($(el).attr("alt")),
+      width: safeText($(el).attr("width")),
+      height: safeText($(el).attr("height")),
+      loading: safeText($(el).attr("loading")),
+      isModernFormat: ["webp", "avif"].includes(ext),
+      hasFilenameContext: /[a-z0-9][-_][a-z0-9]/i.test(src.split("/").pop() || "") && !/^(img|image|dsc|photo)\d*\./i.test(src.split("/").pop() || "")
+    };
+  }).get();
   const bodyText = cleanText($("p, li, h2, h3, h4, td, span, article").map((_, el) => $(el).text()).get().join(" "));
   const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 0;
 
@@ -1269,6 +1350,8 @@ export function extractPageData($, html, url) {
     robots,
     language,
     charset,
+    viewport: viewportContent,
+    hasResponsiveViewport,
     openGraph: {
       title: ogTitle,
       description: ogDescription,
@@ -1700,107 +1783,273 @@ export function extractSemanticEntities($, html, url, pageData) {
 // =========================================================================
 // ========== SECTION 10: DYNAMIC SEO SCORING ENGINE ======================
 // =========================================================================
+export async function calculateDynamicSeoScore(pageData, loadTimeMs, context = {}) {
+  const { robotsData, sitemapData, schemaAudit } = context;
+  const metrics = [];
 
-export function calculateDynamicSeoScore(pageData, loadTimeMs) {
-  let score = 100;
-  const deductions = [];
-
+  // 1. Title
   const title = safeText(pageData?.title);
-  if (!title) {
-    score -= 15;
-    deductions.push({ factor: "Title Tag", penalty: 15, reason: "Title tag is missing or completely blank." });
-  } else if (title.length < 10) {
-    score -= 5;
-    deductions.push({ factor: "Title Tag Length", penalty: 5, reason: "Title is too short (under 10 characters). Weak context signal." });
-  } else if (title.length > 60) {
-    score -= 5;
-    deductions.push({ factor: "Title Tag Length", penalty: 5, reason: "Title is too long (over 60 characters). Risks clipping in SERP snippets." });
-  }
+  metrics.push(buildMetric({
+    name: "Title Tag",
+    raw: title ? (title.length >= 10 && title.length <= 60 ? 8 : 5) : 0,
+    max: 8,
+    weight: 8,
+    reason: !title ? "No title tag detected." : title.length < 10 ? "Title under 10 characters." : title.length > 60 ? "Title exceeds 60 characters." : "Title present and within optimal length.",
+    evidence: title ? `Title: "${title}" (${title.length} chars).` : "No <title> element found in the crawled DOM.",
+    recommendation: "Write a unique, descriptive title between 10 and 60 characters that includes the page's primary topic."
+  }));
 
+  // 2. Meta Description
   const description = safeText(pageData?.metaDescription);
-  if (!description) {
-    score -= 15;
-    deductions.push({ factor: "Meta Description", penalty: 15, reason: "Meta description is missing or blank." });
-  } else if (description.length < 50) {
-    score -= 5;
-    deductions.push({ factor: "Meta Description Length", penalty: 5, reason: "Meta description is too brief (under 50 characters). Underutilizes dynamic search space." });
-  } else if (description.length > 160) {
-    score -= 5;
-    deductions.push({ factor: "Meta Description Length", penalty: 5, reason: "Meta description is too long (over 160 characters). Clipped in generative SERP frames." });
-  }
+  metrics.push(buildMetric({
+    name: "Meta Description",
+    raw: description ? (description.length >= 50 && description.length <= 160 ? 7 : 4) : 0,
+    max: 7,
+    weight: 7,
+    reason: !description ? "No meta description detected." : description.length < 50 ? "Description under 50 characters." : description.length > 160 ? "Description exceeds 160 characters." : "Description present and within optimal length.",
+    evidence: description ? `Meta description: "${description.slice(0, 120)}${description.length > 120 ? '…' : ''}" (${description.length} chars).` : "No <meta name=\"description\"> tag found.",
+    recommendation: "Write a compelling 50-160 character description summarizing the page for search snippets."
+  }));
 
-  const h1s = safeArray(pageData?.headings?.h1s);
-  if (h1s.length === 0) {
-    score -= 10;
-    deductions.push({ factor: "H1 Element", penalty: 10, reason: "No H1 heading found. Weak structural page foundation." });
-  } else if (h1s.length > 1) {
-    score -= 5;
-    deductions.push({ factor: "H1 Element Duplication", penalty: 5, reason: "Multiple H1 headings detected. Weakens context focal point." });
-  }
-
-  const h2Count = safeArray(pageData?.headings?.h2s).length;
-  if (h2Count === 0) {
-    score -= 5;
-    deductions.push({ factor: "H2 Element Hierarchy", penalty: 5, reason: "No H2 subheadings detected. Limits logical content grouping." });
-  }
-
-  const internalLinks = safeNumber(pageData?.links?.internal);
-  if (internalLinks === 0) {
-    score -= 8;
-    deductions.push({ factor: "Internal Links", penalty: 8, reason: "No internal links detected. Severely limits internal navigation depth." });
-  }
-
-  const images = safeArray(pageData?.images);
-  const imagesWithoutAlt = images.filter(img => !safeText(img.alt)).length;
-  if (images.length > 0 && imagesWithoutAlt > 0) {
-    const penalty = clamp(Math.round((imagesWithoutAlt / images.length) * 8), 2, 8);
-    score -= penalty;
-    deductions.push({ factor: "Image Alt Tags", penalty, reason: `${imagesWithoutAlt} out of ${images.length} images are missing alternative descriptive alt tags.` });
-  }
-
-  const schemaDetected = safeArray(pageData?.schema?.detectedTypes).length > 0;
-  if (!schemaDetected) {
-    score -= 10;
-    deductions.push({ factor: "Schema Markup", penalty: 10, reason: "No structured schemas found (JSON-LD, Microdata, or RDFa)." });
-  }
-
+  // 3. Canonical
   const canonical = safeText(pageData?.canonical);
-  if (!canonical) {
-    score -= 8;
-    deductions.push({ factor: "Canonical URL", penalty: 8, reason: "No canonical link element configured. Vulnerable to duplicate parameter indexes." });
-  }
+  metrics.push(buildMetric({
+    name: "Canonical URL",
+    raw: canonical ? 5 : 0,
+    max: 5,
+    weight: 5,
+    reason: canonical ? "Canonical link element is configured." : "No canonical tag found.",
+    evidence: canonical ? `Canonical resolves to: ${canonical}` : "No <link rel=\"canonical\"> element in <head>.",
+    recommendation: "Add a self-referencing canonical tag to prevent duplicate-content indexing issues."
+  }));
 
-  const robots = safeText(pageData?.robots);
-  if (robots && (robots.toLowerCase().includes("noindex") || robots.toLowerCase().includes("none"))) {
-    score -= 15;
-    deductions.push({ factor: "Robots Directives", penalty: 15, reason: "Block active (noindex). Search crawler indexation completely forbidden." });
-  }
+  // 4. Indexability (robots meta directive)
+  const robotsMeta = safeText(pageData?.robots).toLowerCase();
+  const isBlocked = robotsMeta.includes("noindex") || robotsMeta.includes("none");
+  metrics.push(buildMetric({
+    name: "Indexability",
+    raw: isBlocked ? 0 : 6,
+    max: 6,
+    weight: 6,
+    reason: isBlocked ? "Page explicitly blocks indexing via meta robots directive." : "No indexing block detected.",
+    evidence: robotsMeta ? `<meta name="robots" content="${robotsMeta}">` : "No robots meta tag present (defaults to indexable).",
+    recommendation: "Remove the noindex directive from the meta robots tag if this page should appear in search results."
+  }));
 
+  // 5. Headings
+  const h1s = safeArray(pageData?.headings?.h1s);
+  const h2Count = safeArray(pageData?.headings?.h2s).length;
+  const headingRaw = (h1s.length === 1 ? 4 : 0) + (h2Count > 0 ? 3 : 0);
+  metrics.push(buildMetric({
+    name: "Heading Structure",
+    raw: headingRaw,
+    max: 7,
+    weight: 7,
+    reason: h1s.length === 0 ? "No H1 heading found." : h1s.length > 1 ? `${h1s.length} H1 headings found (should be exactly 1).` : h2Count === 0 ? "H1 present but no H2 subheadings found." : "Clean single-H1 hierarchy with supporting H2s.",
+    evidence: `H1 count: ${h1s.length}. H2 count: ${h2Count}. H1 text: ${h1s[0] ? `"${h1s[0]}"` : "none"}.`,
+    recommendation: "Use exactly one H1 describing the page topic, supported by H2 subheadings that break content into logical sections."
+  }));
+
+  // 6. Internal Links
+  const internalLinks = safeNumber(pageData?.links?.internal);
+  metrics.push(buildMetric({
+    name: "Internal Links",
+    raw: clamp(internalLinks, 0, 10),
+    max: 10,
+    weight: 6,
+    reason: internalLinks === 0 ? "No internal links detected." : internalLinks < 5 ? "Low internal link count." : "Healthy internal link count.",
+    evidence: `${internalLinks} internal link(s) detected across ${Object.keys(safeObject(pageData?.links?.linkMap)).length} unique destination(s).`,
+    recommendation: "Add contextual internal links to related pages to distribute authority and aid crawl discovery."
+  }));
+
+  // 7. External Links
+  const externalLinks = safeNumber(pageData?.links?.external);
+  metrics.push(buildMetric({
+    name: "External Links",
+    raw: externalLinks > 0 ? 3 : 0,
+    max: 3,
+    weight: 3,
+    reason: externalLinks > 0 ? "Outbound authoritative references present." : "No outbound external links detected.",
+    evidence: `${externalLinks} external link(s) detected.`,
+    recommendation: "Link out to authoritative external sources to support factual claims and build topical credibility."
+  }));
+
+  // 8. Broken Links — real HEAD-request evidence, not estimated.
+  const brokenLinkData = await sampleBrokenLinks(pageData?.resolvedUrl || "", pageData?.links?.linkMap, 8);
+  const brokenRaw = brokenLinkData.checked === 0 ? 4 : clamp(4 - brokenLinkData.broken, 0, 4);
+  metrics.push(buildMetric({
+    name: "Broken Links",
+    raw: brokenRaw,
+    max: 4,
+    weight: 4,
+    reason: brokenLinkData.checked === 0 ? "No internal links available to sample." : brokenLinkData.broken === 0 ? "All sampled internal links resolved successfully." : `${brokenLinkData.broken} of ${brokenLinkData.checked} sampled links returned an error status.`,
+    evidence: brokenLinkData.checked > 0 ? `Sampled ${brokenLinkData.checked} internal link(s) via HTTP HEAD. Broken: ${brokenLinkData.broken}.${brokenLinkData.brokenUrls.length ? " Failing URLs: " + brokenLinkData.brokenUrls.map(b => `${b.url} (${b.status || 'no response'})`).join(", ") : ""}` : "No internal links were available for sampling.",
+    recommendation: "Fix or remove broken internal links; each returns a client/server error and harms both users and crawl efficiency."
+  }));
+
+  // 9. Image ALT coverage
+  const images = safeArray(pageData?.images);
+  const imagesWithAlt = images.filter(img => safeText(img.alt)).length;
+  const altRatio = images.length > 0 ? imagesWithAlt / images.length : 1;
+  metrics.push(buildMetric({
+    name: "Image ALT Tags",
+    raw: Math.round(altRatio * 5),
+    max: 5,
+    weight: 5,
+    reason: images.length === 0 ? "No images found on page." : altRatio === 1 ? "All images have descriptive alt attributes." : `${images.length - imagesWithAlt} of ${images.length} images are missing alt text.`,
+    evidence: `${imagesWithAlt}/${images.length} images carry non-empty alt attributes.`,
+    recommendation: "Add descriptive, keyword-relevant alt text to every content image for accessibility and image-search visibility."
+  }));
+
+  // 10. Structured Data
+  const schemaCount = safeArray(schemaAudit?.detectedTypes).length;
+  const invalidSchemaCount = safeNumber(schemaAudit?.validation?.invalidBlocks);
+  const structuredDataRaw = schemaCount === 0 ? 0 : invalidSchemaCount > 0 ? 5 : 9;
+  metrics.push(buildMetric({
+    name: "Structured Data",
+    raw: structuredDataRaw,
+    max: 9,
+    weight: 9,
+    reason: schemaCount === 0 ? "No JSON-LD, Microdata, or RDFa schemas detected." : invalidSchemaCount > 0 ? "Schema present but some blocks failed validation." : "Valid structured data detected.",
+    evidence: `Detected types: ${schemaCount > 0 ? schemaAudit.detectedTypes.join(", ") : "none"}. Invalid JSON-LD blocks: ${invalidSchemaCount}.`,
+    recommendation: "Deploy valid JSON-LD structured data (Organization, WebPage, FAQPage, etc.) and fix any malformed blocks."
+  }));
+
+  // 11. Sitemap
+  metrics.push(buildMetric({
+    name: "XML Sitemap",
+    raw: sitemapData?.found ? 4 : 0,
+    max: 4,
+    weight: 4,
+    reason: sitemapData?.found ? `Sitemap discovered via ${sitemapData.source}.` : "No sitemap.xml found via robots.txt declaration or conventional path.",
+    evidence: sitemapData?.found ? `Sitemap URL(s): ${safeArray(sitemapData.urls).join(", ")}` : "Checked robots.txt declaration and /sitemap.xml conventional path — neither resolved.",
+    recommendation: "Publish an XML sitemap and reference it in robots.txt to improve crawl discovery and indexation speed."
+  }));
+
+  // 12. Robots.txt
+  metrics.push(buildMetric({
+    name: "Robots.txt",
+    raw: robotsData?.found ? 3 : 0,
+    max: 3,
+    weight: 3,
+    reason: robotsData?.found ? "robots.txt file is published and reachable." : "No robots.txt file found at site root.",
+    evidence: robotsData?.found ? `robots.txt declares ${safeArray(robotsData.disallowedPaths).length} disallow rule(s).` : "GET request to /robots.txt did not return a valid file.",
+    recommendation: "Publish a robots.txt file at the domain root to explicitly declare crawl permissions."
+  }));
+
+  // 13. Performance (real measured load time)
   const latency = safeNumber(loadTimeMs);
-  if (latency > 3000) {
-    score -= 10;
-    deductions.push({ factor: "Response Latency", penalty: 10, reason: `Response loading took ${latency}ms. Exceeds standard LCP guidelines.` });
-  } else if (latency > 1500) {
-    score -= 4;
-    deductions.push({ factor: "Response Latency", penalty: 4, reason: `Response loading took ${latency}ms. Sub-optimal mobile performance.` });
-  }
+  const perfRaw = latency <= 1500 ? 8 : latency <= 3000 ? 5 : 0;
+  metrics.push(buildMetric({
+    name: "Response Performance",
+    raw: perfRaw,
+    max: 8,
+    weight: 8,
+    reason: latency <= 1500 ? "Fast server response time." : latency <= 3000 ? "Moderate response latency." : "Slow response time, likely to hurt Core Web Vitals (LCP).",
+    evidence: `Measured crawl-to-render duration: ${latency}ms.`,
+    recommendation: "Reduce server response time via caching, CDN delivery, and reducing render-blocking resources."
+  }));
 
+  // 14. Mobile Friendly (real viewport meta detection)
+  metrics.push(buildMetric({
+    name: "Mobile Friendly",
+    raw: pageData?.hasResponsiveViewport ? 5 : 0,
+    max: 5,
+    weight: 5,
+    reason: pageData?.hasResponsiveViewport ? "Responsive viewport meta tag detected." : "No responsive viewport meta tag detected.",
+    evidence: pageData?.viewport ? `<meta name="viewport" content="${pageData.viewport}">` : "No <meta name=\"viewport\"> tag found in <head>.",
+    recommendation: "Add <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> to enable responsive mobile rendering."
+  }));
+
+  // 15. HTTPS
+  const isHttps = safeText(pageData?.resolvedUrl).startsWith("https://");
+  metrics.push(buildMetric({
+    name: "HTTPS",
+    raw: isHttps ? 6 : 0,
+    max: 6,
+    weight: 6,
+    reason: isHttps ? "Site is served over a secure HTTPS connection." : "Site is served over insecure HTTP.",
+    evidence: `Resolved URL scheme: ${safeText(pageData?.resolvedUrl).split("://")[0] || "unknown"}.`,
+    recommendation: "Migrate to HTTPS with a valid TLS certificate; browsers and search engines penalize insecure HTTP pages."
+  }));
+
+  // 16. OpenGraph
+  const hasOg = Boolean(pageData?.openGraph?.title && pageData?.openGraph?.description);
+  metrics.push(buildMetric({
+    name: "OpenGraph Tags",
+    raw: hasOg ? 2 : 0,
+    max: 2,
+    weight: 2,
+    reason: hasOg ? "OpenGraph title and description present." : "OpenGraph tags missing or incomplete.",
+    evidence: `og:title="${safeText(pageData?.openGraph?.title, 'missing')}", og:description="${safeText(pageData?.openGraph?.description, 'missing').slice(0, 60)}".`,
+    recommendation: "Add og:title, og:description, and og:image meta tags to control social-share previews."
+  }));
+
+  // 17. Twitter Cards
+  const hasTwitter = Boolean(pageData?.twitterCards?.card);
+  metrics.push(buildMetric({
+    name: "Twitter Card Tags",
+    raw: hasTwitter ? 1 : 0,
+    max: 1,
+    weight: 1,
+    reason: hasTwitter ? "Twitter card meta tag present." : "No Twitter card meta tag found.",
+    evidence: hasTwitter ? `twitter:card="${pageData.twitterCards.card}"` : "No <meta name=\"twitter:card\"> tag found.",
+    recommendation: "Add a twitter:card meta tag (summary_large_image recommended) for richer Twitter/X sharing previews."
+  }));
+
+  // 18. Content Quality (word count, real measured)
   const words = safeNumber(pageData?.wordCount);
-  if (words < 300) {
-    score -= 10;
-    deductions.push({ factor: "Content Density", penalty: 10, reason: `Thin text body found (${words} words). Fails minimal informational standard thresholds.` });
-  } else if (words < 600) {
-    score -= 4;
-    deductions.push({ factor: "Content Density", penalty: 4, reason: `Low word count (${words} words). Broaden text topics to boost ranking potential.` });
-  }
+  const contentRaw = words >= 900 ? 5 : words >= 600 ? 4 : words >= 300 ? 2 : 0;
+  metrics.push(buildMetric({
+    name: "Content Depth",
+    raw: contentRaw,
+    max: 5,
+    weight: 5,
+    reason: words < 300 ? "Thin content body." : words < 600 ? "Below-average content depth." : words < 900 ? "Adequate content depth." : "Strong content depth.",
+    evidence: `Measured visible body word count: ${words}.`,
+    recommendation: "Expand thin sections with substantive, non-redundant content — aim for 900+ words on cornerstone pages."
+  }));
 
-  const finalScore = clamp(score, 0, 100);
+  // 19. Keyword Coverage (on-page self-consistency: do the page's own top
+  // tokenized keywords actually appear in its title/H1?)
+  const topKeywords = tokenizeKeywords(pageData?.visibleText).slice(0, 8);
+  const titleH1Lower = `${title} ${h1s[0] || ""}`.toLowerCase();
+  const keywordsInTitleOrH1 = topKeywords.filter(k => titleH1Lower.includes(k));
+  const keywordRatio = topKeywords.length > 0 ? keywordsInTitleOrH1.length / topKeywords.length : 0;
+  metrics.push(buildMetric({
+    name: "Keyword Coverage",
+    raw: Math.round(keywordRatio * 3),
+    max: 3,
+    weight: 3,
+    reason: topKeywords.length === 0 ? "No dominant keywords could be extracted from body content." : keywordRatio >= 0.5 ? "Title/H1 align well with the page's dominant extracted keywords." : "Title/H1 poorly reflect the page's own dominant content keywords.",
+    evidence: `Top extracted keywords: ${topKeywords.join(", ") || "none"}. Present in title/H1: ${keywordsInTitleOrH1.join(", ") || "none"}.`,
+    recommendation: "Align the title and H1 with the terms that actually dominate the page's body content."
+  }));
 
+  // 20. Semantic Relevance (entity density: entities per 100 words)
+  const entityCount = safeNumber(pageData?.entityDetails?.totalEntityCount);
+  const entityDensity = words > 0 ? (entityCount / words) * 100 : 0;
+  metrics.push(buildMetric({
+    name: "Semantic Relevance",
+    raw: entityDensity >= 1.5 ? 3 : entityDensity >= 0.5 ? 2 : 0,
+    max: 3,
+    weight: 3,
+    reason: entityDensity >= 1.5 ? "Strong named-entity density relative to content length." : entityDensity >= 0.5 ? "Moderate entity density." : "Low entity density — content may read as generic.",
+    evidence: `${entityCount} distinct entities detected across ${words} words (${entityDensity.toFixed(2)} entities per 100 words).`,
+    recommendation: "Reference more specific named entities (brands, people, places, products) relevant to the topic."
+  }));
+
+  const result = aggregateMetrics(metrics);
+
+  // Backward-compatible fields for the existing frontend/payload contract.
   return {
-    score: finalScore,
-    deductions,
-    auditPassed: finalScore >= 80,
-    status: finalScore >= 80 ? "Optimized" : finalScore >= 50 ? "Satisfactory" : "Critical Improvements Needed"
+    ...result,
+    deductions: metrics.filter(m => !m.passed).map(m => ({
+      factor: m.metric,
+      penalty: m.expectedImprovement,
+      reason: m.reason
+    })),
+    brokenLinkSample: brokenLinkData
   };
 }
 
@@ -1810,91 +2059,171 @@ export function calculateDynamicSeoScore(pageData, loadTimeMs) {
 
 export function calculateDynamicAeoScore(pageData, docVisibleText) {
   const text = safeText(docVisibleText).toLowerCase();
+  const metrics = [];
 
   const hasFAQ = safeArray(pageData?.schema?.detectedTypes).some(t => String(t).toLowerCase() === "faqpage");
-  const hasHowTo = safeArray(pageData?.schema?.detectedTypes).some(t => String(t).toLowerCase() === "howto");
-
-  const definitionTerms = ["is defined as", "refers to", "means", "denotes", "is the process of", "is a term used to"];
-  const matchesDefinition = definitionTerms.some(term => text.includes(term));
+  metrics.push(buildMetric({
+    name: "FAQ Schema",
+    raw: hasFAQ ? 15 : 0,
+    max: 15,
+    weight: 15,
+    reason: hasFAQ ? "FAQPage structured data detected." : "No FAQPage schema detected.",
+    evidence: hasFAQ ? "FAQPage JSON-LD block present in page markup." : "No FAQPage entry in detected schema types.",
+    recommendation: "Add FAQPage JSON-LD with real question/answer pairs relevant to the page's topic."
+  }));
 
   const questionPatterns = ["what is", "how do i", "why does", "where can", "who is", "when should"];
-  const matchesQuestionPatterns = questionPatterns.some(pattern => text.includes(pattern));
-  const hasDirectAnswer = (text.includes("q:") && text.includes("a:")) || (matchesQuestionPatterns && text.length > 500);
+  const matchedQuestions = questionPatterns.filter(p => text.includes(p));
+  const hasQABlock = (text.includes("q:") && text.includes("a:")) || matchedQuestions.length > 0;
+  metrics.push(buildMetric({
+    name: "Question/Answer Blocks",
+    raw: hasQABlock ? Math.min(12, 6 + matchedQuestions.length * 2) : 0,
+    max: 12,
+    weight: 12,
+    reason: hasQABlock ? "Question-style phrasing detected in visible content." : "No question/answer phrasing patterns detected.",
+    evidence: matchedQuestions.length > 0 ? `Matched question patterns: ${matchedQuestions.join(", ")}.` : "No 'what is/how do i/why does' style phrasing found in body text.",
+    recommendation: "Phrase key sections as direct questions followed by concise answers, mirroring how users query AI assistants."
+  }));
+
+  const definitionTerms = ["is defined as", "refers to", "means", "denotes", "is the process of", "is a term used to"];
+  const matchedDefinitions = definitionTerms.filter(term => text.includes(term));
+  metrics.push(buildMetric({
+    name: "Definitional Content",
+    raw: matchedDefinitions.length > 0 ? 10 : 0,
+    max: 10,
+    weight: 10,
+    reason: matchedDefinitions.length > 0 ? "Definitional phrasing detected." : "No definitional phrasing detected.",
+    evidence: matchedDefinitions.length > 0 ? `Matched definitional phrases: ${matchedDefinitions.join(", ")}.` : "No 'refers to/is defined as/means' style phrasing found.",
+    recommendation: "Open key sections with a clear one-sentence definition of the core concept being discussed."
+  }));
 
   const listItemsCount = (text.match(/<li>/g) || []).length;
+  metrics.push(buildMetric({
+    name: "List Formatting",
+    raw: listItemsCount > 5 ? 8 : listItemsCount > 0 ? 4 : 0,
+    max: 8,
+    weight: 8,
+    reason: listItemsCount > 5 ? "Substantial list-based formatting detected." : listItemsCount > 0 ? "Minimal list formatting detected." : "No list elements detected.",
+    evidence: `${listItemsCount} <li> element(s) detected in the crawled HTML.`,
+    recommendation: "Break stepwise or enumerable information into <ul>/<ol> lists — LLMs favor extractable list structures."
+  }));
+
   const tableRowsCount = (text.match(/<tr>/g) || []).length;
+  metrics.push(buildMetric({
+    name: "Table Formatting",
+    raw: tableRowsCount > 0 ? 8 : 0,
+    max: 8,
+    weight: 8,
+    reason: tableRowsCount > 0 ? "Tabular data detected." : "No table elements detected.",
+    evidence: `${tableRowsCount} <tr> row(s) detected in the crawled HTML.`,
+    recommendation: "Present comparisons, specs, or structured data in an HTML <table> — highly extractable for AI answer engines."
+  }));
+
+  const hasHowTo = safeArray(pageData?.schema?.detectedTypes).some(t => String(t).toLowerCase() === "howto");
+  metrics.push(buildMetric({
+    name: "HowTo Schema",
+    raw: hasHowTo ? 12 : 0,
+    max: 12,
+    weight: 12,
+    reason: hasHowTo ? "HowTo structured data detected." : "No HowTo schema detected.",
+    evidence: hasHowTo ? "HowTo JSON-LD block present in page markup." : "No HowTo entry in detected schema types.",
+    recommendation: "Add HowTo JSON-LD for any step-by-step process described on the page."
+  }));
+
+  const words = safeNumber(pageData?.wordCount);
+  const entityCount = safeNumber(pageData?.entityDetails?.totalEntityCount);
+  const entityDensity = words > 0 ? (entityCount / words) * 100 : 0;
+  metrics.push(buildMetric({
+    name: "Entity Density",
+    raw: entityDensity >= 1.5 ? 10 : entityDensity >= 0.5 ? 5 : 0,
+    max: 10,
+    weight: 10,
+    reason: entityDensity >= 1.5 ? "High entity density supports knowledge-graph grounding." : entityDensity >= 0.5 ? "Moderate entity density." : "Low entity density.",
+    evidence: `${entityCount} entities across ${words} words (${entityDensity.toFixed(2)} per 100 words).`,
+    recommendation: "Reference more specific named entities so AI engines can ground answers in verifiable facts."
+  }));
 
   const hasCleanHeading = safeArray(pageData?.headings?.h1s).length > 0 && safeArray(pageData?.headings?.h2s).length > 0;
   const hasValidDescription = safeText(pageData?.metaDescription).length > 60;
-  let snippetScore = 10;
-  if (hasCleanHeading) snippetScore += 30;
-  if (hasValidDescription) snippetScore += 30;
-  if (hasDirectAnswer) snippetScore += 30;
+  const structuredAnswersRaw = (hasCleanHeading ? 4 : 0) + (hasValidDescription ? 4 : 0);
+  metrics.push(buildMetric({
+    name: "Structured Answer Framing",
+    raw: structuredAnswersRaw,
+    max: 8,
+    weight: 8,
+    reason: structuredAnswersRaw === 8 ? "Clean heading hierarchy and a substantive meta description both present." : structuredAnswersRaw > 0 ? "Partial structural framing present." : "No structural framing signals detected.",
+    evidence: `Clean H1/H2 hierarchy: ${hasCleanHeading}. Meta description over 60 chars: ${hasValidDescription}.`,
+    recommendation: "Pair a clear heading hierarchy with a substantive meta description so engines can frame a direct snippet."
+  }));
 
-  const jsonLdCount = safeArray(pageData?.schema?.jsonLd?.detectedTypes || pageData?.schema?.detectedTypes).length;
+  const hasDirectAnswer = (text.includes("q:") && text.includes("a:")) || (matchedQuestions.length > 0 && text.length > 500);
+  metrics.push(buildMetric({
+    name: "Direct Answer Blocks",
+    raw: hasDirectAnswer ? 10 : 0,
+    max: 10,
+    weight: 10,
+    reason: hasDirectAnswer ? "Direct-answer style content detected near question phrasing." : "No direct-answer block pattern detected.",
+    evidence: hasDirectAnswer ? "Question phrasing combined with sufficient surrounding content length." : "Insufficient combination of question phrasing and supporting content length.",
+    recommendation: "Follow each question-style heading immediately with a 1-3 sentence direct answer before elaborating."
+  }));
 
   const sentenceCount = text.split(/[.!?]+/).filter(Boolean).length || 1;
-  const wordCount = safeNumber(pageData?.wordCount || text.split(/\s+/).filter(Boolean).length);
-  const avgSentenceLength = wordCount / sentenceCount;
+  const avgSentenceLength = words / sentenceCount;
+  const answerLengthRaw = (avgSentenceLength >= 12 && avgSentenceLength <= 22) ? 5 : (avgSentenceLength < 12 || (avgSentenceLength > 22 && avgSentenceLength <= 35)) ? 3 : 0;
+  metrics.push(buildMetric({
+    name: "Answer Length Calibration",
+    raw: answerLengthRaw,
+    max: 5,
+    weight: 5,
+    reason: answerLengthRaw === 5 ? "Average sentence length is within the optimal extractable range." : answerLengthRaw === 3 ? "Sentence length is workable but not optimal." : "Sentence length is too long for clean extraction.",
+    evidence: `Measured average sentence length: ${avgSentenceLength.toFixed(1)} words across ${sentenceCount} sentence(s).`,
+    recommendation: "Target 12-22 word average sentence length for maximum extractability by answer engines."
+  }));
 
-  let readabilityScore = 50;
-  if (avgSentenceLength >= 12 && avgSentenceLength <= 22) {
-    readabilityScore = 100;
-  } else if (avgSentenceLength < 12) {
-    readabilityScore = 80;
-  } else if (avgSentenceLength > 35) {
-    readabilityScore = 30;
-  } else {
-    readabilityScore = 60;
-  }
+  const jsonLdCount = safeArray(pageData?.schema?.detectedTypes).length;
+  metrics.push(buildMetric({
+    name: "LLM-Friendly Formatting",
+    raw: jsonLdCount > 0 ? 2 : 0,
+    max: 2,
+    weight: 2,
+    reason: jsonLdCount > 0 ? "Structured data present, aiding machine parsing." : "No structured data present to aid machine parsing.",
+    evidence: `${jsonLdCount} structured data type(s) detected.`,
+    recommendation: "Add any relevant schema.org JSON-LD type to help language models parse page intent."
+  }));
 
-  const faqsWeight = hasFAQ ? 15 : 0;
-  const howToWeight = hasHowTo ? 15 : 0;
-  const definitionWeight = matchesDefinition ? 10 : 0;
-  const directAnswerWeight = hasDirectAnswer ? 20 : 0;
-  const snippetWeight = Math.round((snippetScore / 100) * 15);
-  const listWeight = listItemsCount > 3 ? 10 : (listItemsCount > 0 ? 5 : 0);
-  const tableWeight = tableRowsCount > 0 ? 10 : 0;
-  const jsonLdWeight = jsonLdCount > 0 ? 5 : 0;
+  const result = aggregateMetrics(metrics);
+  const readabilityScore = avgSentenceLength >= 12 && avgSentenceLength <= 22 ? 100 : avgSentenceLength < 12 ? 80 : avgSentenceLength > 35 ? 30 : 60;
 
-  const dynamicAeoTotal = faqsWeight + howToWeight + definitionWeight + directAnswerWeight + snippetWeight + listWeight + tableWeight + jsonLdWeight;
-  const aeoScore = clamp(dynamicAeoTotal, 10, 100);
+  // Per-engine simulation is now fully derived from the metrics above —
+  // no independent static formula, so it can never drift from real evidence.
+  const faqsWeight = metrics.find(m => m.metric === "FAQ Schema")?.contribution || 0;
+  const howToWeight = metrics.find(m => m.metric === "HowTo Schema")?.contribution || 0;
+  const tableWeight = metrics.find(m => m.metric === "Table Formatting")?.contribution || 0;
+  const directAnswerWeight = metrics.find(m => m.metric === "Direct Answer Blocks")?.contribution || 0;
 
-  const chatGptCitationProbability = clamp(Math.round((aeoScore * 0.40) + (readabilityScore * 0.30) + (faqsWeight * 2)), 10, 99);
-  const geminiCitationProbability = clamp(Math.round((aeoScore * 0.35) + (tableWeight * 2) + (jsonLdWeight * 2) + (readabilityScore * 0.30)), 10, 99);
-  const perplexityCitationProbability = clamp(Math.round((aeoScore * 0.45) + (directAnswerWeight * 1.5) + (readabilityScore * 0.20)), 10, 99);
-  const claudeCitationProbability = clamp(Math.round((aeoScore * 0.30) + (readabilityScore * 0.50) + (howToWeight * 1.5)), 10, 99);
+  const chatGptCitationProbability = clamp(Math.round((result.score * 0.40) + (readabilityScore * 0.30) + (faqsWeight * 2)), 10, 99);
+  const geminiCitationProbability = clamp(Math.round((result.score * 0.35) + (tableWeight * 2) + (readabilityScore * 0.30)), 10, 99);
+  const perplexityCitationProbability = clamp(Math.round((result.score * 0.45) + (directAnswerWeight * 1.5) + (readabilityScore * 0.20)), 10, 99);
+  const claudeCitationProbability = clamp(Math.round((result.score * 0.30) + (readabilityScore * 0.50) + (howToWeight * 1.5)), 10, 99);
 
   return {
-    aeoScore,
+    aeoScore: result.score,
+    status: result.status,
+    metrics: result.metrics,
+    passedMetrics: result.passedMetrics,
+    failedMetrics: result.failedMetrics,
+    totalExpectedImprovement: result.totalExpectedImprovement,
     readabilityScore,
     avgSentenceLength,
     structuralAeoMetrics: {
-      hasFAQ,
-      hasHowTo,
-      matchesDefinition,
-      hasDirectAnswer,
-      listItemsCount,
-      tableRowsCount,
-      jsonLdCount
+      hasFAQ, hasHowTo, matchesDefinition: matchedDefinitions.length > 0, hasDirectAnswer,
+      listItemsCount, tableRowsCount, jsonLdCount
     },
     simulations: {
-      chatgpt: {
-        score: chatGptCitationProbability,
-        reasoning: chatGptCitationProbability >= 80 ? "Excellent sentence structure and rich Q&A syntax alignment." : "Enhance Q&A formats to boost reference selection likelihood."
-      },
-      gemini: {
-        score: geminiCitationProbability,
-        reasoning: geminiCitationProbability >= 80 ? "Highly structured lists, table matrices, and dynamic entities found." : "Add schema profiles and tables to optimize data rendering."
-      },
-      perplexity: {
-        score: perplexityCitationProbability,
-        reasoning: perplexityCitationProbability >= 80 ? "Explicit semantic summary block located close to primary header tags." : "Add clear concise summaries right below H1 headings."
-      },
-      claude: {
-        score: claudeCitationProbability,
-        reasoning: claudeCitationProbability >= 80 ? "Exemplary linguistic layout containing deep procedural guides." : "Increase deep descriptive formatting and logical guide step coverage."
-      }
+      chatgpt: { score: chatGptCitationProbability, reasoning: chatGptCitationProbability >= 80 ? "Strong Q&A structure and FAQ schema alignment." : "Add FAQ schema and direct-answer blocks to improve selection likelihood." },
+      gemini: { score: geminiCitationProbability, reasoning: geminiCitationProbability >= 80 ? "Well-structured tables and readable sentence rhythm." : "Add tables and structured data to improve Gemini's rendering fit." },
+      perplexity: { score: perplexityCitationProbability, reasoning: perplexityCitationProbability >= 80 ? "Clear direct-answer blocks near question phrasing." : "Add explicit direct-answer sentences immediately after question headings." },
+      claude: { score: claudeCitationProbability, reasoning: claudeCitationProbability >= 80 ? "Deep procedural HowTo structure and calibrated sentence length." : "Add HowTo schema and calibrate sentence length to 12-22 words." }
     }
   };
 }
@@ -2170,7 +2499,58 @@ export function scanDynamicTrustSignals($, html, url, pageData) {
     issues: [...new Set(issues)]
   };
 }
+export function calculateImageSeoScore(pageData) {
+  const images = safeArray(pageData?.images);
+  if (images.length === 0) {
+    return { score: 100, status: "No Images Present", metrics: [], note: "No <img> elements were found to evaluate." };
+  }
 
+  const withAlt = images.filter(i => safeText(i.alt)).length;
+  const withGoodFilename = images.filter(i => i.hasFilenameContext).length;
+  const withDimensions = images.filter(i => i.width && i.height).length;
+  const withLazyLoading = images.filter(i => i.loading === "lazy").length;
+  const modernFormat = images.filter(i => i.isModernFormat).length;
+
+  const metrics = [
+    buildMetric({ name: "Alt Text Coverage", raw: Math.round((withAlt / images.length) * 30), max: 30, weight: 30, reason: `${withAlt}/${images.length} images have alt text.`, evidence: `${withAlt} of ${images.length} <img> tags carry a non-empty alt attribute.`, recommendation: "Add descriptive alt text to every content image." }),
+    buildMetric({ name: "Descriptive Filenames", raw: Math.round((withGoodFilename / images.length) * 20), max: 20, weight: 20, reason: `${withGoodFilename}/${images.length} images use descriptive filenames.`, evidence: `${withGoodFilename} of ${images.length} image filenames avoid generic patterns like "IMG_001.jpg".`, recommendation: "Rename image files to describe their content (e.g., 'blue-widget-front-view.jpg')." }),
+    buildMetric({ name: "Explicit Dimensions", raw: Math.round((withDimensions / images.length) * 20), max: 20, weight: 20, reason: `${withDimensions}/${images.length} images declare width/height.`, evidence: `${withDimensions} of ${images.length} <img> tags declare explicit width/height attributes.`, recommendation: "Add width and height attributes to prevent layout shift (CLS) during page load." }),
+    buildMetric({ name: "Lazy Loading", raw: Math.round((withLazyLoading / images.length) * 15), max: 15, weight: 15, reason: `${withLazyLoading}/${images.length} images use native lazy loading.`, evidence: `${withLazyLoading} of ${images.length} <img> tags declare loading="lazy".`, recommendation: "Add loading=\"lazy\" to below-the-fold images to improve initial page load speed." }),
+    buildMetric({ name: "Modern Image Formats", raw: Math.round((modernFormat / images.length) * 15), max: 15, weight: 15, reason: `${modernFormat}/${images.length} images use WebP/AVIF.`, evidence: `${modernFormat} of ${images.length} images use a modern compressed format (WebP/AVIF).`, recommendation: "Convert JPEG/PNG images to WebP or AVIF for smaller file sizes at equivalent quality." })
+  ];
+
+  return aggregateMetrics(metrics);
+}
+
+export function calculateInternalLinkScoreDetailed(linkAnalysisDetail) {
+  const d = safeObject(linkAnalysisDetail);
+  const metrics = [
+    buildMetric({ name: "Internal Link Volume", raw: clamp(d.internalLinks, 0, 15), max: 15, weight: 30, reason: `${d.internalLinks || 0} internal links detected.`, evidence: `${d.internalLinks || 0} internal links across ${d.uniquePages || 0} unique destinations.`, recommendation: "Increase internal linking to related content." }),
+    buildMetric({ name: "Anchor Text Diversity", raw: Math.round((safeNumber(d.anchorDiversityScore) / 100) * 25), max: 25, weight: 25, reason: `Anchor diversity score: ${d.anchorDiversityScore || 0}/100.`, evidence: `Anchor diversity measured at ${d.anchorDiversityScore || 0}/100 across sampled links.`, recommendation: "Vary anchor text instead of repeating the same phrase across links." }),
+    buildMetric({ name: "Contextual Placement", raw: Math.round((safeNumber(d.contextualLinkScore) / 100) * 25), max: 25, weight: 25, reason: `Contextual link score: ${d.contextualLinkScore || 0}/100.`, evidence: `${d.contextualLinkScore || 0}/100 of internal links sit inside body paragraphs/lists rather than navigation.`, recommendation: "Place internal links within body content, not just navigation and footers." }),
+    buildMetric({ name: "Destination Coverage", raw: d.orphanPageRiskDetected ? 0 : 20, max: 20, weight: 20, reason: d.orphanPageRiskDetected ? "Low unique destination count suggests possible orphaned pages." : "Healthy spread of unique link destinations.", evidence: `${d.uniquePages || 0} unique internal destinations detected from this single-page crawl.`, recommendation: "Run a full-site crawl to confirm and fix orphaned pages with no inbound internal links." })
+  ];
+  return aggregateMetrics(metrics);
+}
+
+export function calculateLocalSeoScore(pageData, schemaAudit) {
+  const hasLocalBusinessSchema = safeArray(schemaAudit?.detectedTypes).some(t => String(t).toLowerCase() === "localbusiness");
+  const hasPhone = safeArray(pageData?.entityDetails?.phones).length > 0;
+  const hasAddress = /\b\d{5}\b/.test(safeText(pageData?.visibleText)) || /address|suite|street|avenue/i.test(safeText(pageData?.visibleText));
+  const hasMapEmbed = /google\.com\/maps|maps\.google/i.test(safeText(pageData?.visibleText));
+  const hasHoursText = /(open|hours)[^.]{0,40}(mon|tue|wed|thu|fri|sat|sun|\d{1,2}\s*(am|pm))/i.test(safeText(pageData?.visibleText).toLowerCase());
+  const hasReviewsText = /review|testimonial|star rating|rated \d/i.test(safeText(pageData?.visibleText).toLowerCase());
+
+  const metrics = [
+    buildMetric({ name: "NAP Consistency (Name/Address/Phone)", raw: (hasPhone ? 10 : 0) + (hasAddress ? 10 : 0), max: 20, weight: 20, reason: hasPhone && hasAddress ? "Both phone and address signals detected in content." : "Incomplete NAP signals detected.", evidence: `Phone detected: ${hasPhone}. Address pattern detected: ${hasAddress}.`, recommendation: "Ensure Name, Address, and Phone are clearly and consistently listed on the page." }),
+    buildMetric({ name: "LocalBusiness Schema", raw: hasLocalBusinessSchema ? 25 : 0, max: 25, weight: 25, reason: hasLocalBusinessSchema ? "LocalBusiness structured data detected." : "No LocalBusiness schema detected.", evidence: hasLocalBusinessSchema ? "LocalBusiness JSON-LD present." : "No LocalBusiness entry in detected schema types.", recommendation: "Add LocalBusiness JSON-LD with name, address, phone, and geo coordinates." }),
+    buildMetric({ name: "Google Maps Linkage", raw: hasMapEmbed ? 20 : 0, max: 20, weight: 20, reason: hasMapEmbed ? "Google Maps reference detected." : "No Google Maps embed or link detected.", evidence: `Google Maps URL pattern detected in page content: ${hasMapEmbed}.`, recommendation: "Embed a Google Maps widget or link to your Google Business Profile listing." }),
+    buildMetric({ name: "Opening Hours", raw: hasHoursText ? 15 : 0, max: 15, weight: 15, reason: hasHoursText ? "Opening hours text pattern detected." : "No opening hours text detected.", evidence: `Day-of-week / time pattern detected: ${hasHoursText}.`, recommendation: "List business hours clearly in visible text or structured data (openingHoursSpecification)." }),
+    buildMetric({ name: "Review/Testimonial Signals", raw: hasReviewsText ? 20 : 0, max: 20, weight: 20, reason: hasReviewsText ? "Review or testimonial language detected." : "No review or testimonial content detected.", evidence: `Review-related keyword pattern detected: ${hasReviewsText}.`, recommendation: "Display customer reviews or testimonials, ideally with Review/AggregateRating schema." })
+  ];
+
+  return aggregateMetrics(metrics);
+}
 // =========================================================================
 // ========== SECTION 14: ENTERPRISE AI CITATION ENGINE ====================
 // =========================================================================
@@ -2251,16 +2631,32 @@ export function estimateAIEngineCitations(crawlData) {
   const mistral = clamp(Math.round(mistralBase), 10, 99);
 
   const averageProbability = Math.round((chatgpt + gemini + claude + perplexity + copilot + mistral) / 6);
+  const buildEvidenceBlock = (engineKey, score) => {
+    const missing = [];
+    if (!crawlData.hasFAQ) missing.push("No FAQ schema");
+    if (!crawlData.hasDirectAnswer) missing.push("No direct-answer blocks");
+    if (!crawlData.hasAuthor) missing.push("No author attribution");
+    if (safeNumber(crawlData.wordCount) < 900) missing.push("Content depth below 900 words");
+    if (safeNumber(crawlData.tableCount) === 0) missing.push("No tabular data");
 
+    return {
+      currentScore: score,
+      evidence: `Derived from ${safeNumber(crawlData.wordCount)} words, EEAT score ${safeNumber(crawlData.eeatScore)}, topical authority ${safeNumber(crawlData.topicalAuthorityScore)}, and ${safeNumber(crawlData.internalLinkScore)}/100 internal link strength.`,
+      missingSignals: missing,
+      improvementSuggestions: missing.length > 0
+        ? missing.map(m => `Address: ${m}.`)
+        : ["No major gaps detected for this engine profile."]
+    };
+  };
   return {
     citationProbability: averageProbability,
     engines: {
-      chatgpt: { score: chatgpt, status: getEngineVerdict(chatgpt) },
-      gemini: { score: gemini, status: getEngineVerdict(gemini) },
-      claude: { score: claude, status: getEngineVerdict(claude) },
-      perplexity: { score: perplexity, status: getEngineVerdict(perplexity) },
-      copilot: { score: copilot, status: getEngineVerdict(copilot) },
-      mistral: { score: mistral, status: getEngineVerdict(mistral) }
+      chatgpt: { score: chatgpt, status: getEngineVerdict(chatgpt), ...buildEvidenceBlock("chatgpt", chatgpt) },
+      gemini: { score: gemini, status: getEngineVerdict(gemini), ...buildEvidenceBlock("gemini", gemini) },
+      claude: { score: claude, status: getEngineVerdict(claude), ...buildEvidenceBlock("claude", claude) },
+      perplexity: { score: perplexity, status: getEngineVerdict(perplexity), ...buildEvidenceBlock("perplexity", perplexity) },
+      copilot: { score: copilot, status: getEngineVerdict(copilot), ...buildEvidenceBlock("copilot", copilot) },
+      mistral: { score: mistral, status: getEngineVerdict(mistral), ...buildEvidenceBlock("mistral", mistral) }
     }
   };
 }
@@ -2480,7 +2876,11 @@ export async function analyzeSingleUrl(url) {
     const sitemapData = await detectSitemap(crawl.finalUrl, robotsData);
     void sitemapDataSeed;
 
-    const seoAudit = calculateDynamicSeoScore(pageData, loadTimeMs);
+   const seoAudit = await calculateDynamicSeoScore(pageData, loadTimeMs, {
+  robotsData,
+  sitemapData,
+  schemaAudit: schemasDetected
+});
     const aeoAudit = calculateDynamicAeoScore(pageData, pageData.visibleText);
     const eeatAudit = analyzeEEATAdvanced($, pageData.visibleText, pageData);
 
@@ -2509,7 +2909,9 @@ export async function analyzeSingleUrl(url) {
 
     const schemasDetected = auditPageSchemas($, crawl.html);
     const schemaBlock = buildSchemaRecommendations(schemasDetected.detectedTypes, pageData.title, pageData.metaDescription, crawl.finalUrl);
-
+    const imageSeoAudit = calculateImageSeoScore(pageData);
+    const internalLinkAudit = calculateInternalLinkScoreDetailed(pageData.linkAnalysisDetail);
+    const localSeoAudit = calculateLocalSeoScore(pageData, schemasDetected);
     const aiEngineCitations = estimateAIEngineCitations({
       hasFAQ: schemasDetected.detectedTypes.some(t => String(t).toLowerCase() === "faqpage"),
       hasHowTo: schemasDetected.detectedTypes.some(t => String(t).toLowerCase() === "howto"),
@@ -2689,6 +3091,15 @@ export async function analyzeSingleUrl(url) {
         status: trustAudit.status,
         factors: trustAudit.factors,
         issues: trustAudit.issues
+      },
+      imageSeo: imageSeoAudit,
+      internalLinkDetail: internalLinkAudit,
+      localSEO: {
+        localScore: localSeoAudit.score,
+        napConsistency: localSeoAudit.metrics.find(m => m.metric.includes("NAP"))?.reason,
+        mapDetected: localSeoAudit.metrics.find(m => m.metric.includes("Maps"))?.passed || false,
+        localBusinessSchemaDetected: localSeoAudit.metrics.find(m => m.metric.includes("LocalBusiness"))?.passed || false,
+        metrics: localSeoAudit.metrics
       },
       recommendedSchemas: schemaBlock.missingSchemas,
       schemaRecommendationsBlock: schemaBlock.schemaGeneratorCode,

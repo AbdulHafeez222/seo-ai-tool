@@ -2,71 +2,159 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Aegis AI - SEO + GEO Intelligence Platform v9 Enterprise</title>
+  <title>Aegis AI Visibility — Enterprise SEO, AEO & GEO Intelligence Platform</title>
+  <meta name="description" content="Enterprise-grade AI visibility auditing platform. Analyze SEO, AEO, E-E-A-T, topical authority, and AI citation probability across ChatGPT, Gemini, Perplexity, and Claude.">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
- 
+  <meta name="theme-color" content="#0b0f19">
+  <meta name="robots" content="noindex, nofollow">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+
 <style>
-/* ===== ENTERPRISE SAAS SYSTEM THEME VARIABLES ===== */
+/* =========================================================================
+   ENTERPRISE DESIGN SYSTEM — TOKENS
+   ========================================================================= */
 :root {
   --bg-body: #0b0f19;
   --bg-box: #111827;
   --bg-card: #1f2937;
+  --bg-card-hover: #232f42;
   --bg-ai-box: #0f172a;
+  --bg-input: #0b0f19;
   --text-primary: #f9fafb;
   --text-secondary: #d1d5db;
   --text-heading: #ffffff;
   --text-muted: #9ca3af;
+  --text-inverse: #0b0f19;
   --border-color: #374151;
+  --border-color-strong: #4b5563;
   --selection-bg: #3b82f6;
   --selection-text: #ffffff;
   --accent-primary: #3b82f6;
   --accent-primary-hover: #2563eb;
+  --accent-primary-soft: rgba(59, 130, 246, 0.12);
   --accent-success: #10b981;
+  --accent-success-soft: rgba(16, 185, 129, 0.12);
   --accent-warning: #f59e0b;
+  --accent-warning-soft: rgba(245, 158, 11, 0.12);
   --accent-danger: #ef4444;
+  --accent-danger-soft: rgba(239, 68, 68, 0.12);
   --accent-purple: #8b5cf6;
+  --accent-purple-soft: rgba(139, 92, 246, 0.12);
   --card-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  --card-shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.35), 0 8px 10px -6px rgb(0 0 0 / 0.35);
   --glass-bg: rgba(17, 24, 39, 0.85);
   --glass-backdrop: blur(16px);
   --card-radius: 16px;
+  --card-radius-sm: 10px;
+  --card-radius-lg: 20px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 2rem;
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.25s ease;
+  --focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.35);
 }
 
-/* LIGHT THEME */
 body.light {
   --bg-body: #f8fafc;
   --bg-box: #ffffff;
   --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
   --bg-ai-box: #eff6ff;
+  --bg-input: #ffffff;
   --text-primary: #0f172a;
   --text-secondary: #334155;
   --text-heading: #1e293b;
   --text-muted: #64748b;
+  --text-inverse: #ffffff;
   --border-color: #e2e8f0;
+  --border-color-strong: #cbd5e1;
   --selection-bg: #2563eb;
   --card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  --card-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.08);
   --glass-bg: rgba(255, 255, 255, 0.85);
 }
 
-/* ===== BASE STYLES ===== */
-body { 
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-  background: var(--bg-body); 
+*, *::before, *::after { box-sizing: border-box; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg-body);
   color: var(--text-primary);
   padding: 0;
   margin: 0;
-  transition: background 0.3s ease, color 0.3s ease;
+  transition: background var(--transition-base), color var(--transition-base);
   line-height: 1.5;
+  font-size: var(--font-size-base);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ===== ACCESSIBILITY Focus States ===== */
-button:focus-visible, input:focus-visible {
+::selection { background: var(--selection-bg); color: var(--selection-text); }
+
+/* =========================================================================
+   ACCESSIBILITY
+   ========================================================================= */
+.skip-link {
+  position: absolute;
+  top: -48px;
+  left: 12px;
+  z-index: 10001;
+  background: var(--accent-primary);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: top var(--transition-fast);
+}
+.skip-link:focus { top: 12px; }
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+button:focus-visible,
+input:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible,
+summary:focus-visible {
   outline: 3px solid var(--accent-primary);
   outline-offset: 2px;
+  border-radius: 4px;
 }
 
-/* ===== STICKY TOP ACTION BAR ===== */
+/* =========================================================================
+   ACTION BAR / HEADER
+   ========================================================================= */
 .action-bar {
   position: sticky;
   top: 0;
@@ -80,54 +168,46 @@ button:focus-visible, input:focus-visible {
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+  gap: var(--space-4);
+  flex-wrap: wrap;
 }
 
-.brand-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
+.brand-title-wrap { display: flex; align-items: center; gap: 12px; min-width: 0; }
 
 .brand-logo-icon {
   background: linear-gradient(135deg, var(--accent-primary), var(--accent-purple));
   color: white;
-  width: 36px;
-  height: 36px;
+  width: 36px; height: 36px;
   border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   font-weight: 800;
+  flex-shrink: 0;
 }
 
 .action-bar h1 {
-  font-size: 1.25rem;
+  font-size: var(--font-size-xl);
   margin: 0;
   font-weight: 800;
   background: linear-gradient(90deg, #3b82f6, #8b5cf6);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  white-space: nowrap;
 }
 
+.action-bar-controls { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+
 .status-badge-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  background: rgba(16, 185, 129, 0.1);
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--font-size-xs);
+  background: var(--accent-success-soft);
   color: var(--accent-success);
   padding: 4px 10px;
   border-radius: 20px;
   font-weight: 600;
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--accent-success);
-  border-radius: 50%;
-  animation: pulse-dot 1.5s infinite;
-}
+.status-dot { width: 8px; height: 8px; background: var(--accent-success); border-radius: 50%; animation: pulse-dot 1.5s infinite; }
+.status-dot.busy { background: var(--accent-warning); }
 
 @keyframes pulse-dot {
   0% { transform: scale(0.95); opacity: 0.5; }
@@ -135,22 +215,32 @@ button:focus-visible, input:focus-visible {
   100% { transform: scale(0.95); opacity: 0.5; }
 }
 
-.dashboard-container {
-  max-width: 1400px;
-  margin: 20px auto;
-  padding: 0 20px 80px 20px;
+.theme-toggle-btn {
+  padding: 8px 16px; font-size: var(--font-size-xs);
+  background: var(--bg-card); color: var(--text-primary);
+  border: 1px solid var(--border-color);
 }
 
-.box { 
-  background: var(--bg-box); 
-  padding: 30px; 
-  border-radius: var(--card-radius); 
-  box-shadow: var(--card-shadow); 
+/* =========================================================================
+   LAYOUT
+   ========================================================================= */
+.dashboard-container { max-width: 1400px; margin: 20px auto; padding: 0 20px 80px 20px; }
+
+.box {
+  background: var(--bg-box);
+  padding: 30px;
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
   border: 1px solid var(--border-color);
   text-align: left;
 }
 
-/* ===== INPUTS & BUTTONS ===== */
+.section-intro { margin-bottom: var(--space-5); }
+.section-intro p.helper-text { font-size: var(--font-size-sm); color: var(--text-muted); margin-top: -6px; }
+
+/* =========================================================================
+   FORM CONTROLS
+   ========================================================================= */
 .input-grid-saas {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -158,35 +248,70 @@ button:focus-visible, input:focus-visible {
   margin-bottom: 20px;
 }
 
-.input-group {
-  margin-bottom: 0;
-}
+.input-group { margin-bottom: 0; }
 
 .input-label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 600;
   margin-bottom: 6px;
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 
-input { 
-  width: 100%; 
+.input-label .optional-tag {
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.input-help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--border-color);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: help;
+}
+
+input[type="text"], input:not([type]) {
+  width: 100%;
   box-sizing: border-box;
-  padding: 12px 16px; 
-  border: 1px solid var(--border-color); 
-  border-radius: 10px;
-  background: var(--bg-body);
+  padding: 12px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--card-radius-sm);
+  background: var(--bg-input);
   color: var(--text-primary);
   font-size: 1rem;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
 input:focus {
   outline: none;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  box-shadow: var(--focus-ring);
 }
+
+input[aria-invalid="true"] {
+  border-color: var(--accent-danger);
+  box-shadow: 0 0 0 3px var(--accent-danger-soft);
+}
+
+.field-error-text {
+  color: var(--accent-danger);
+  font-size: var(--font-size-xs);
+  margin-top: 6px;
+  display: none;
+  font-weight: 600;
+}
+.field-error-text.visible { display: block; }
 
 .btn-grid {
   display: grid;
@@ -195,105 +320,156 @@ input:focus {
   margin-top: 15px;
 }
 
-button { 
-  padding: 12px 20px; 
-  border: none; 
-  background: var(--accent-primary); 
-  color: white; 
-  cursor: pointer; 
-  border-radius: 10px; 
-  font-weight: 600; 
-  font-size: 0.875rem;
+button {
+  padding: 12px 20px;
+  border: none;
+  background: var(--accent-primary);
+  color: white;
+  cursor: pointer;
+  border-radius: var(--card-radius-sm);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
+  font-family: inherit;
 }
 button:hover { background: var(--accent-primary-hover); transform: translateY(-1px); }
 button:active { transform: translateY(0); }
 button:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
 
-/* ===== CARDS & GRIDS ===== */
-.card { 
-  text-align: left; 
-  margin-top: 24px; 
-  background: var(--bg-card); 
+button .btn-spinner {
+  display: none;
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+button[aria-busy="true"] .btn-spinner { display: inline-block; }
+button[aria-busy="true"] .btn-label-text::after { content: "…"; }
+
+/* =========================================================================
+   CARDS
+   ========================================================================= */
+.card {
+  text-align: left;
+  margin-top: 24px;
+  background: var(--bg-card);
   color: var(--text-primary);
-  padding: 24px; 
+  padding: 24px;
   border-radius: var(--card-radius);
   border: 1px solid var(--border-color);
   box-shadow: var(--card-shadow);
+  transition: box-shadow var(--transition-base);
 }
+.card:hover { box-shadow: var(--card-shadow-lg); }
 
-.ai-box { 
-  background: var(--bg-ai-box); 
+.ai-box {
+  background: var(--bg-ai-box);
   color: var(--text-primary);
-  padding: 20px; 
-  border-radius: 12px; 
+  padding: 20px;
+  border-radius: 12px;
   margin-top: 12px;
   border: 1px solid var(--border-color);
+  transition: border-color var(--transition-fast);
 }
+.ai-box:hover { border-color: var(--border-color-strong); }
 
-h3 { 
+h2.visually-hidden-heading { position: absolute; width: 1px; height: 1px; overflow: hidden; }
+
+h3 {
   margin-top: 0;
-  margin-bottom: 20px; 
-  color: var(--text-heading); 
-  font-size: 1.25rem;
+  margin-bottom: 20px;
+  color: var(--text-heading);
+  font-size: var(--font-size-xl);
   font-weight: 700;
-  border-bottom: 2px solid var(--border-color); 
-  padding-bottom: 10px; 
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 10px;
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-content: space-between;
+  flex-wrap: wrap;
 }
+h3 .card-title-group { display: flex; align-items: center; gap: 8px; }
+h3 .card-title-actions { display: flex; align-items: center; gap: 8px; }
+
+h4 { color: var(--text-heading); font-size: var(--font-size-base); font-weight: 700; margin: var(--space-4) 0 var(--space-2) 0; }
 
 p { color: var(--text-secondary); margin: 0 0 10px 0; }
 small { color: var(--text-muted) !important; }
 
-/* ===== CHARTS & GAUGES ===== */
-.chartContainer { 
-  display: grid; 
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); 
-  gap: 24px; 
-  margin: 30px 0; 
+/* =========================================================================
+   TOOLTIPS
+   ========================================================================= */
+.tooltip-wrap { position: relative; display: inline-flex; }
+.tooltip-wrap:hover .tooltip-bubble,
+.tooltip-wrap:focus-within .tooltip-bubble { opacity: 1; visibility: visible; transform: translateY(0); }
+.tooltip-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #0f172a;
+  color: #f9fafb;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all var(--transition-fast);
+  box-shadow: var(--card-shadow);
+  z-index: 20;
+  pointer-events: none;
 }
 
-.chartBox { 
+/* =========================================================================
+   CHARTS & GAUGES
+   ========================================================================= */
+.chartContainer {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 24px;
+  margin: 30px 0;
+}
+
+.chartBox {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   padding: 20px;
   border-radius: var(--card-radius);
-  position: relative; 
-  display: flex; 
-  flex-direction: column;
-  align-items: center; 
-  justify-content: center; 
-  box-shadow: var(--card-shadow);
-}
-
-.chartWrapper {
   position: relative;
-  width: 150px;
-  height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--card-shadow);
+  transition: transform var(--transition-fast);
 }
+.chartBox:hover { transform: translateY(-2px); }
+
+.chartWrapper { position: relative; width: 150px; height: 150px; }
 
 canvas { width: 100% !important; height: 100% !important; position: relative; z-index: 1; }
 
-.centerScore { 
-  position: absolute; top: 50%; left: 50%; 
-  transform: translate(-50%, -50%); 
-  font-size: 26px; font-weight: 800; 
-  text-align: center; line-height: 1; 
-  pointer-events: none; z-index: 10; width: 100%; 
+.centerScore {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 26px; font-weight: 800;
+  text-align: center; line-height: 1;
+  pointer-events: none; z-index: 10; width: 100%;
 }
-.centerScore span { 
-  display: block; font-size: 11px; 
-  font-weight: 600; color: var(--text-muted); margin-top: 4px; 
+.centerScore span {
+  display: block; font-size: 11px;
+  font-weight: 600; color: var(--text-muted); margin-top: 4px;
   text-transform: uppercase;
 }
 
-/* ===== RADAR / TREND DUAL GRID ===== */
 .dual-visuals-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -302,33 +478,50 @@ canvas { width: 100% !important; height: 100% !important; position: relative; z-
 }
 
 @media (max-width: 600px) {
-  .dual-visuals-grid {
-    grid-template-columns: 1fr;
-  }
+  .dual-visuals-grid { grid-template-columns: 1fr; }
 }
 
-/* ===== EXECUTIVE METRICS BADGES ===== */
-.badge { display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+/* =========================================================================
+   BADGES
+   ========================================================================= */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
 .badge-green { background: #14532d; color: #bbf7d0; }
 .badge-red { background: #7f1d1d; color: #fecaca; }
 .badge-orange { background: #7c2d12; color: #fed7aa; }
 .badge-purple { background: #581c87; color: #e9d5ff; }
+.badge-neutral { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+.badge-info { background: rgba(59, 130, 246, 0.15); color: #93c5fd; }
 
 body.light .badge-green { background: #dcfce7; color: #166534; }
 body.light .badge-red { background: #fee2e2; color: #991b1b; }
 body.light .badge-orange { background: #ffedd5; color: #9a3412; }
 body.light .badge-purple { background: #f3e8ff; color: #6b21a8; }
+body.light .badge-info { background: #dbeafe; color: #1d4ed8; }
 
-/* ===== METRICS SAAS DASHBOARD GRID ===== */
+/* =========================================================================
+   METRICS GRID
+   ========================================================================= */
 .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 15px 0; }
-.metric-box { 
-  text-align: center; padding: 20px; 
-  background: linear-gradient(135deg, #1e3a8a 0%, #4c1d95 100%); 
-  border-radius: 12px; color: white; 
+.metric-box {
+  text-align: center; padding: 20px;
+  background: linear-gradient(135deg, #1e3a8a 0%, #4c1d95 100%);
+  border-radius: 12px; color: white;
   box-shadow: 0 4px 10px rgba(0,0,0,0.1);
   position: relative;
   overflow: hidden;
+  transition: transform var(--transition-fast);
 }
+.metric-box:hover { transform: translateY(-2px); }
 body.light .metric-box { background: linear-gradient(135deg, #3b82f6 0%, #6d28d9 100%); }
 .metric-value { font-size: 28px; font-weight: 800; line-height: 1; }
 .metric-label { font-size: 13px; opacity: 0.9; margin-top: 6px; font-weight: 600; }
@@ -344,40 +537,30 @@ body.light .metric-box { background: linear-gradient(135deg, #3b82f6 0%, #6d28d9
   background: rgba(255,255,255,0.15);
 }
 
-/* ===== STRENGTH/WEAKNESS REASONING SYSTEM ===== */
-.reasoning-panel {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-  margin-top: 15px;
-}
-@media(min-width: 768px) {
-  .reasoning-panel { grid-template-columns: 1fr 1fr; }
-}
+/* =========================================================================
+   PROGRESS BARS
+   ========================================================================= */
+.progress-row { margin-bottom: 14px; }
+.progress-row-head { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: var(--font-size-sm); }
+.progress-track { width: 100%; height: 8px; background: rgba(148,163,184,0.2); border-radius: 10px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 10px; transition: width 0.8s ease; }
 
-.reasoning-box {
-  padding: 16px;
-  border-radius: 10px;
-  border: 1px solid var(--border-color);
-}
-.reasoning-box.strength {
-  background: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.3);
-}
-.reasoning-box.weakness {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.3);
-}
-.reasoning-title {
-  font-weight: 700;
-  font-size: 0.95rem;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
+/* =========================================================================
+   REASONING PANELS
+   ========================================================================= */
+.reasoning-panel { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 15px; }
+@media(min-width: 768px) { .reasoning-panel { grid-template-columns: 1fr 1fr; } }
 
-/* ===== SCHEMAS CODE BLOCKS & SYNTAX HIGHLIGHT ===== */
+.reasoning-box { padding: 16px; border-radius: 10px; border: 1px solid var(--border-color); }
+.reasoning-box.strength { background: var(--accent-success-soft); border-color: rgba(16, 185, 129, 0.3); }
+.reasoning-box.weakness { background: var(--accent-danger-soft); border-color: rgba(239, 68, 68, 0.3); }
+.reasoning-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.reasoning-box ul { margin-top: 6px; }
+.reasoning-box li { font-size: var(--font-size-sm); }
+
+/* =========================================================================
+   CODE BLOCKS
+   ========================================================================= */
 pre {
   color: #f8fcfc !important;
   background: #0f172a !important;
@@ -387,9 +570,12 @@ pre {
   overflow-x: auto;
   font-size: 13px;
   text-align: left;
+  max-height: 320px;
 }
 
-/* ===== LOADING OVERLAY STATE ===== */
+/* =========================================================================
+   LOADING / SKELETON / EMPTY STATES
+   ========================================================================= */
 .loading-overlay {
   display: none;
   position: fixed;
@@ -414,27 +600,19 @@ pre {
 }
 
 .loading-spinner {
-  border: 4px solid rgba(255,255,255,0.1); 
-  border-top: 4px solid var(--accent-primary); 
-  border-radius: 50%; width: 48px; height: 48px; 
+  border: 4px solid rgba(255,255,255,0.1);
+  border-top: 4px solid var(--accent-primary);
+  border-radius: 50%; width: 48px; height: 48px;
   animation: spin 1s linear infinite; margin: 0 auto 20px auto;
 }
 
-.loading-status-text {
-  font-weight: 700;
-  font-size: 1.1rem;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.loading-subtext {
-  color: var(--text-muted);
-  font-size: 14px;
-}
+.loading-status-text { font-weight: 700; font-size: 1.1rem; color: var(--text-primary); margin-bottom: 8px; }
+.loading-subtext { color: var(--text-muted); font-size: 14px; }
+.loading-progress-track { width: 100%; height: 6px; background: rgba(148,163,184,0.2); border-radius: 10px; overflow: hidden; margin-top: 18px; }
+.loading-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-primary), var(--accent-purple)); transition: width 0.6s ease; }
 
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-/* Skeleton Placeholder */
 .skeleton-loader {
   display: none;
   background: var(--bg-card);
@@ -451,376 +629,466 @@ pre {
   border-radius: 4px;
   margin-bottom: 12px;
 }
-@keyframes loading-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
+@keyframes loading-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-/* ===== METRICS TIMELINE ROADMAP ===== */
-.timeline {
-  position: relative;
-  margin-top: 20px;
-  padding-left: 30px;
-  border-left: 3px solid var(--border-color);
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
 }
+.empty-state-icon { font-size: 32px; margin-bottom: 10px; opacity: 0.6; }
+.empty-state-title { font-weight: 700; color: var(--text-secondary); margin-bottom: 4px; }
+.empty-state-text { font-size: var(--font-size-sm); }
 
-.timeline-item {
-  position: relative;
-  margin-bottom: 24px;
+.toast-region {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 10050;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 360px;
 }
-
-.timeline-dot {
-  position: absolute;
-  left: -37px;
-  top: 4px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--accent-primary);
-  border: 3px solid var(--bg-card);
+.toast {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--accent-primary);
+  padding: 14px 16px;
+  border-radius: 10px;
+  box-shadow: var(--card-shadow-lg);
+  font-size: var(--font-size-sm);
+  animation: toast-in 0.25s ease;
 }
+.toast.toast-error { border-left-color: var(--accent-danger); }
+.toast.toast-success { border-left-color: var(--accent-success); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
+/* =========================================================================
+   TIMELINE / ROADMAP
+   ========================================================================= */
+.timeline { position: relative; margin-top: 20px; padding-left: 30px; border-left: 3px solid var(--border-color); }
+.timeline-item { position: relative; margin-bottom: 24px; }
+.timeline-dot { position: absolute; left: -37px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent-primary); border: 3px solid var(--bg-card); }
 .timeline-dot.critical { background: var(--accent-danger); }
 .timeline-dot.high { background: var(--accent-warning); }
+.timeline-dot.medium { background: var(--accent-primary); }
+.timeline-dot.low { background: var(--text-muted); }
 
-/* ===== TABLES & LISTS ===== */
+/* =========================================================================
+   TABLES
+   ========================================================================= */
+.table-scroll-wrap { overflow-x: auto; border-radius: var(--card-radius-sm); border: 1px solid var(--border-color); }
+table { width: 100%; border-collapse: collapse; margin: 0; }
+td, th { padding: 12px; border-bottom: 1px solid var(--border-color); text-align: left; color: var(--text-primary); font-size: var(--font-size-sm); }
+th { font-weight: 700; color: var(--text-heading); background: rgba(255,255,255,0.02); position: sticky; top: 0; }
+body.light th { background: rgba(0,0,0,0.02); }
+tbody tr { transition: background var(--transition-fast); }
+tbody tr:hover { background: rgba(59, 130, 246, 0.06); }
+tbody tr:last-child td { border-bottom: none; }
+
+.table-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; justify-content: space-between; }
+.table-toolbar input { max-width: 260px; }
+
+details summary { cursor: pointer; font-weight: 600; padding: 10px 0; color: var(--text-heading); outline: none; list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: "▸ "; color: var(--accent-primary); }
+details[open] summary::before { content: "▾ "; }
+
 ul { padding-left: 20px; margin: 0; }
 li { margin: 6px 0; color: var(--text-secondary); }
-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-td, th { padding: 12px; border-bottom: 1px solid var(--border-color); text-align: left; color: var(--text-primary); }
-th { font-weight: 700; color: var(--text-heading); background: rgba(255,255,255,0.02); }
-body.light th { background: rgba(0,0,0,0.02); }
-details summary { cursor: pointer; font-weight: 600; padding: 10px 0; color: var(--text-heading); outline: none; }
 
-/* ===== COOPERATIVE CARDS AND GRID SYSTEM ===== */
-.grid-2-saas {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 20px;
-  margin-top: 20px;
+/* =========================================================================
+   GRID SYSTEMS
+   ========================================================================= */
+.grid-2-saas { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-top: 20px; }
+
+/* =========================================================================
+   RESPONSIVE
+   ========================================================================= */
+@media (max-width: 768px) {
+  .btn-grid { grid-template-columns: 1fr; }
+  .action-bar { padding: 10px 14px; }
+  .dashboard-container { padding: 0 12px 60px 12px; }
+  th, td { font-size: 12px; padding: 8px; }
 }
 
-/* ===== RESPONSIVE UTILITY ===== */
-@media (max-width: 768px) {
-  .btn-grid {
-    grid-template-columns: 1fr;
-  }
+/* =========================================================================
+   PRINT / PDF EXPORT
+   ========================================================================= */
+@media print {
+  .action-bar, .btn-grid, .loading-overlay, .toast-region { display: none !important; }
+  .card { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
 }
 </style>
 </head>
 <body>
 
+<a href="#mainContent" class="skip-link">Skip to main content</a>
+
+<!-- LIVE REGION FOR SCREEN-READER STATUS ANNOUNCEMENTS -->
+<div id="liveStatusRegion" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<!-- TOAST NOTIFICATIONS -->
+<div id="toastRegion" class="toast-region" role="log" aria-live="polite"></div>
+
 <!-- GLOBAL STATUS LOADER OVERLAY -->
-<div class="loading-overlay" id="loadingOverlay">
+<div class="loading-overlay" id="loadingOverlay" role="alertdialog" aria-modal="true" aria-labelledby="loadingStatusText" aria-describedby="loadingSubtext">
   <div class="loading-box-saas">
-    <div class="loading-spinner"></div>
+    <div class="loading-spinner" aria-hidden="true"></div>
     <div class="loading-status-text" id="loadingStatusText">Analyzing Domain...</div>
     <div class="loading-subtext" id="loadingSubtext">Evaluating SEO and AEO index vectors</div>
+    <div class="loading-progress-track" aria-hidden="true">
+      <div class="loading-progress-fill" id="loadingProgressFill"></div>
+    </div>
   </div>
 </div>
 
-<div class="action-bar">
+<header class="action-bar">
   <div class="brand-title-wrap">
-    <div class="brand-logo-icon">A</div>
+    <div class="brand-logo-icon" aria-hidden="true">A</div>
     <div>
-      <h1>Aegis AI Visibility v9</h1>
-      <small>Enterprise GEO Index Engine</small>
+      <h1>Aegis AI Visibility</h1>
+      <small>Enterprise SEO · AEO · GEO Intelligence Engine</small>
     </div>
   </div>
-  <div style="display:flex; align-items:center; gap:12px;">
+  <div class="action-bar-controls">
     <div class="status-badge-live">
-      <div class="status-dot"></div>
+      <div class="status-dot" id="scanStatusDot"></div>
       <span id="scanStatusIndicator">Ready</span>
     </div>
-    <button onclick="toggleTheme()" aria-label="Toggle visual layout color palette" style="padding:8px 16px; font-size:12px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-color);">🌙 Theme</button>
+    <button type="button" onclick="toggleTheme()" class="theme-toggle-btn" aria-pressed="false" id="themeToggleBtn">
+      <span aria-hidden="true">🌙</span> Theme
+    </button>
   </div>
-</div>
+</header>
 
-<div class="dashboard-container">
-  <div class="box">
-    <h3>🔍 Domain Scan & Intelligent Intelligence Framework</h3>
-    
-    <div class="input-grid-saas">
-      <div class="input-group">
-        <label class="input-label" for="url">Primary Target Domain URL</label>
-        <input id="url" placeholder="e.g. hafeezdigitalstudio.com" value="hafeezdigitalstudio.com" aria-label="Primary Target Domain URL">
-      </div>
-      
-      <div class="input-group">
-        <label class="input-label" for="competitorUrl">Competitor Domain URL (Optional)</label>
-        <input id="competitorUrl" placeholder="e.g. competitorsite.com" aria-label="Competitor Domain URL">
-      </div>
-      
-      <div class="input-group">
-        <label class="input-label" for="keyword">Content Brief Keyword Context (Optional)</label>
-        <input id="keyword" placeholder="e.g. wedding photography tips" aria-label="Content Brief Keyword Context">
-      </div>
+<main id="mainContent" class="dashboard-container">
+
+  <section class="box" aria-labelledby="scanFormHeading">
+    <div class="section-intro">
+      <h3 id="scanFormHeading">
+        <span class="card-title-group"><span aria-hidden="true">🔍</span> Domain Scan &amp; Intelligence Framework</span>
+      </h3>
+      <p class="helper-text">Enter a target domain to run a full SEO, AEO, and AI-visibility audit. Add a competitor domain to unlock comparison, gap analysis, and keyword-theft tooling.</p>
     </div>
 
-    <div class="btn-grid">
-      <button id="scanBtn" onclick="scan()">🔍 Scan Website</button>
-      <button id="compareBtn" onclick="compareCompetitor()">⚔️ Compare Competitor</button>
-      <button id="gapBtn" onclick="gapAnalysis()">🔍 Gap Analysis</button>
-      <button id="roadmapBtn" onclick="generateRoadmap()">🗺️ AI Roadmap</button>
-      <button id="theftBtn" onclick="keywordTheft()">💎 Keyword Theft</button>
-      <button id="briefBtn" onclick="contentBrief()">📝 Content Brief</button>
-      <button id="autopilotBtn" onclick="runAutopilot()" style="background:var(--accent-success);">🚀 AI AUTOPILOT</button>
-      <button onclick="downloadPDF()" style="background:#4b5563;">📄 Download PDF</button>
-      <button onclick="loadHistory()" style="background:#6b7280;">📊 History</button>
-    </div>
+    <form id="scanForm" onsubmit="return false;" novalidate>
+      <div class="input-grid-saas">
+        <div class="input-group">
+          <label class="input-label" for="url">
+            Primary Target Domain URL
+            <span class="tooltip-wrap">
+              <span class="input-help-icon" tabindex="0" aria-describedby="urlHelpTip">?</span>
+              <span class="tooltip-bubble" id="urlHelpTip" role="tooltip">e.g. hafeezdigitalstudio.com — https:// is optional</span>
+            </span>
+          </label>
+          <input id="url" type="text" placeholder="e.g. hafeezdigitalstudio.com" value="hafeezdigitalstudio.com" aria-required="true" aria-describedby="urlFieldError" autocomplete="url">
+          <div class="field-error-text" id="urlFieldError" role="alert"></div>
+        </div>
 
-    <!-- Skeleton loader element -->
-    <div id="skeletonLoader" class="skeleton-loader">
+        <div class="input-group">
+          <label class="input-label" for="competitorUrl">
+            Competitor Domain URL <span class="optional-tag">Optional</span>
+          </label>
+          <input id="competitorUrl" type="text" placeholder="e.g. competitorsite.com" aria-describedby="competitorFieldError" autocomplete="url">
+          <div class="field-error-text" id="competitorFieldError" role="alert"></div>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label" for="keyword">
+            Content Brief Keyword Context <span class="optional-tag">Optional</span>
+          </label>
+          <input id="keyword" type="text" placeholder="e.g. wedding photography tips" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="btn-grid" role="group" aria-label="Analysis actions">
+        <button type="button" id="scanBtn" onclick="scan()" aria-describedby="scanBtnTip">
+          <span class="btn-spinner" aria-hidden="true"></span>
+          <span aria-hidden="true">🔍</span><span class="btn-label-text">Scan Website</span>
+        </button>
+        <button type="button" id="compareBtn" onclick="compareCompetitor()">
+          <span class="btn-spinner" aria-hidden="true"></span>
+          <span aria-hidden="true">⚔️</span><span class="btn-label-text">Compare Competitor</span>
+        </button>
+        <button type="button" id="gapBtn" onclick="gapAnalysis()">
+          <span class="btn-spinner" aria-hidden="true"></span>
+          <span aria-hidden="true">🔍</span><span class="btn-label-text">Gap Analysis</span>
+        </button>
+        <button type="button" id="roadmapBtn" onclick="generateRoadmap()">
+          <span class="btn-spinner" aria-hidden="true"></span>
+          <span aria-hidden="true">🗺️</span><span class="btn-label-text">AI Roadmap</span>
+        </button>
+        <button type="button" id="theftBtn" onclick="keywordTheft()">
+          <span class="btn-spinner" aria-hidden="true"></span>
+          <span aria-hidden="true">💎</span><span class="btn-label-text">Keyword Theft</span>
+        </button>
+        <button type="button" id="briefBtn" onclick="contentBrief()">
+          <span class="btn-spinner" aria-hidden="true"></span>
+          <span aria-hidden="true">📝</span><span class="btn-label-text">Content Brief</span>
+        </button>
+        <button type="button" id="autopilotBtn" onclick="runAutopilot()" style="background:var(--accent-success);">
+          <span class="btn-spinner" aria-hidden="true"></span>
+          <span aria-hidden="true">🚀</span><span class="btn-label-text">AI AUTOPILOT</span>
+        </button>
+        <button type="button" onclick="downloadPDF()" style="background:#4b5563;">
+          <span aria-hidden="true">📄</span> Download PDF
+        </button>
+        <button type="button" onclick="loadHistory()" style="background:#6b7280;">
+          <span aria-hidden="true">📊</span> History
+        </button>
+      </div>
+    </form>
+
+    <div id="skeletonLoader" class="skeleton-loader" aria-hidden="true">
       <div class="skeleton-bar" style="width: 40%; height: 24px; margin-bottom: 24px;"></div>
       <div class="skeleton-bar" style="width: 100%;"></div>
       <div class="skeleton-bar" style="width: 85%;"></div>
       <div class="skeleton-bar" style="width: 90%;"></div>
       <div class="skeleton-bar" style="width: 60%;"></div>
     </div>
-  </div>
+  </section>
 
-  <!-- CRAWL ENGINE DIAGNOSTICS CARD -->
-  <div id="crawlDiagnosticsCard" class="card" style="display:none;">
-    <h3>📡 Crawl Engine Diagnostics</h3>
+  <section id="crawlDiagnosticsCard" class="card" style="display:none;" aria-labelledby="crawlDiagnosticsHeading">
+    <h3 id="crawlDiagnosticsHeading"><span class="card-title-group"><span aria-hidden="true">📡</span> Crawl Engine Diagnostics</span></h3>
     <div id="crawlDiagnosticsContent"></div>
-  </div>
+  </section>
 
-  <!-- EXECUTIVE SUMMARY MODULE -->
-  <div id="executiveSummaryPanel" class="card" style="display:none;">
-    <h3>📊 Executive Summary Dashboard</h3>
-    <div class="grid-3" id="execDashboardGrid">
-      <!-- Generated Dynamically -->
-    </div>
-  </div>
+  <section id="executiveSummaryPanel" class="card" style="display:none;" aria-labelledby="execSummaryHeading">
+    <h3 id="execSummaryHeading"><span class="card-title-group"><span aria-hidden="true">📊</span> Executive Summary Dashboard</span></h3>
+    <div class="grid-3" id="execDashboardGrid"></div>
+  </section>
 
-  <!-- MULTI-CHART METRICS DISPLAY -->
-  <div class="chartContainer" id="gaugeChartsContainer" style="display:none;">
+  <section class="chartContainer" id="gaugeChartsContainer" style="display:none;" aria-label="Core score gauges">
     <div class="chartBox">
       <div class="chartWrapper">
-        <canvas id="seoChart"></canvas>
+        <canvas id="seoChart" role="img" aria-label="SEO score gauge"></canvas>
         <div class="centerScore" id="seoScore">Data unavailable</div>
       </div>
       <div style="font-weight:700; margin-top:10px;">SEO SCORE</div>
     </div>
     <div class="chartBox">
       <div class="chartWrapper">
-        <canvas id="aeoChart"></canvas>
+        <canvas id="aeoChart" role="img" aria-label="AEO score gauge"></canvas>
         <div class="centerScore" id="aeoScore">Data unavailable</div>
       </div>
       <div style="font-weight:700; margin-top:10px;">AEO SCORE</div>
     </div>
     <div class="chartBox">
       <div class="chartWrapper">
-        <canvas id="eeatChart"></canvas>
+        <canvas id="eeatChart" role="img" aria-label="E-E-A-T score gauge"></canvas>
         <div class="centerScore" id="eeatScore">Data unavailable</div>
       </div>
       <div style="font-weight:700; margin-top:10px;">E-E-A-T SCORE</div>
     </div>
     <div class="chartBox">
       <div class="chartWrapper">
-        <canvas id="citationChart"></canvas>
+        <canvas id="citationChart" role="img" aria-label="AI citation score gauge"></canvas>
         <div class="centerScore" id="citationScore">Data unavailable</div>
       </div>
       <div style="font-weight:700; margin-top:10px;">AI CITATION</div>
     </div>
-  </div>
+  </section>
 
-  <!-- DUAL VISUALS GRAPH CONTAINER -->
-  <div class="dual-visuals-grid" id="chartsTrendContainer" style="display:none;">
+  <section class="dual-visuals-grid" id="chartsTrendContainer" style="display:none;" aria-label="Footprint radar and historical trend charts">
     <div class="chartBox" style="align-items:stretch; height: 350px;">
-      <h4 style="margin: 0 0 10px 0; color: var(--text-heading); font-size:14px; text-transform:uppercase;">AI Index Footprint</h4>
+      <h4 style="margin: 0 0 10px 0; font-size:14px; text-transform:uppercase;">AI Index Footprint</h4>
       <div style="position:relative; flex:1; height: 260px;">
-        <canvas id="radarVisualsChart"></canvas>
+        <canvas id="radarVisualsChart" role="img" aria-label="Radar chart of AI index footprint across SEO, AEO, EEAT, citation, authority, and trust"></canvas>
       </div>
     </div>
     <div class="chartBox" style="align-items:stretch; height: 350px;">
-      <h4 style="margin: 0 0 10px 0; color: var(--text-heading); font-size:14px; text-transform:uppercase;">Historical Visibility Trend</h4>
+      <h4 style="margin: 0 0 10px 0; font-size:14px; text-transform:uppercase;">Historical Visibility Trend</h4>
       <div style="position:relative; flex:1; height: 260px;">
-        <canvas id="trendVisualsChart"></canvas>
+        <canvas id="trendVisualsChart" role="img" aria-label="Line chart of historical AI visibility trend"></canvas>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- AI Visibility Engine Output Grid -->
   <div class="grid-2-saas">
-    <div id="aiReasoningCard" class="card" style="display:none; margin-top:0;">
-      <h3>🤖 AI Reasoning Intelligence Engine</h3>
+    <section id="aiReasoningCard" class="card" style="display:none; margin-top:0;" aria-labelledby="aiReasoningHeading">
+      <h3 id="aiReasoningHeading"><span class="card-title-group"><span aria-hidden="true">🤖</span> AI Reasoning Intelligence Engine</span></h3>
       <div id="aiReasoningContent"></div>
-    </div>
+    </section>
 
-    <!-- TRUE AEO CITATION SIMULATION CARD -->
-    <div id="realCitationCard" class="card" style="display:none; margin-top:0;">
-      <h3>📊 LLM Engine Citation Probability</h3>
+    <section id="realCitationCard" class="card" style="display:none; margin-top:0;" aria-labelledby="realCitationHeading">
+      <h3 id="realCitationHeading"><span class="card-title-group"><span aria-hidden="true">📊</span> LLM Engine Citation Probability</span></h3>
       <div id="aeoSimulationExplanation"></div>
-    </div>
+    </section>
   </div>
 
-  <!-- MODEL OUTPUT SIMULATION CARD -->
-  <div id="aiSimulationCard" class="card" style="display:none;">
-    <h3>🤖 Model Output Simulations</h3>
+  <section id="aiSimulationCard" class="card" style="display:none;" aria-labelledby="aiSimulationHeading">
+    <h3 id="aiSimulationHeading"><span class="card-title-group"><span aria-hidden="true">🤖</span> Model Output Simulations</span></h3>
     <div id="aiSimulationText"></div>
-  </div>
+  </section>
 
-  <!-- STRUCTURAL SEO AUDIT CENTER -->
-  <div id="seoAuditCard" class="card" style="display:none;">
-    <h3>📊 Detailed SEO Audit</h3>
+  <section id="seoAuditCard" class="card" style="display:none;" aria-labelledby="seoAuditHeading">
+    <h3 id="seoAuditHeading"><span class="card-title-group"><span aria-hidden="true">📊</span> Detailed SEO Audit</span></h3>
     <div id="seoAuditResults"></div>
-  </div>
+  </section>
 
   <div class="grid-2-saas">
-    <!-- INDIVIDUAL METRIC AND ANALYSIS CARDS -->
-    <div id="titleAnalyzerCard" class="card" style="display:none; margin-top:0;">
-      <h3>📝 Title Analyzer</h3>
+    <section id="titleAnalyzerCard" class="card" style="display:none; margin-top:0;" aria-labelledby="titleAnalyzerHeading">
+      <h3 id="titleAnalyzerHeading"><span class="card-title-group"><span aria-hidden="true">📝</span> Title Analyzer</span></h3>
       <div id="titleAnalyzerResults"></div>
-    </div>
+    </section>
 
-    <div id="metaAnalyzerCard" class="card" style="display:none; margin-top:0;">
-      <h3>📄 Meta Description Analyzer</h3>
+    <section id="metaAnalyzerCard" class="card" style="display:none; margin-top:0;" aria-labelledby="metaAnalyzerHeading">
+      <h3 id="metaAnalyzerHeading"><span class="card-title-group"><span aria-hidden="true">📄</span> Meta Description Analyzer</span></h3>
       <div id="metaAnalyzerResults"></div>
-    </div>
+    </section>
   </div>
 
   <div class="grid-3" style="margin-top:24px;">
-    <div id="headingCard" class="card" style="display:none; margin-top:0;">
-      <h3>📋 Heading Structure Analyzer</h3>
+    <section id="headingCard" class="card" style="display:none; margin-top:0;" aria-labelledby="headingCardHeading">
+      <h3 id="headingCardHeading"><span class="card-title-group"><span aria-hidden="true">📋</span> Heading Structure Analyzer</span></h3>
       <div id="headingResults"></div>
-    </div>
+    </section>
 
-    <div id="internalLinkCard" class="card" style="display:none; margin-top:0;">
-      <h3>🔗 Internal Linking Analyzer</h3>
+    <section id="internalLinkCard" class="card" style="display:none; margin-top:0;" aria-labelledby="internalLinkHeading">
+      <h3 id="internalLinkHeading"><span class="card-title-group"><span aria-hidden="true">🔗</span> Internal Linking Analyzer</span></h3>
       <div id="internalLinkResults"></div>
-    </div>
+    </section>
 
-    <div id="imageSeoCard" class="card" style="display:none; margin-top:0;">
-      <h3>🖼️ Image SEO Analyzer</h3>
+    <section id="imageSeoCard" class="card" style="display:none; margin-top:0;" aria-labelledby="imageSeoHeading">
+      <h3 id="imageSeoHeading"><span class="card-title-group"><span aria-hidden="true">🖼️</span> Image SEO Analyzer</span></h3>
       <div id="imageSeoResults"></div>
-    </div>
+    </section>
   </div>
 
   <div class="grid-2-saas">
-    <!-- ENTITY EXTRACTION -->
-    <div id="entityCard" class="card" style="display:none; margin-top:0;">
-      <h3>🏷️ Entity Extraction & Mapping</h3>
+    <section id="entityCard" class="card" style="display:none; margin-top:0;" aria-labelledby="entityHeading">
+      <h3 id="entityHeading"><span class="card-title-group"><span aria-hidden="true">🏷️</span> Entity Extraction &amp; Mapping</span></h3>
       <div id="entityResults"></div>
-    </div>
+    </section>
 
-    <div id="eeatCard" class="card" style="display:none; margin-top:0;">
-      <h3>🛡️ Detailed E-E-A-T Trust Index</h3>
+    <section id="eeatCard" class="card" style="display:none; margin-top:0;" aria-labelledby="eeatHeading">
+      <h3 id="eeatHeading"><span class="card-title-group"><span aria-hidden="true">🛡️</span> Detailed E-E-A-T Trust Index</span></h3>
       <div id="eeatResults"></div>
-    </div>
+    </section>
   </div>
 
   <div class="grid-2-saas">
-    <!-- TOPICAL & SEMANTIC SCROLLS -->
-    <div id="topicalAuthorityCard" class="card" style="display:none; margin-top:0;">
-      <h3>📚 Topical Authority Score</h3>
+    <section id="topicalAuthorityCard" class="card" style="display:none; margin-top:0;" aria-labelledby="topicalAuthorityHeading">
+      <h3 id="topicalAuthorityHeading"><span class="card-title-group"><span aria-hidden="true">📚</span> Topical Authority Score</span></h3>
       <div id="topicalAuthorityContent"></div>
-    </div>
+    </section>
 
-    <div id="semanticSEOCard" class="card" style="display:none; margin-top:0;">
-      <h3>🧠 Semantic SEO Analysis</h3>
+    <section id="semanticSEOCard" class="card" style="display:none; margin-top:0;" aria-labelledby="semanticSEOHeading">
+      <h3 id="semanticSEOHeading"><span class="card-title-group"><span aria-hidden="true">🧠</span> Semantic SEO Analysis</span></h3>
       <div id="semanticSEOContent"></div>
-    </div>
+    </section>
   </div>
 
   <div class="grid-3" style="margin-top:24px;">
-    <div id="citationOppCard" class="card" style="display:none; margin-top:0;">
-      <h3>🤖 AI Citation Opportunities</h3>
+    <section id="citationOppCard" class="card" style="display:none; margin-top:0;" aria-labelledby="citationOppHeading">
+      <h3 id="citationOppHeading"><span class="card-title-group"><span aria-hidden="true">🤖</span> AI Citation Opportunities</span></h3>
       <div id="citationOppContent"></div>
-    </div>
+    </section>
 
-    <div id="trustSignalsCard" class="card" style="display:none; margin-top:0;">
-      <h3>🛡️ Trust Signal Scanner</h3>
+    <section id="trustSignalsCard" class="card" style="display:none; margin-top:0;" aria-labelledby="trustSignalsHeading">
+      <h3 id="trustSignalsHeading"><span class="card-title-group"><span aria-hidden="true">🛡️</span> Trust Signal Scanner</span></h3>
       <div id="trustSignalsContent"></div>
-    </div>
+    </section>
 
-    <div id="localSeoCard" class="card" style="display:none; margin-top:0;">
-      <h3>📍 Local SEO Analyzer</h3>
+    <section id="localSeoCard" class="card" style="display:none; margin-top:0;" aria-labelledby="localSeoHeading">
+      <h3 id="localSeoHeading"><span class="card-title-group"><span aria-hidden="true">📍</span> Local SEO Signals</span></h3>
       <div id="localSEOContent"></div>
-    </div>
+    </section>
   </div>
 
-  <div id="schemaCard" class="card" style="display:none;">
-    <h3>📋 Schema Detection & JSON-LD Generator</h3>
+  <section id="schemaCard" class="card" style="display:none;" aria-labelledby="schemaHeading">
+    <h3 id="schemaHeading"><span class="card-title-group"><span aria-hidden="true">📋</span> Schema Detection &amp; JSON-LD Generator</span></h3>
     <div id="schemaResults"></div>
-  </div>
+  </section>
 
-  <div id="competitorCard" class="card" style="display:none;">
-    <h3>⚔️ Competitor Comparison Matrix</h3>
-    <canvas id="comparisonChart" style="max-height: 300px; margin-bottom: 20px;"></canvas>
+  <section id="competitorCard" class="card" style="display:none;" aria-labelledby="competitorHeading">
+    <h3 id="competitorHeading"><span class="card-title-group"><span aria-hidden="true">⚔️</span> Competitor Comparison Matrix</span></h3>
+    <canvas id="comparisonChart" style="max-height: 300px; margin-bottom: 20px;" role="img" aria-label="Bar chart comparing AI visibility scores"></canvas>
     <div id="comparisonDetails"></div>
-  </div>
+  </section>
 
-  <div id="gapCard" class="card" style="display:none;">
-    <h3>🔍 AI Citation Gap Finder</h3>
+  <section id="gapCard" class="card" style="display:none;" aria-labelledby="gapHeading">
+    <h3 id="gapHeading"><span class="card-title-group"><span aria-hidden="true">🔍</span> AI Citation Gap Finder</span></h3>
     <div id="gapContent"></div>
-  </div>
+  </section>
 
-  <!-- AI Visibility Roadmap Panel -->
-  <div id="roadmapCard" class="card" style="display:none;">
-    <h3>🗺️ AI Visibility Roadmap</h3>
+  <section id="roadmapCard" class="card" style="display:none;" aria-labelledby="roadmapHeading">
+    <h3 id="roadmapHeading"><span class="card-title-group"><span aria-hidden="true">🗺️</span> AI Visibility Roadmap</span></h3>
     <div id="roadmapSteps"></div>
-  </div>
+  </section>
 
-  <!-- Competitor Keyword Theft Panel -->
-  <div id="keywordTheftCard" class="card" style="display:none;">
-    <h3>💎 Competitor Keyword Intelligence</h3>
+  <section id="keywordTheftCard" class="card" style="display:none;" aria-labelledby="keywordTheftHeading">
+    <h3 id="keywordTheftHeading"><span class="card-title-group"><span aria-hidden="true">💎</span> Competitor Keyword Intelligence</span></h3>
     <div id="keywordTheftResults"></div>
-  </div>
+  </section>
 
-  <div id="briefCard" class="card" style="display:none;">
-    <h3>📝 AI Content Brief Generator</h3>
+  <section id="briefCard" class="card" style="display:none;" aria-labelledby="briefHeading">
+    <h3 id="briefHeading"><span class="card-title-group"><span aria-hidden="true">📝</span> AI Content Brief Generator</span></h3>
     <div id="briefResults"></div>
-  </div>
+  </section>
 
-  <div id="autopilotCard" class="card" style="display:none;">
-    <h3>🚀 AI SEO AUTOPILOT</h3>
+  <section id="autopilotCard" class="card" style="display:none;" aria-labelledby="autopilotHeading">
+    <h3 id="autopilotHeading"><span class="card-title-group"><span aria-hidden="true">🚀</span> AI SEO AUTOPILOT</span></h3>
     <div id="autopilotResults"></div>
-  </div>
+  </section>
 
-  <!-- GLOBAL STATUS LOG DISPLAY -->
-  <div id="result"></div>
-</div>
+  <section id="result" aria-live="polite"></section>
+
+  <section id="historyPanel" class="card" style="display:none;" aria-labelledby="historyPanelHeading">
+    <h3 id="historyPanelHeading"><span class="card-title-group"><span aria-hidden="true">📊</span> Scan History</span></h3>
+    <div class="table-toolbar">
+      <input type="text" id="historySearchInput" placeholder="Filter by domain…" oninput="filterHistoryTable()" aria-label="Filter scan history by domain">
+      <button type="button" onclick="clearLocalHistory()" style="background:#6b7280; padding:8px 14px; font-size:12px;">Clear Local History</button>
+    </div>
+    <div id="historyPanelContent"></div>
+  </section>
+
+</main>
 
 <script>
-// SINGLE GLOBAL SOURCE OF TRUTH FOR API CONFIGURATION
+// =========================================================================
+// GLOBAL CONFIG & STATE
+// =========================================================================
 window.API_BASE = window.location.origin;
 
 let seoChart = null, aeoChart = null, eeatChart = null, citationChart = null;
 let comparisonChart = null, radarChart = null, trendChart = null;
 let lastScanData = null;
 let scanInProgress = false;
+let loadingTimers = [];
+let historyRecordsCache = [];
 
-// Track active async timer loops
-let loadingTimer1 = null;
-let loadingTimer2 = null;
-
-// Initialize Theme
+// =========================================================================
+// THEME
+// =========================================================================
 if (localStorage.getItem("theme") === "light") {
   document.body.classList.add("light");
+  const tBtn = document.getElementById("themeToggleBtn");
+  if (tBtn) tBtn.setAttribute("aria-pressed", "true");
 }
 
 function toggleTheme() {
   document.body.classList.toggle("light");
-  localStorage.setItem("theme", document.body.classList.contains("light") ? "light" : "dark");
-  
+  const isLight = document.body.classList.contains("light");
+  localStorage.setItem("theme", isLight ? "light" : "dark");
+  const tBtn = document.getElementById("themeToggleBtn");
+  if (tBtn) tBtn.setAttribute("aria-pressed", String(isLight));
+
   if (lastScanData) {
-    try {
-      renderAllResults(lastScanData);
-    } catch (e) {
-      console.error("Theme toggle re-render failed:", e);
-    }
+    try { renderAllResults(lastScanData); } catch (e) { console.error("Theme toggle re-render failed:", e); }
   }
 }
 
-// Universal Safe Data Fetchers
+// =========================================================================
+// SAFE ACCESSORS
+// =========================================================================
 function safeGet(obj, path, fallback = null) {
   try {
     const val = path.split('.').reduce((a, b) => (a !== undefined && a !== null) ? a[b] : undefined, obj);
     return val !== undefined && val !== null ? val : fallback;
-  } catch {
-    return fallback;
-  }
+  } catch { return fallback; }
 }
 
 function safeText(value, fallback = "Data unavailable") {
@@ -830,9 +1098,7 @@ function safeText(value, fallback = "Data unavailable") {
   return String(value).trim();
 }
 
-function safeArray(arr) {
-  return Array.isArray(arr) ? arr : [];
-}
+function safeArray(arr) { return Array.isArray(arr) ? arr : []; }
 
 function safeNumber(num, fallback = null) {
   const parsed = Number(num);
@@ -843,7 +1109,8 @@ function escapeHtml(text = "") {
   return String(text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function cleanDomainBrand(url) {
@@ -858,16 +1125,16 @@ function cleanDomainBrand(url) {
       return segment.charAt(0).toUpperCase() + segment.slice(1);
     }
     return mainHost;
-  } catch(e) {}
+  } catch (e) {}
   return "Selected Target";
 }
 
 function getProgressColor(score) {
   if (score == null) return "rgba(156, 163, 175, 0.2)";
-  if (score >= 80) return "#10b981"; // Success Green
-  if (score >= 60) return "#3b82f6"; // Primary Blue
-  if (score >= 40) return "#f59e0b"; // Warning Orange
-  return "#ef4444"; // Danger Red
+  if (score >= 80) return "#10b981";
+  if (score >= 60) return "#3b82f6";
+  if (score >= 40) return "#f59e0b";
+  return "#ef4444";
 }
 
 function getStatusLabel(score) {
@@ -878,133 +1145,190 @@ function getStatusLabel(score) {
   return "Low";
 }
 
+// =========================================================================
+// TOASTS & LIVE-REGION ANNOUNCEMENTS
+// =========================================================================
+function announce(message) {
+  const region = document.getElementById("liveStatusRegion");
+  if (region) region.textContent = message;
+}
+
+function showToast(message, type = "info", duration = 5000) {
+  const region = document.getElementById("toastRegion");
+  if (!region) return;
+  const toast = document.createElement("div");
+  toast.className = `toast ${type === "error" ? "toast-error" : type === "success" ? "toast-success" : ""}`;
+  toast.setAttribute("role", type === "error" ? "alert" : "status");
+  toast.textContent = message;
+  region.appendChild(toast);
+  setTimeout(() => { toast.remove(); }, duration);
+}
+
+// =========================================================================
+// FIELD VALIDATION
+// =========================================================================
+function validateRequiredField(inputEl, errorEl, message) {
+  if (!inputEl) return false;
+  const value = inputEl.value.trim();
+  if (!value) {
+    inputEl.setAttribute("aria-invalid", "true");
+    if (errorEl) { errorEl.textContent = message; errorEl.classList.add("visible"); }
+    return false;
+  }
+  inputEl.removeAttribute("aria-invalid");
+  if (errorEl) { errorEl.textContent = ""; errorEl.classList.remove("visible"); }
+  return true;
+}
+
+function getUrlValue() { return (document.getElementById("url")?.value || "").trim(); }
+function getCompetitorValue() { return (document.getElementById("competitorUrl")?.value || "").trim(); }
+function getKeywordValue() { return (document.getElementById("keyword")?.value || "").trim(); }
+
+// =========================================================================
+// BUTTON BUSY STATE
+// =========================================================================
+function setButtonBusy(id, busy) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.disabled = busy;
+  btn.setAttribute("aria-busy", String(busy));
+}
+
+function setAllButtonsDisabled(disabled) {
+  document.querySelectorAll(".btn-grid button").forEach(btn => { btn.disabled = disabled; });
+}
+
+// =========================================================================
+// API HELPER — normalizes error handling across every endpoint shape
+// =========================================================================
+async function apiFetch(path) {
+  let res, json;
+  try {
+    res = await fetch(`${window.API_BASE}${path}`);
+  } catch (networkErr) {
+    throw new Error(`Network error while reaching the analysis server: ${networkErr.message}`);
+  }
+
+  try {
+    json = await res.json();
+  } catch (parseErr) {
+    throw new Error(`Server returned an unreadable response (HTTP ${res.status}).`);
+  }
+
+  if (!res.ok) {
+    const msg = safeText(json?.message, `Request failed with status ${res.status}.`);
+    const err = new Error(msg);
+    err.status = res.status;
+    err.payload = json;
+    throw err;
+  }
+
+  return json;
+}
+
+// =========================================================================
+// CHARTS
+// =========================================================================
 function renderRadialChart(canvasId, score) {
   const canvas = document.getElementById(canvasId);
-  if (!canvas) return null;
+  if (!canvas || typeof Chart === "undefined") return null;
 
-  const ctx = canvas.getContext('2d');
   const color = getProgressColor(score);
-  
+
   if (score == null) {
     return new Chart(canvas, {
       type: "doughnut",
-      data: {
-        datasets: [{
-          data: [0, 100],
-          backgroundColor: ["rgba(156, 163, 175, 0.1)", "rgba(156, 163, 175, 0.1)"],
-          borderWidth: 0
-        }]
-      },
-      options: {
-        cutout: '75%',
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: {
-          legend: { display: false },
-          tooltip: { enabled: false }
-        }
-      }
+      data: { datasets: [{ data: [0, 100], backgroundColor: ["rgba(156,163,175,0.1)", "rgba(156,163,175,0.1)"], borderWidth: 0 }] },
+      options: { cutout: '75%', responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: { enabled: false } } }
     });
   }
 
   const dataVal = Math.min(100, Math.max(0, score));
   return new Chart(canvas, {
     type: "doughnut",
-    data: {
-      datasets: [{
-        data: [dataVal, 100 - dataVal],
-        backgroundColor: [color, "rgba(226, 232, 240, 0.1)"],
-        borderWidth: 0
-      }]
-    },
-    options: {
-      cutout: '75%',
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: { enabled: false }
-      }
-    }
+    data: { datasets: [{ data: [dataVal, 100 - dataVal], backgroundColor: [color, "rgba(226,232,240,0.1)"], borderWidth: 0 }] },
+    options: { cutout: '75%', responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: { enabled: false } } }
   });
 }
 
 function animateValue(id, start, end, duration, suffix = "") {
   const obj = document.getElementById(id);
   if (!obj) return;
-  if (end == null) {
-    obj.innerHTML = `Data unavailable`;
-    return;
-  }
-  if (start === end) {
-    obj.innerHTML = `${end}${suffix}`;
-    return;
-  }
+  if (end == null) { obj.innerHTML = `Data unavailable`; return; }
+  if (start === end) { obj.innerHTML = `${end}${suffix}`; return; }
   let startTimestamp = null;
   const step = (timestamp) => {
     if (!startTimestamp) startTimestamp = timestamp;
     const progress = Math.min((timestamp - startTimestamp) / duration, 1);
     const val = Math.floor(progress * (end - start) + start);
     obj.innerHTML = `${val}${suffix}`;
-    if (progress < 1) {
-      window.requestAnimationFrame(step);
-    }
+    if (progress < 1) window.requestAnimationFrame(step);
   };
   window.requestAnimationFrame(step);
 }
 
-function showLoading(statusText = "Analyzing Crawl Vectors...", subText = "Evaluating SEO and AEO index vectors") {
+// =========================================================================
+// LOADING OVERLAY
+// =========================================================================
+function clearLoadingTimers() {
+  loadingTimers.forEach(t => clearTimeout(t));
+  loadingTimers = [];
+}
+
+function setLoadingProgress(pct) {
+  const fill = document.getElementById("loadingProgressFill");
+  if (fill) fill.style.width = `${pct}%`;
+}
+
+function showLoading(statusText = "Analyzing Domain...", subText = "Evaluating SEO and AEO index vectors") {
   const overlay = document.getElementById("loadingOverlay");
   const sText = document.getElementById("loadingStatusText");
   const subTextEl = document.getElementById("loadingSubtext");
-  
+
   if (sText) sText.textContent = statusText;
   if (subTextEl) subTextEl.textContent = subText;
   if (overlay) overlay.style.display = "flex";
-  
+  setLoadingProgress(8);
+
   const skeleton = document.getElementById("skeletonLoader");
   if (skeleton) skeleton.style.display = "block";
-  
-  const scanStatus = document.getElementById("scanStatusIndicator");
-  if (scanStatus) scanStatus.textContent = "Crawl Active";
 
-  // Disable Action Buttons
-  const buttons = document.querySelectorAll(".btn-grid button");
-  buttons.forEach(btn => btn.disabled = true);
+  const scanStatus = document.getElementById("scanStatusIndicator");
+  const scanDot = document.getElementById("scanStatusDot");
+  if (scanStatus) scanStatus.textContent = "Crawl Active";
+  if (scanDot) scanDot.classList.add("busy");
+
+  announce(statusText);
+  setAllButtonsDisabled(true);
 }
 
 function hideLoading() {
   const overlay = document.getElementById("loadingOverlay");
   if (overlay) overlay.style.display = "none";
-  
+  setLoadingProgress(0);
+
   const skeleton = document.getElementById("skeletonLoader");
   if (skeleton) skeleton.style.display = "none";
-  
-  const scanStatus = document.getElementById("scanStatusIndicator");
-  if (scanStatus) scanStatus.textContent = "Ready";
 
-  // Re-enable Action Buttons
-  const buttons = document.querySelectorAll(".btn-grid button");
-  buttons.forEach(btn => btn.disabled = false);
+  const scanStatus = document.getElementById("scanStatusIndicator");
+  const scanDot = document.getElementById("scanStatusDot");
+  if (scanStatus) scanStatus.textContent = "Ready";
+  if (scanDot) scanDot.classList.remove("busy");
+
+  setAllButtonsDisabled(false);
 }
 
 function resetReportState() {
   const cards = [
-    "executiveSummaryPanel", "gaugeChartsContainer", "chartsTrendContainer", 
-    "aiReasoningCard", "realCitationCard", "aiSimulationCard", "seoAuditCard", 
-    "titleAnalyzerCard", "metaAnalyzerCard", "headingCard", "internalLinkCard", 
-    "imageSeoCard", "entityCard", "eeatCard", "schemaCard", "competitorCard", 
-    "gapCard", "roadmapCard", "keywordTheftCard", "briefCard", "autopilotCard", 
-    "topicalAuthorityCard", "semanticSEOCard", "citationOppCard", 
+    "executiveSummaryPanel", "gaugeChartsContainer", "chartsTrendContainer",
+    "aiReasoningCard", "realCitationCard", "aiSimulationCard", "seoAuditCard",
+    "titleAnalyzerCard", "metaAnalyzerCard", "headingCard", "internalLinkCard",
+    "imageSeoCard", "entityCard", "eeatCard", "schemaCard", "competitorCard",
+    "gapCard", "roadmapCard", "keywordTheftCard", "briefCard", "autopilotCard",
+    "topicalAuthorityCard", "semanticSEOCard", "citationOppCard",
     "trustSignalsCard", "localSeoCard", "crawlDiagnosticsCard"
   ];
-  
-  cards.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.style.display = "none";
-    }
-  });
+  cards.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = "none"; });
 
   const resultEl = document.getElementById("result");
   if (resultEl) resultEl.innerHTML = "";
@@ -1012,1159 +1336,1180 @@ function resetReportState() {
   lastScanData = null;
 }
 
-function clearLoadingTimers() {
-  if (loadingTimer1) {
-    clearTimeout(loadingTimer1);
-    loadingTimer1 = null;
-  }
-  if (loadingTimer2) {
-    clearTimeout(loadingTimer2);
-    loadingTimer2 = null;
-  }
+// =========================================================================
+// EMPTY STATE HELPER
+// =========================================================================
+function emptyStateHtml(icon, title, text) {
+  return `
+    <div class="empty-state">
+      <div class="empty-state-icon" aria-hidden="true">${icon}</div>
+      <div class="empty-state-title">${escapeHtml(title)}</div>
+      <div class="empty-state-text">${escapeHtml(text)}</div>
+    </div>`;
 }
 
-// ==== SCAN OPERATIONS ====
+// =========================================================================
+// SCAN
+// =========================================================================
 async function scan() {
   if (scanInProgress) return;
-  scanInProgress = true;
 
   const urlEl = document.getElementById("url");
-  if (!urlEl) {
-    scanInProgress = false;
+  const urlErrEl = document.getElementById("urlFieldError");
+  if (!validateRequiredField(urlEl, urlErrEl, "Please enter a domain to scan.")) {
+    urlEl?.focus();
     return;
   }
 
   const url = urlEl.value.trim();
-  if (!url) {
-    scanInProgress = false;
-    alert("Please enter a valid domain target.");
-    return;
-  }
-
+  scanInProgress = true;
   clearLoadingTimers();
   resetReportState();
+  setButtonBusy("scanBtn", true);
   showLoading("Fetching Website Content...", "Establishing secure crawl layer to download target components");
-  
-  loadingTimer1 = setTimeout(() => {
-    if (scanInProgress) {
-      showLoading("Analyzing Content Struct...", "Parsing semantic tags, heading hierarchies and image entities");
-    }
-  }, 3000);
 
-  loadingTimer2 = setTimeout(() => {
-    if (scanInProgress) {
-      showLoading("Generating AI Visibility Signals...", "Calculating vector weights and entity frequency benchmarks");
-    }
-  }, 6000);
+  loadingTimers.push(setTimeout(() => { if (scanInProgress) { showLoading("Analyzing Content Structure...", "Parsing semantic tags, heading hierarchies and image entities"); setLoadingProgress(45); } }, 3000));
+  loadingTimers.push(setTimeout(() => { if (scanInProgress) { showLoading("Generating AI Visibility Signals...", "Calculating vector weights and entity frequency benchmarks"); setLoadingProgress(80); } }, 6500));
 
   try {
-    const res = await fetch(`${window.API_BASE}/scan?url=${encodeURIComponent(url)}`);
-    if (!res.ok) {
-      throw new Error(`Crawl server responded with status: ${res.status}`);
-    }
-    
-    const data = await res.json();
+    const data = await apiFetch(`/scan?url=${encodeURIComponent(url)}`);
     clearLoadingTimers();
+    setLoadingProgress(100);
 
-    if (data && data.status === "error") {
-      const resultEl = document.getElementById("result");
-      if (resultEl) {
-        resultEl.innerHTML = `
-          <div class="card" style="border-color:var(--accent-danger);">
-            <h3 style="color:var(--accent-danger); border-bottom-color:var(--accent-danger);">⚠️ Analysis Blocked</h3>
-            <p>${escapeHtml(data.message)}</p>
-            <button onclick="retryLastScan()" style="background:var(--accent-danger); margin-top:10px;">🔄 Retry Scan</button>
-          </div>`;
-      }
+    if (data && data.blocked) {
+      renderBlockedState(data);
       hideLoading();
       return;
     }
 
-    lastScanData = data ? (data.data || data) : null;
-    
-    if (lastScanData) {
-      renderAllResults(lastScanData);
-      saveLocalHistory(url, lastScanData);
-    } else {
-      throw new Error("Empty or invalid layout payload structure returned from server.");
-    }
+    lastScanData = data;
+    renderAllResults(lastScanData);
+    saveLocalHistory(url, lastScanData);
+    showToast("Scan completed successfully.", "success");
+    announce("Scan completed. Results are now available.");
 
   } catch (err) {
     clearLoadingTimers();
-    const resultEl = document.getElementById("result");
-    if (resultEl) {
-      resultEl.innerHTML = `
-        <div class="card" style="border-color:var(--accent-danger);">
-          <h3 style="color:var(--accent-danger); border-bottom-color:var(--accent-danger);">⚠️ Analysis Failure State</h3>
-          <p>The system was unable to analyze this domain target due to crawl restriction barriers or platform limitations.</p>
-          <p><strong>Detailed Error Context:</strong> ${escapeHtml(err.message)}</p>
-          <button onclick="retryLastScan()" style="background:var(--accent-primary); margin-top:10px;">🔄 Retry Scan</button>
-        </div>
-      `;
-    }
+    renderScanErrorState(err);
+    showToast(err.message || "Scan failed.", "error");
   } finally {
     clearLoadingTimers();
     hideLoading();
+    setButtonBusy("scanBtn", false);
     scanInProgress = false;
   }
 }
 
-function retryLastScan() {
-  scan();
+function renderBlockedState(data) {
+  const resultEl = document.getElementById("result");
+  if (!resultEl) return;
+  resultEl.innerHTML = `
+    <div class="card" style="border-color:var(--accent-danger);" role="alert">
+      <h3 style="color:var(--accent-danger); border-bottom-color:var(--accent-danger);"><span aria-hidden="true">⚠️</span> Analysis Blocked</h3>
+      <p><strong>Reason:</strong> ${escapeHtml(safeText(data.reason))}</p>
+      <p><strong>Protection System:</strong> ${escapeHtml(safeText(data.protectionType))}</p>
+      <p><strong>Crawl Method Attempted:</strong> ${escapeHtml(safeText(data.crawlMethod))}</p>
+      <p><strong>Retry Attempts:</strong> ${escapeHtml(safeText(data.retryCount, "0"))}</p>
+      <p><strong>HTTP Status:</strong> ${escapeHtml(safeText(data.status))}</p>
+      <button type="button" onclick="retryLastScan()" style="background:var(--accent-danger); margin-top:10px;"><span aria-hidden="true">🔄</span> Retry Scan</button>
+    </div>`;
 }
 
+function renderScanErrorState(err) {
+  const resultEl = document.getElementById("result");
+  if (!resultEl) return;
+
+  let extraNote = "";
+  if (err.status === 429) extraNote = "You've reached your daily scan limit for this plan.";
+  else if (err.status === 409) extraNote = "This URL is already being scanned. Please wait for it to complete.";
+  else if (err.status === 400) extraNote = "The URL provided could not be validated.";
+
+  resultEl.innerHTML = `
+    <div class="card" style="border-color:var(--accent-danger);" role="alert">
+      <h3 style="color:var(--accent-danger); border-bottom-color:var(--accent-danger);"><span aria-hidden="true">⚠️</span> Analysis Failure</h3>
+      <p>${escapeHtml(extraNote || "The system was unable to analyze this domain target.")}</p>
+      <p><strong>Detailed Error:</strong> ${escapeHtml(err.message)}</p>
+      <button type="button" onclick="retryLastScan()" style="background:var(--accent-primary); margin-top:10px;"><span aria-hidden="true">🔄</span> Retry Scan</button>
+    </div>`;
+}
+
+function retryLastScan() { scan(); }
+
+// =========================================================================
+// MAIN RESULT RENDERER — bound to real server.js /scan payload shape
+// =========================================================================
 function renderAllResults(data) {
   if (!data) return;
 
   try {
-    // Diagnostic State Parsing
-    const pageType = safeGet(data, "pageType");
-    const crawlMethod = safeGet(data, "crawlMethod");
-    const finalUrl = safeGet(data, "resolvedUrl");
-    const statusCode = safeGet(data, "httpStatus");
-    const contentLength = safeGet(data, "contentLength");
-    const crawlStatus = safeGet(data, "analysisStatus");
-
-    const diagCard = document.getElementById("crawlDiagnosticsCard");
-    if (diagCard) {
-      if (pageType || crawlMethod || statusCode || finalUrl) {
-        diagCard.style.display = "block";
-        
-        let statusBadgeClass = "badge-green";
-        let statusLabel = "SUCCESS";
-        
-        if (pageType === "BLOCKED_PAGE" || crawlStatus === "BLOCKED" || String(statusCode).startsWith("4") || String(statusCode).startsWith("5")) {
-          statusBadgeClass = "badge-red";
-          statusLabel = "BLOCKED";
-        } else if (pageType === "THIN_CONTENT") {
-          statusBadgeClass = "badge-orange";
-          statusLabel = "THIN CONTENT";
-        } else if (crawlMethod === "PLAYWRIGHT_RENDERED") {
-          statusBadgeClass = "badge-purple";
-          statusLabel = "DYNAMIC AUTOMATION";
-        }
-
-        let warningHtml = "";
-        if (pageType === "BLOCKED_PAGE" || crawlStatus === "BLOCKED") {
-          warningHtml = `
-            <div class="reasoning-box weakness" style="margin-top: 15px;">
-              <div class="reasoning-title" style="color:var(--accent-danger)">⚠️ Crawl Block Notice</div>
-              <p>Website appears blocked, restricted, or protected by anti-bot measures.</p>
-            </div>`;
-        }
-
-        const diagContent = document.getElementById("crawlDiagnosticsContent");
-        if (diagContent) {
-          diagContent.innerHTML = `
-            <div class="grid-3">
-              <div class="metric-box" style="background:#111827; border: 1px solid var(--border-color);">
-                <div class="metric-value" style="font-size: 18px; color: var(--text-primary);">${escapeHtml(safeText(crawlMethod))}</div>
-                <div class="metric-label">Crawl Method</div>
-              </div>
-              <div class="metric-box" style="background:#111827; border: 1px solid var(--border-color);">
-                <div class="metric-value" style="font-size: 18px; color: var(--text-primary);">${escapeHtml(safeText(statusCode))}</div>
-                <div class="metric-label">HTTP Status Code</div>
-              </div>
-              <div class="metric-box" style="background:#111827; border: 1px solid var(--border-color);">
-                <div class="metric-value" style="font-size: 18px; color: var(--text-primary);">${contentLength != null ? (Number(contentLength) / 1024).toFixed(1) + " KB" : "Data unavailable"}</div>
-                <div class="metric-label">Content Size</div>
-              </div>
-            </div>
-            <div style="margin-top: 15px;">
-              <p><strong>Resolved Target URL:</strong> <a href="${escapeHtml(finalUrl || '')}" target="_blank" style="color: var(--accent-primary); word-break: break-all;">${escapeHtml(safeText(finalUrl))}</a></p>
-              <p><strong>Process Verification State:</strong> <span class="badge ${statusBadgeClass}">${statusLabel}</span></p>
-            </div>
-            ${warningHtml}
-          `;
-        }
-      } else {
-        diagCard.style.display = "none";
-      }
-    }
-
-    // Dynamic Central Scores Only
-    const seoScore = safeNumber(safeGet(data, "seoScore"));
-    const aeoScore = safeNumber(safeGet(data, "aeoScore"));
-    const eeatScore = safeNumber(safeGet(data, "eeatScore"));
-    const citationScore = safeNumber(safeGet(data, "citationScore"));
-    const topicalAuthorityScore = safeNumber(safeGet(data, "topicalAuthority.authorityScore"));
-    const trustScore = safeNumber(safeGet(data, "aiTrustScore"));
-
-    // Render Gauges Container
-    const gaugeContainer = document.getElementById("gaugeChartsContainer");
-    if (gaugeContainer) {
-      if (seoScore != null || aeoScore != null || eeatScore != null || citationScore != null) {
-        gaugeContainer.style.display = "grid";
-      } else {
-        gaugeContainer.style.display = "none";
-      }
-    }
-
-    // Animate Gauges securely
-    animateValue("seoScore", 0, seoScore, 1000, "%<span>SEO</span>");
-    animateValue("aeoScore", 0, aeoScore, 1000, "%<span>AEO</span>");
-    animateValue("eeatScore", 0, eeatScore, 1000, "%<span>EEAT</span>");
-    animateValue("citationScore", 0, citationScore, 1000, "%<span>Citation</span>");
-
-    if (seoChart) seoChart.destroy();
-    if (aeoChart) aeoChart.destroy();
-    if (eeatChart) eeatChart.destroy();
-    if (citationChart) citationChart.destroy();
-
-    seoChart = renderRadialChart("seoChart", seoScore);
-    aeoChart = renderRadialChart("aeoChart", aeoScore);
-    eeatChart = renderRadialChart("eeatChart", eeatScore);
-    citationChart = renderRadialChart("citationChart", citationScore);
-
-    // Render Executive Summary Panel
-    const execPanel = document.getElementById("executiveSummaryPanel");
-    if (execPanel) {
-      if (seoScore != null || aeoScore != null || eeatScore != null || citationScore != null || topicalAuthorityScore != null || trustScore != null) {
-        execPanel.style.display = "block";
-        const dashboardGrid = document.getElementById("execDashboardGrid");
-        if (dashboardGrid) {
-          dashboardGrid.innerHTML = `
-            <div class="metric-box">
-              <div class="metric-value">${seoScore != null ? seoScore + '%' : 'Data unavailable'}</div>
-              <div class="metric-label">SEO Score</div>
-              <span class="status-indicator-p" style="background:${getProgressColor(seoScore)}">${getStatusLabel(seoScore)}</span>
-            </div>
-            <div class="metric-box">
-              <div class="metric-value">${aeoScore != null ? aeoScore + '%' : 'Data unavailable'}</div>
-              <div class="metric-label">AEO Score</div>
-              <span class="status-indicator-p" style="background:${getProgressColor(aeoScore)}">${getStatusLabel(aeoScore)}</span>
-            </div>
-            <div class="metric-box">
-              <div class="metric-value">${eeatScore != null ? eeatScore + '%' : 'Data unavailable'}</div>
-              <div class="metric-label">EEAT Score</div>
-              <span class="status-indicator-p" style="background:${getProgressColor(eeatScore)}">${getStatusLabel(eeatScore)}</span>
-            </div>
-            <div class="metric-box">
-              <div class="metric-value">${citationScore != null ? citationScore + '%' : 'Data unavailable'}</div>
-              <div class="metric-label">AI Citation</div>
-              <span class="status-indicator-p" style="background:${getProgressColor(citationScore)}">${getStatusLabel(citationScore)}</span>
-            </div>
-            <div class="metric-box">
-              <div class="metric-value">${topicalAuthorityScore != null ? topicalAuthorityScore + '%' : 'Data unavailable'}</div>
-              <div class="metric-label">Authority Score</div>
-              <span class="status-indicator-p" style="background:${getProgressColor(topicalAuthorityScore)}">${getStatusLabel(topicalAuthorityScore)}</span>
-            </div>
-            <div class="metric-box">
-              <div class="metric-value">${trustScore != null ? trustScore + '%' : 'Data unavailable'}</div>
-              <div class="metric-label">Trust Score</div>
-              <span class="status-indicator-p" style="background:${getProgressColor(trustScore)}">${getStatusLabel(trustScore)}</span>
-            </div>
-          `;
-        }
-      } else {
-        execPanel.style.display = "none";
-      }
-    }
-
-    // Radar & Trend Charts
-    const chartsTrend = document.getElementById("chartsTrendContainer");
-    if (chartsTrend) {
-      if (seoScore != null || aeoScore != null || eeatScore != null || citationScore != null) {
-        chartsTrend.style.display = "grid";
-        
-        const radarEl = document.getElementById("radarVisualsChart");
-        if (radarEl) {
-          const ctxRadar = radarEl.getContext('2d');
-          if (radarChart) radarChart.destroy();
-          radarChart = new Chart(ctxRadar, {
-            type: 'radar',
-            data: {
-              labels: ['SEO', 'AEO', 'E-E-A-T', 'Citation', 'Authority', 'Trust'],
-              datasets: [{
-                label: 'Domain Footprint',
-                data: [
-                  seoScore ?? 0, 
-                  aeoScore ?? 0, 
-                  eeatScore ?? 0, 
-                  citationScore ?? 0, 
-                  topicalAuthorityScore ?? 0, 
-                  trustScore ?? 0
-                ],
-                backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                borderColor: '#3b82f6',
-                pointBackgroundColor: '#2563eb',
-                borderWidth: 2
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              scales: {
-                r: {
-                  angleLines: { color: 'rgba(156, 163, 175, 0.2)' },
-                  grid: { color: 'rgba(156, 163, 175, 0.2)' },
-                  pointLabels: { color: '#9ca3af', font: { size: 10 } },
-                  ticks: { display: false },
-                  suggestedMin: 0,
-                  suggestedMax: 100
-                }
-              },
-              plugins: { legend: { display: false } }
-            }
-          });
-        }
-
-        const trendEl = document.getElementById("trendVisualsChart");
-        if (trendEl) {
-          const trend = safeGet(data, "visibilityTrend") || {};
-          const ctxTrend = trendEl.getContext('2d');
-          if (trendChart) trendChart.destroy();
-          trendChart = new Chart(ctxTrend, {
-            type: 'line',
-            data: {
-              labels: safeArray(trend?.labels).length > 0 ? trend.labels : ['Current'],
-              datasets: [
-                {
-                  label: 'AI Visibility',
-                  data: safeArray(trend?.scores).length > 0 ? trend.scores : [citationScore ?? 0],
-                  borderColor: '#8b5cf6',
-                  backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                  fill: true,
-                  tension: 0.4
-                },
-                {
-                  label: 'SEO Trend',
-                  data: safeArray(trend?.seoScores).length > 0 ? trend.seoScores : [seoScore ?? 0],
-                  borderColor: '#3b82f6',
-                  fill: false,
-                  tension: 0.4
-                }
-              ]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              scales: {
-                x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
-                y: { grid: { color: 'rgba(156, 163, 175, 0.1)' }, ticks: { color: '#9ca3af' }, suggestedMin: 0, suggestedMax: 100 }
-              },
-              plugins: { legend: { labels: { color: '#9ca3af' } } }
-            }
-          });
-        }
-      } else {
-        chartsTrend.style.display = "none";
-      }
-    }
-
-    // AI Reasoning Panel
-    const reasoning = safeGet(data, "reasoning");
-    const reasoningCard = document.getElementById("aiReasoningCard");
-    if (reasoningCard) {
-      if (reasoning?.seo || reasoning?.aeo) {
-        reasoningCard.style.display = "block";
-        const reasoningContent = document.getElementById("aiReasoningContent");
-        if (reasoningContent) {
-          reasoningContent.innerHTML = `
-            <div class="reasoning-panel">
-              <div class="reasoning-box strength">
-                <div class="reasoning-title" style="color:var(--accent-success)">✔ SEO Audit Insight</div>
-                <p>${escapeHtml(safeText(reasoning?.seo))}</p>
-              </div>
-              <div class="reasoning-box weakness">
-                <div class="reasoning-title" style="color:var(--accent-warning)">❌ AEO Audit Insight</div>
-                <p>${escapeHtml(safeText(reasoning?.aeo))}</p>
-              </div>
-            </div>
-          `;
-        }
-      } else {
-        reasoningCard.style.display = "none";
-      }
-    }
-
-    // AEO Citation Sim Engine
-    const aeoSim = safeGet(data, "aeoSimulation") || safeGet(data, "analysis.aeo") || {};
-    const realCitationCard = document.getElementById("realCitationCard");
-    if (realCitationCard) {
-      const chatgptProb = safeNumber(aeoSim?.citationChatGPT ?? aeoSim?.chatgptProbability);
-      const geminiProb = safeNumber(aeoSim?.citationGemini ?? aeoSim?.geminiProbability);
-      const perplexityProb = safeNumber(aeoSim?.citationPerplexity ?? aeoSim?.perplexityProbability);
-      const claudeProb = safeNumber(aeoSim?.citationClaude ?? aeoSim?.claudeProbability);
-
-      if (chatgptProb != null || geminiProb != null || perplexityProb != null || claudeProb != null) {
-        realCitationCard.style.display = "block";
-        const explanationEl = document.getElementById("aeoSimulationExplanation");
-        if (explanationEl) {
-          explanationEl.innerHTML = `
-            <div>
-              ${chatgptProb != null ? `
-                <div style="margin-bottom:12px;">
-                  <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span><strong>ChatGPT (OpenAI Search)</strong></span>
-                    <span><strong>${chatgptProb}% Citation Probability</strong></span>
-                  </div>
-                  <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
-                    <div style="height:100%; width:${chatgptProb}%; background:var(--accent-success);"></div>
-                  </div>
-                </div>` : ''}
-              ${geminiProb != null ? `
-                <div style="margin-bottom:12px;">
-                  <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span><strong>Gemini (Google Overviews)</strong></span>
-                    <span><strong>${geminiProb}% Citation Probability</strong></span>
-                  </div>
-                  <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
-                    <div style="height:100%; width:${geminiProb}%; background:var(--accent-primary);"></div>
-                  </div>
-                </div>` : ''}
-              ${perplexityProb != null ? `
-                <div style="margin-bottom:12px;">
-                  <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span><strong>Perplexity Engine (Discovery)</strong></span>
-                    <span><strong>${perplexityProb}% Citation Probability</strong></span>
-                  </div>
-                  <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
-                    <div style="height:100%; width:${perplexityProb}%; background:var(--accent-purple);"></div>
-                  </div>
-                </div>` : ''}
-              ${claudeProb != null ? `
-                <div style="margin-bottom:12px;">
-                  <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span><strong>Claude (Anthropic Index)</strong></span>
-                    <span><strong>${claudeProb}% Citation Probability</strong></span>
-                  </div>
-                  <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
-                    <div style="height:100%; width:${claudeProb}%; background:var(--accent-warning);"></div>
-                  </div>
-                </div>` : ''}
-            </div>
-          `;
-        }
-      } else {
-        realCitationCard.style.display = "none";
-      }
-    }
-
-    // Model Output Simulations: Fixes [object Object] rendering
-    const sim = safeGet(data, "aiSimulation") || safeGet(data, "aiSearchSimulation") || {};
-    const simCard = document.getElementById("aiSimulationCard");
-    if (simCard) {
-      if (Object.keys(sim).length > 0) {
-        simCard.style.display = "block";
-        const simText = document.getElementById("aiSimulationText");
-        if (simText) {
-          const renderItem = (title, key) => {
-            const item = sim[key];
-            if (!item) return '';
-            // If backend returned object instead of string, format it logically
-            let outStr = '';
-            if (typeof item === 'object') {
-              outStr = Object.entries(item)
-                .map(([k, v]) => `<strong>${escapeHtml(k.toUpperCase())}:</strong> ${escapeHtml(String(v))}`)
-                .join('<br/>');
-            } else {
-              outStr = escapeHtml(String(item));
-            }
-            return `<div class="ai-box"><strong>${escapeHtml(title)}:</strong><p style="margin-top:5px; line-height:1.6;">${outStr}</p></div>`;
-          };
-
-          simText.innerHTML = `
-            ${renderItem("ChatGPT Simulation", "chatgpt")}
-            ${renderItem("Gemini Overviews Simulation", "gemini")}
-            ${renderItem("Perplexity Discovery Simulation", "perplexity")}
-            ${renderItem("Claude Logic Simulation", "claude")}
-          `;
-        }
-      } else {
-        simCard.style.display = "none";
-      }
-    }
-
-    // Detailed SEO Audit Table
-    const seoAuditCard = document.getElementById("seoAuditCard");
-    if (seoAuditCard) {
-      const crit = safeArray(safeGet(data, "analysis.seo.criticalIssues") || safeGet(data, "criticalIssues"));
-      const imp = safeArray(safeGet(data, "analysis.seo.importantIssues") || safeGet(data, "importantIssues"));
-      const minor = safeArray(safeGet(data, "analysis.seo.minorIssues") || safeGet(data, "minorIssues"));
-
-      if (crit.length > 0 || imp.length > 0 || minor.length > 0) {
-        seoAuditCard.style.display = "block";
-        const seoAuditResults = document.getElementById("seoAuditResults");
-        if (seoAuditResults) {
-          seoAuditResults.innerHTML = `
-            <div class="grid-3" style="margin-bottom: 20px;">
-              <div class="metric-box" style="background:var(--accent-danger)"><div class="metric-value">${crit.length}</div><div class="metric-label">Critical Issues</div></div>
-              <div class="metric-box" style="background:var(--accent-warning)"><div class="metric-value">${imp.length}</div><div class="metric-label">Important Issues</div></div>
-              <div class="metric-box" style="background:var(--accent-primary)"><div class="metric-value">${minor.length}</div><div class="metric-label">Minor Issues</div></div>
-            </div>
-            ${crit.length > 0 ? `<h4 style="color:var(--accent-danger)">🚨 Critical Rectifications Required:</h4><ul>${crit.map(c => `<li>${escapeHtml(c?.description || c)}</li>`).join('')}</ul>` : ''}
-            ${imp.length > 0 ? `<h4 style="color:var(--accent-warning)">⚠️ General Warnings:</h4><ul>${imp.map(i => `<li>${escapeHtml(i?.description || i)}</li>`).join('')}</ul>` : ''}
-            ${minor.length > 0 ? `<h4 style="color:var(--accent-primary)">ℹ️ Minor Alerts:</h4><ul>${minor.map(m => `<li>${escapeHtml(m?.description || m)}</li>`).join('')}</ul>` : ''}
-          `;
-        }
-      } else {
-        seoAuditCard.style.display = "none";
-      }
-    }
-
-    // Metadata Analyzers
-    const titleCard = document.getElementById("titleAnalyzerCard");
-    if (titleCard) {
-      if (data?.title) {
-        titleCard.style.display = "block";
-        const titleResults = document.getElementById("titleAnalyzerResults");
-        if (titleResults) {
-          titleResults.innerHTML = `
-            <p><strong>Discovered Title Header:</strong> ${escapeHtml(data.title)}</p>
-            <p><strong>Characters Metric:</strong> ${data.title.length} characters</p>
-          `;
-        }
-      } else {
-        titleCard.style.display = "none";
-      }
-    }
-
-    const metaCard = document.getElementById("metaAnalyzerCard");
-    if (metaCard) {
-      if (data?.metaDescription) {
-        metaCard.style.display = "block";
-        const metaResults = document.getElementById("metaAnalyzerResults");
-        if (metaResults) {
-          metaResults.innerHTML = `
-            <p><strong>Discovered Meta Description:</strong> ${escapeHtml(data.metaDescription)}</p>
-            <p><strong>Characters Metric:</strong> ${data.metaDescription.length} characters</p>
-          `;
-        }
-      } else {
-        metaCard.style.display = "none";
-      }
-    }
-
-    // Heading Structure Metrics
-    const headingCard = document.getElementById("headingCard");
-    if (headingCard) {
-      if (data?.h1Count != null || data?.h2Count != null || data?.h3Count != null) {
-        headingCard.style.display = "block";
-        const headingResults = document.getElementById("headingResults");
-        if (headingResults) {
-          headingResults.innerHTML = `
-            <p><strong>H1 Main Count:</strong> ${safeText(data.h1Count)} detected</p>
-            <p><strong>H2 Subsection Count:</strong> ${safeText(data.h2Count)} detected</p>
-            <p><strong>H3 Topic Count:</strong> ${safeText(data.h3Count)} detected</p>
-          `;
-        }
-      } else {
-        headingCard.style.display = "none";
-      }
-    }
-
-    // Internal Link Auditing
-    const internalCard = document.getElementById("internalLinkCard");
-    if (internalCard) {
-      const linkIntel = safeGet(data, "internalLinkIntelligence") || safeGet(data, "breakdown.internalLinkingAudit");
-      if (linkIntel) {
-        internalCard.style.display = "block";
-        const linkResults = document.getElementById("internalLinkResults");
-        if (linkResults) {
-          linkResults.innerHTML = `
-            <p><strong>Internal Link Elements:</strong> ${safeText(data.internalLinks ?? linkIntel?.internalLinks)}</p>
-            <p><strong>Average Link Depth:</strong> ${safeText(linkIntel?.avgLinkDepth ?? linkIntel?.linkDepthAverage)}</p>
-            <p><strong>Anchor Diversity Score:</strong> ${linkIntel?.anchorDiversityScore != null ? linkIntel.anchorDiversityScore + '%' : 'Data unavailable'}</p>
-            <p><strong>Contextual Link Score:</strong> ${linkIntel?.contextualLinkScore != null ? linkIntel.contextualLinkScore + '%' : 'Data unavailable'}</p>
-          `;
-        }
-      } else {
-        internalCard.style.display = "none";
-      }
-    }
-
-    // Image SEO Alt Indicators
-    const imageCard = document.getElementById("imageSeoCard");
-    if (imageCard) {
-      if (data?.totalImages != null || data?.imagesWithoutAlt != null) {
-        imageCard.style.display = "block";
-        const imgResults = document.getElementById("imageSeoResults");
-        if (imgResults) {
-          imgResults.innerHTML = `
-            <p><strong>Total Image Nodes Scanned:</strong> ${safeText(data.totalImages)}</p>
-            <p><strong>Images Missing ALT Attributes:</strong> ${safeText(data.imagesWithoutAlt)}</p>
-          `;
-        }
-      } else {
-        imageCard.style.display = "none";
-      }
-    }
-
-    // Entity Map Lists
-    const entityCard = document.getElementById("entityCard");
-    if (entityCard) {
-      const ent = safeGet(data, "entities") || safeGet(data, "aiEntities") || {};
-      if (Object.keys(ent).length > 0) {
-        entityCard.style.display = "block";
-        const entResults = document.getElementById("entityResults");
-        if (entResults) {
-          const listBrands = safeArray(ent?.brands).join(', ');
-          const listServices = safeArray(ent?.services).join(', ');
-          const listLocations = safeArray(ent?.locations).join(', ');
-
-          entResults.innerHTML = `
-            <p><strong>Identified Brand Names:</strong> ${escapeHtml(safeText(listBrands))}</p>
-            <p><strong>Extracted Services & Products:</strong> ${escapeHtml(safeText(listServices))}</p>
-            <p><strong>Inferred Locations:</strong> ${escapeHtml(safeText(listLocations))}</p>
-          `;
-        }
-      } else {
-        entityCard.style.display = "none";
-      }
-    }
-
-    // EEAT Signals Indicators
-    const eeatCard = document.getElementById("eeatCard");
-    if (eeatCard) {
-      const eeatAnalysis = safeGet(data, "analysis.eeat") || {};
-      if (Object.keys(eeatAnalysis).length > 0) {
-        eeatCard.style.display = "block";
-        const eeatResults = document.getElementById("eeatResults");
-        if (eeatResults) {
-          eeatResults.innerHTML = `
-            <p><strong>EEAT Signal Grade:</strong> ${escapeHtml(safeText(eeatAnalysis?.status))}</p>
-            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;">
-              <span class="badge ${data?.hasAboutPage ? 'badge-green' : 'badge-red'}">About Page</span>
-              <span class="badge ${data?.hasContactPage ? 'badge-green' : 'badge-red'}">Contact Page</span>
-              <span class="badge ${data?.hasPrivacyPolicy ? 'badge-green' : 'badge-red'}">Privacy Policy</span>
-              <span class="badge ${data?.hasAuthor ? 'badge-green' : 'badge-red'}">Author Bio</span>
-              <span class="badge ${techAnalysis?.isHttps ? 'badge-green' : 'badge-red'}">HTTPS Secure</span>
-            </div>
-          `;
-        }
-      } else {
-        eeatCard.style.display = "none";
-      }
-    }
-
-    // Recommended Schema Array Card: Fixes duplicate schema block rendering issues
-    const schemaCard = document.getElementById("schemaCard");
-    if (schemaCard) {
-      const techAnalysis = safeGet(data, "analysis.technical") || {};
-      const detectedList = safeArray(techAnalysis?.schemas || data?.schemas);
-      const recommendedList = safeArray(techAnalysis?.recommendedSchemas || data?.recommendedSchemas);
-
-      if (detectedList.length > 0 || recommendedList.length > 0) {
-        schemaCard.style.display = "block";
-        const schemaResults = document.getElementById("schemaResults");
-        if (schemaResults) {
-          const detectedStr = detectedList.length > 0 
-            ? detectedList.map(s => `<span class="badge badge-green" style="margin:2px;">${escapeHtml(s)}</span>`).join('')
-            : `<span class="badge badge-red">No Schema Markup Detected</span>`;
-
-          const recommendedStr = recommendedList.length > 0
-            ? recommendedList.map(s => `<span class="badge badge-purple" style="margin:2px;">${escapeHtml(s)}</span>`).join('')
-            : `<span>No recommendations required</span>`;
-
-          // Generate Schema code cards strictly once
-          let schemasCodeHtml = "";
-          if (data?.schemaGenerator || data?.schema) {
-            const rawSchema = data?.schemaGenerator || data?.schema;
-            schemasCodeHtml = `
-              <div class="ai-box" style="margin-top:15px;">
-                <strong>Recommended Structured Markup Schema Draft:</strong>
-                <pre>${escapeHtml(rawSchema)}</pre>
-                <button onclick="copyToClipboard(\`${String(rawSchema).replace(/`/g, '\\`')}\`, this)">📋 Copy Markup</button>
-              </div>`;
-          }
-
-          schemaResults.innerHTML = `
-            <p><strong>Detected Schemas on Domain:</strong></p>
-            <div style="margin-bottom:15px;">${detectedStr}</div>
-            <p><strong>Recommended Schemas to Deploy:</strong></p>
-            <div style="margin-bottom:20px;">${recommendedStr}</div>
-            ${schemasCodeHtml}
-          `;
-        }
-      } else {
-        schemaCard.style.display = "none";
-      }
-    }
-
-    // Topical & Semantic Content
-    const tCard = document.getElementById("topicalAuthorityCard");
-    if (tCard) {
-      const topical = safeGet(data, "topicalAuthority");
-      if (topical) {
-        tCard.style.display = "block";
-        const contentEl = document.getElementById("topicalAuthorityContent");
-        if (contentEl) {
-          const clustersHtml = safeArray(topical?.clusters).map(cls => `
-            <div class="ai-box" style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
-              <span><strong>${escapeHtml(cls?.name)}</strong></span>
-              <span class="badge ${cls?.status === 'Active' ? 'badge-green' : 'badge-orange'}">${escapeHtml(cls?.status)}</span>
-            </div>
-          `).join('');
-
-          contentEl.innerHTML = `
-            <p><strong>Authority Score:</strong> ${topical?.authorityScore != null ? topical.authorityScore + '/100' : 'Data unavailable'}</p>
-            <p><strong>Topical Coverage Depth:</strong> ${escapeHtml(safeText(topical?.depth))}</p>
-            <p><strong>Coverage Percent:</strong> ${escapeHtml(safeText(topical?.topicsCovered))}</p>
-            <div style="margin-top:15px;">
-              <strong>Dynamic Topical Clusters:</strong>
-              ${clustersHtml || '<p style="color:var(--text-muted)">No active topical clusters parsed.</p>'}
-            </div>
-          `;
-        }
-      } else {
-        tCard.style.display = "none";
-      }
-    }
-
-    const sCard = document.getElementById("semanticSEOCard");
-    if (sCard) {
-      const semantic = safeGet(data, "semanticSEO");
-      if (semantic) {
-        sCard.style.display = "block";
-        const contentEl = document.getElementById("semanticSEOContent");
-        if (contentEl) {
-          const gapBadges = safeArray(semantic?.semanticGaps || semantic?.missingEntities).map(gap => `<span class="badge badge-orange" style="margin:2px;">${escapeHtml(gap)}</span>`).join('');
-          contentEl.innerHTML = `
-            <p><strong>Semantic NLP Relevance Grade:</strong> ${semantic?.nlpScore != null ? semantic.nlpScore + '/100' : 'Data unavailable'}</p>
-            <p><strong>Semantic Topic Match:</strong> ${semantic?.topicCoverage != null ? semantic.topicCoverage + '%' : 'Data unavailable'}</p>
-            <p><strong>Gap Entities:</strong></p>
-            <div style="margin-top:5px;">${gapBadges || 'No immediate semantic gaps identified'}</div>
-          `;
-        }
-      } else {
-        sCard.style.display = "none";
-      }
-    }
-
-    // AI Citation Opportunities
-    const oppCard = document.getElementById("citationOppCard");
-    if (oppCard) {
-      const opps = safeArray(safeGet(data, "citationOpportunities"));
-      if (opps.length > 0) {
-        oppCard.style.display = "block";
-        const contentEl = document.getElementById("citationOppContent");
-        if (contentEl) {
-          contentEl.innerHTML = opps.map(o => `
-            <div class="ai-box">
-              <strong>${escapeHtml(o?.engine)} Engine Opportunity:</strong>
-              <p>${escapeHtml(o?.issue)}</p>
-              <span class="badge badge-red" style="margin-top:5px;">Impact: ${escapeHtml(o?.impact)}</span>
-              <p style="margin-top:5px; font-size:13px; color:var(--text-muted);">Fix Action: ${escapeHtml(o?.fix)}</p>
-            </div>
-          `).join('');
-        }
-      } else {
-        oppCard.style.display = "none";
-      }
-    }
-
-    // Trust Signal Scans
-    const trCard = document.getElementById("trustSignalsCard");
-    if (trCard) {
-      const trust = safeGet(data, "trustSignals");
-      if (trust) {
-        trCard.style.display = "block";
-        const contentEl = document.getElementById("trustSignalsContent");
-        if (contentEl) {
-          contentEl.innerHTML = `
-            <p><strong>Platform Trust Flow Score:</strong> ${trust?.trustScore != null ? trust.trustScore + '/100' : 'Data unavailable'}</p>
-            <ul>
-              <li>Active Contact channels: ${trust?.hasContact ? '✓ Verified' : '✗ Unverified'}</li>
-              <li>Corporate About sections: ${trust?.hasAbout ? '✓ Verified' : '✗ Unverified'}</li>
-              <li>Terms of Service validation: ${trust?.hasTermsPage ? '✓ Verified' : '✗ Unverified'}</li>
-              <li>Social parameters index: ${safeArray(trust?.socialLinks).length > 0 ? '✓ Verified (' + safeArray(trust?.socialLinks).length + ' linked)' : '✗ Unverified'}</li>
-            </ul>
-          `;
-        }
-      } else {
-        trCard.style.display = "none";
-      }
-    }
-
-    // Local SEO Analyzers
-    const lCard = document.getElementById("localSeoCard");
-    if (lCard) {
-      const local = safeGet(data, "localSEO");
-      if (local) {
-        lCard.style.display = "block";
-        const contentEl = document.getElementById("localSEOContent");
-        if (contentEl) {
-          contentEl.innerHTML = `
-            <p><strong>Local SEO Score:</strong> ${local?.localScore != null ? local.localScore + '/100' : 'Data unavailable'}</p>
-            <p><strong>NAP Consistency Alignment:</strong> ${escapeHtml(safeText(local?.napConsistency))}</p>
-            <p><strong>Google Maps Linkage:</strong> ${local?.mapDetected ? '✓ Connected' : '✗ Missing'}</p>
-            <p><strong>LocalBusiness JSON-LD:</strong> ${local?.localBusinessSchemaDetected ? '✓ Active' : '✗ Missing'}</p>
-          `;
-        }
-      } else {
-        lCard.style.display = "none";
-      }
-    }
+    renderCrawlDiagnostics(data);
+    renderExecutiveSummaryAndGauges(data);
+    renderTrendAndRadar(data);
+    renderAiReasoning(data);
+    renderCitationProbability(data);
+    renderModelSimulations(data);
+    renderSeoAudit(data);
+    renderTitleMeta(data);
+    renderHeadings(data);
+    renderInternalLinks(data);
+    renderImageSeo(data);
+    renderEntities(data);
+    renderEeat(data);
+    renderSchema(data);
+    renderTopicalAuthority(data);
+    renderSemanticSeo(data);
+    renderCitationOpportunities(data);
+    renderTrustSignals(data);
+    renderLocalSeo(data);
 
     const resultEl = document.getElementById("result");
     if (resultEl) {
       resultEl.innerHTML = `
         <div class="card" style="border-left:5px solid var(--accent-success);">
-          <h4>✅ Domain Scan Matrix Parsed</h4>
-          <p>Structural indexes analyzed successfully. Click individual SaaS checklist options to perform comparison workflows.</p>
-        </div>
-      `;
+          <h4><span aria-hidden="true">✅</span> Domain Scan Matrix Parsed</h4>
+          <p>Structural indexes analyzed successfully for <strong>${escapeHtml(safeText(data.resolvedUrl))}</strong>. Use the checklist actions above to run comparisons, roadmaps, or keyword analysis.</p>
+        </div>`;
     }
   } catch (renderError) {
     console.error("DOM Rendering Exception:", renderError);
+    showToast("A rendering error occurred while displaying results.", "error");
   }
 }
 
-// ==== ROADMAP OPERATIONS ====
+function renderCrawlDiagnostics(data) {
+  const diagCard = document.getElementById("crawlDiagnosticsCard");
+  if (!diagCard) return;
+
+  const crawlMethod = safeGet(data, "crawl.method");
+  const statusCode = safeGet(data, "crawl.status");
+  const contentSize = safeGet(data, "crawl.contentSize");
+  const duration = safeGet(data, "crawl.duration");
+  const retryCount = safeGet(data, "crawl.retryCount");
+  const finalUrl = safeGet(data, "resolvedUrl");
+
+  if (!crawlMethod && !statusCode && !finalUrl) { diagCard.style.display = "none"; return; }
+
+  diagCard.style.display = "block";
+  let statusBadgeClass = "badge-green", statusLabel = "SUCCESS";
+  if (crawlMethod === "PLAYWRIGHT_RENDERED") { statusBadgeClass = "badge-purple"; statusLabel = "DYNAMIC AUTOMATION"; }
+
+  const diagContent = document.getElementById("crawlDiagnosticsContent");
+  if (diagContent) {
+    diagContent.innerHTML = `
+      <div class="grid-3">
+        <div class="metric-box" style="background:#111827; border:1px solid var(--border-color);">
+          <div class="metric-value" style="font-size:18px; color:var(--text-primary);">${escapeHtml(safeText(crawlMethod))}</div>
+          <div class="metric-label">Crawl Method</div>
+        </div>
+        <div class="metric-box" style="background:#111827; border:1px solid var(--border-color);">
+          <div class="metric-value" style="font-size:18px; color:var(--text-primary);">${escapeHtml(safeText(statusCode))}</div>
+          <div class="metric-label">HTTP Status Code</div>
+        </div>
+        <div class="metric-box" style="background:#111827; border:1px solid var(--border-color);">
+          <div class="metric-value" style="font-size:18px; color:var(--text-primary);">${contentSize != null ? (Number(contentSize) / 1024).toFixed(1) + " KB" : "Data unavailable"}</div>
+          <div class="metric-label">Content Size</div>
+        </div>
+      </div>
+      <div style="margin-top:15px;">
+        <p><strong>Resolved Target URL:</strong> <a href="${escapeHtml(finalUrl || '')}" target="_blank" rel="noopener noreferrer" style="color:var(--accent-primary); word-break:break-all;">${escapeHtml(safeText(finalUrl))}</a></p>
+        <p><strong>Crawl Duration:</strong> ${duration != null ? duration + ' ms' : 'Data unavailable'} &nbsp;|&nbsp; <strong>Retries:</strong> ${safeText(retryCount, "0")}</p>
+        <p><strong>Process State:</strong> <span class="badge ${statusBadgeClass}">${statusLabel}</span></p>
+      </div>`;
+  }
+}
+
+function renderExecutiveSummaryAndGauges(data) {
+  const seoScore = safeNumber(data.seoScore);
+  const aeoScore = safeNumber(data.aeoScore);
+  const eeatScore = safeNumber(data.eeatScore);
+  const citationScore = safeNumber(data.citationScore);
+  const authorityScore = safeNumber(safeGet(data, "topicalAuthority.authorityScore"));
+  const trustScore = safeNumber(data.trustScore);
+
+  const gaugeContainer = document.getElementById("gaugeChartsContainer");
+  const hasAnyScore = [seoScore, aeoScore, eeatScore, citationScore].some(s => s != null);
+  if (gaugeContainer) gaugeContainer.style.display = hasAnyScore ? "grid" : "none";
+
+  animateValue("seoScore", 0, seoScore, 1000, "%<span>SEO</span>");
+  animateValue("aeoScore", 0, aeoScore, 1000, "%<span>AEO</span>");
+  animateValue("eeatScore", 0, eeatScore, 1000, "%<span>EEAT</span>");
+  animateValue("citationScore", 0, citationScore, 1000, "%<span>Citation</span>");
+
+  if (seoChart) seoChart.destroy();
+  if (aeoChart) aeoChart.destroy();
+  if (eeatChart) eeatChart.destroy();
+  if (citationChart) citationChart.destroy();
+  seoChart = renderRadialChart("seoChart", seoScore);
+  aeoChart = renderRadialChart("aeoChart", aeoScore);
+  eeatChart = renderRadialChart("eeatChart", eeatScore);
+  citationChart = renderRadialChart("citationChart", citationScore);
+
+  const execPanel = document.getElementById("executiveSummaryPanel");
+  if (!execPanel) return;
+  const hasAnyExec = [seoScore, aeoScore, eeatScore, citationScore, authorityScore, trustScore].some(s => s != null);
+  if (!hasAnyExec) { execPanel.style.display = "none"; return; }
+  execPanel.style.display = "block";
+
+  const dashboardGrid = document.getElementById("execDashboardGrid");
+  if (!dashboardGrid) return;
+
+  const overall = safeNumber(data.overallAIVisibilityScore);
+  const potential = safeNumber(data.potentialAIVisibility);
+
+  const metricBox = (value, label, score) => `
+    <div class="metric-box">
+      <div class="metric-value">${value != null ? value + '%' : 'Data unavailable'}</div>
+      <div class="metric-label">${escapeHtml(label)}</div>
+      <span class="status-indicator-p" style="background:${getProgressColor(score)}">${getStatusLabel(score)}</span>
+    </div>`;
+
+  dashboardGrid.innerHTML = `
+    ${metricBox(overall, "Overall AI Visibility", overall)}
+    ${metricBox(seoScore, "SEO Score", seoScore)}
+    ${metricBox(aeoScore, "AEO Score", aeoScore)}
+    ${metricBox(eeatScore, "EEAT Score", eeatScore)}
+    ${metricBox(citationScore, "AI Citation", citationScore)}
+    ${metricBox(authorityScore, "Authority Score", authorityScore)}
+    ${metricBox(trustScore, "Trust Score", trustScore)}
+    ${metricBox(potential, "Potential Visibility", potential)}
+  `;
+}
+
+function renderTrendAndRadar(data) {
+  const seoScore = safeNumber(data.seoScore);
+  const aeoScore = safeNumber(data.aeoScore);
+  const eeatScore = safeNumber(data.eeatScore);
+  const citationScore = safeNumber(data.citationScore);
+  const authorityScore = safeNumber(safeGet(data, "topicalAuthority.authorityScore"));
+  const trustScore = safeNumber(data.trustScore);
+
+  const chartsTrend = document.getElementById("chartsTrendContainer");
+  if (!chartsTrend) return;
+  const hasAny = [seoScore, aeoScore, eeatScore, citationScore].some(s => s != null);
+  if (!hasAny) { chartsTrend.style.display = "none"; return; }
+  chartsTrend.style.display = "grid";
+
+  const radarEl = document.getElementById("radarVisualsChart");
+  if (radarEl && typeof Chart !== "undefined") {
+    if (radarChart) radarChart.destroy();
+    radarChart = new Chart(radarEl.getContext('2d'), {
+      type: 'radar',
+      data: {
+        labels: ['SEO', 'AEO', 'E-E-A-T', 'Citation', 'Authority', 'Trust'],
+        datasets: [{
+          label: 'Domain Footprint',
+          data: [seoScore ?? 0, aeoScore ?? 0, eeatScore ?? 0, citationScore ?? 0, authorityScore ?? 0, trustScore ?? 0],
+          backgroundColor: 'rgba(59,130,246,0.2)', borderColor: '#3b82f6', pointBackgroundColor: '#2563eb', borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { r: { angleLines: { color: 'rgba(156,163,175,0.2)' }, grid: { color: 'rgba(156,163,175,0.2)' }, pointLabels: { color: '#9ca3af', font: { size: 10 } }, ticks: { display: false }, suggestedMin: 0, suggestedMax: 100 } },
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  // Historical trend is sourced from the dedicated /trend endpoint (populated
+  // server-side per repeat scan) rather than fabricated client-side.
+  fetchTrendAndRenderChart(data.resolvedUrl, citationScore, seoScore);
+}
+
+async function fetchTrendAndRenderChart(url, fallbackCitation, fallbackSeo) {
+  const trendEl = document.getElementById("trendVisualsChart");
+  if (!trendEl || typeof Chart === "undefined") return;
+
+  let points = [];
+  try {
+    const trendData = await apiFetch(`/trend?url=${encodeURIComponent(url)}`);
+    points = safeArray(trendData?.points);
+  } catch (e) {
+    points = [];
+  }
+
+  const labels = points.length > 0 ? points.map(p => new Date(p.timestamp).toLocaleDateString()) : ['Current'];
+  const visibilitySeries = points.length > 0 ? points.map(p => safeNumber(p.overallAIVisibilityScore, 0)) : [fallbackCitation ?? 0];
+  const seoSeries = points.length > 0 ? points.map(p => safeNumber(p.seoScore, 0)) : [fallbackSeo ?? 0];
+
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(trendEl.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'AI Visibility', data: visibilitySeries, borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', fill: true, tension: 0.4 },
+        { label: 'SEO Trend', data: seoSeries, borderColor: '#3b82f6', fill: false, tension: 0.4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
+        y: { grid: { color: 'rgba(156,163,175,0.1)' }, ticks: { color: '#9ca3af' }, suggestedMin: 0, suggestedMax: 100 }
+      },
+      plugins: { legend: { labels: { color: '#9ca3af' } } }
+    }
+  });
+}
+
+function renderAiReasoning(data) {
+  const reasoningCard = document.getElementById("aiReasoningCard");
+  if (!reasoningCard) return;
+
+  const deductions = safeArray(safeGet(data, "seo.deductions"));
+  const eeatFactors = safeArray(safeGet(data, "eeat.factors"));
+  const eeatIssues = safeArray(safeGet(data, "eeat.issues"));
+
+  if (deductions.length === 0 && eeatFactors.length === 0 && eeatIssues.length === 0) {
+    reasoningCard.style.display = "none";
+    return;
+  }
+  reasoningCard.style.display = "block";
+
+  const strengthText = eeatFactors.length > 0
+    ? eeatFactors.slice(0, 3).map(f => `<li>${escapeHtml(f)}</li>`).join('')
+    : `<li>No standout trust or structural strengths were detected in this crawl.</li>`;
+
+  const weaknessSource = deductions.length > 0
+    ? deductions.slice().sort((a, b) => b.penalty - a.penalty).slice(0, 3).map(d => `<li><strong>${escapeHtml(d.factor)}:</strong> ${escapeHtml(d.reason)}</li>`)
+    : eeatIssues.slice(0, 3).map(i => `<li>${escapeHtml(i)}</li>`);
+
+  const reasoningContent = document.getElementById("aiReasoningContent");
+  if (reasoningContent) {
+    reasoningContent.innerHTML = `
+      <div class="reasoning-panel">
+        <div class="reasoning-box strength">
+          <div class="reasoning-title" style="color:var(--accent-success)"><span aria-hidden="true">✔</span> Strongest Signals</div>
+          <ul>${strengthText}</ul>
+        </div>
+        <div class="reasoning-box weakness">
+          <div class="reasoning-title" style="color:var(--accent-warning)"><span aria-hidden="true">❌</span> Highest-Impact Issues</div>
+          <ul>${weaknessSource.join('') || '<li>No critical issues detected.</li>'}</ul>
+        </div>
+      </div>`;
+  }
+}
+
+function renderCitationProbability(data) {
+  const realCitationCard = document.getElementById("realCitationCard");
+  if (!realCitationCard) return;
+
+  const engines = safeGet(data, "citation.engines") || {};
+  const entries = [
+    { key: "chatgpt", label: "ChatGPT (OpenAI Search)", color: "var(--accent-success)" },
+    { key: "gemini", label: "Gemini (Google Overviews)", color: "var(--accent-primary)" },
+    { key: "perplexity", label: "Perplexity Engine (Discovery)", color: "var(--accent-purple)" },
+    { key: "claude", label: "Claude (Anthropic Index)", color: "var(--accent-warning)" },
+    { key: "copilot", label: "Copilot (Microsoft Search)", color: "#22d3ee" },
+    { key: "mistral", label: "Mistral (Le Chat)", color: "#f472b6" }
+  ].map(e => ({ ...e, score: safeNumber(engines[e.key]?.score), status: engines[e.key]?.status }));
+
+  const hasAny = entries.some(e => e.score != null);
+  if (!hasAny) { realCitationCard.style.display = "none"; return; }
+  realCitationCard.style.display = "block";
+
+  const explanationEl = document.getElementById("aeoSimulationExplanation");
+  if (explanationEl) {
+    explanationEl.innerHTML = entries.filter(e => e.score != null).map(e => `
+      <div class="progress-row">
+        <div class="progress-row-head">
+          <span><strong>${escapeHtml(e.label)}</strong> <span class="badge badge-neutral" style="margin-left:6px;">${escapeHtml(safeText(e.status))}</span></span>
+          <span><strong>${e.score}%</strong></span>
+        </div>
+        <div class="progress-track" role="progressbar" aria-valuenow="${e.score}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(e.label)} citation probability">
+          <div class="progress-fill" style="width:${e.score}%; background:${e.color};"></div>
+        </div>
+      </div>`).join('');
+  }
+}
+
+function renderModelSimulations(data) {
+  const simCard = document.getElementById("aiSimulationCard");
+  if (!simCard) return;
+
+  const sims = safeGet(data, "aeo.simulations") || {};
+  const keys = ["chatgpt", "gemini", "perplexity", "claude"];
+  const hasAny = keys.some(k => sims[k]);
+  if (!hasAny) { simCard.style.display = "none"; return; }
+  simCard.style.display = "block";
+
+  const simText = document.getElementById("aiSimulationText");
+  if (simText) {
+    const renderItem = (title, key) => {
+      const item = sims[key];
+      if (!item) return '';
+      return `<div class="ai-box"><strong>${escapeHtml(title)} — ${item.score}% likelihood:</strong><p style="margin-top:5px; line-height:1.6;">${escapeHtml(item.reasoning)}</p></div>`;
+    };
+    simText.innerHTML = `
+      ${renderItem("ChatGPT Simulation", "chatgpt")}
+      ${renderItem("Gemini Overviews Simulation", "gemini")}
+      ${renderItem("Perplexity Discovery Simulation", "perplexity")}
+      ${renderItem("Claude Logic Simulation", "claude")}`;
+  }
+}
+
+function renderSeoAudit(data) {
+  const seoAuditCard = document.getElementById("seoAuditCard");
+  if (!seoAuditCard) return;
+
+  const deductions = safeArray(safeGet(data, "seo.deductions"));
+  if (deductions.length === 0) {
+    seoAuditCard.style.display = "block";
+    document.getElementById("seoAuditResults").innerHTML = emptyStateHtml("✅", "No SEO Deductions Found", "This page passed every checked SEO factor.");
+    return;
+  }
+  seoAuditCard.style.display = "block";
+
+  const crit = deductions.filter(d => d.penalty >= 10);
+  const imp = deductions.filter(d => d.penalty >= 5 && d.penalty < 10);
+  const minor = deductions.filter(d => d.penalty < 5);
+
+  const seoAuditResults = document.getElementById("seoAuditResults");
+  if (seoAuditResults) {
+    seoAuditResults.innerHTML = `
+      <div class="grid-3" style="margin-bottom:20px;">
+        <div class="metric-box" style="background:var(--accent-danger)"><div class="metric-value">${crit.length}</div><div class="metric-label">Critical Issues</div></div>
+        <div class="metric-box" style="background:var(--accent-warning)"><div class="metric-value">${imp.length}</div><div class="metric-label">Important Issues</div></div>
+        <div class="metric-box" style="background:var(--accent-primary)"><div class="metric-value">${minor.length}</div><div class="metric-label">Minor Issues</div></div>
+      </div>
+      <p><strong>Overall SEO Status:</strong> <span class="badge ${safeGet(data,'seo.auditPassed') ? 'badge-green' : 'badge-orange'}">${escapeHtml(safeText(safeGet(data, 'seo.status')))}</span></p>
+      ${crit.length > 0 ? `<h4 style="color:var(--accent-danger)"><span aria-hidden="true">🚨</span> Critical Rectifications Required</h4><ul>${crit.map(c => `<li><strong>${escapeHtml(c.factor)}</strong> (-${c.penalty} pts): ${escapeHtml(c.reason)}</li>`).join('')}</ul>` : ''}
+      ${imp.length > 0 ? `<h4 style="color:var(--accent-warning)"><span aria-hidden="true">⚠️</span> Important Warnings</h4><ul>${imp.map(i => `<li><strong>${escapeHtml(i.factor)}</strong> (-${i.penalty} pts): ${escapeHtml(i.reason)}</li>`).join('')}</ul>` : ''}
+      ${minor.length > 0 ? `<h4 style="color:var(--accent-primary)"><span aria-hidden="true">ℹ️</span> Minor Alerts</h4><ul>${minor.map(m => `<li><strong>${escapeHtml(m.factor)}</strong> (-${m.penalty} pts): ${escapeHtml(m.reason)}</li>`).join('')}</ul>` : ''}
+    `;
+  }
+}
+
+function renderTitleMeta(data) {
+  const titleCard = document.getElementById("titleAnalyzerCard");
+  if (titleCard) {
+    if (data?.title) {
+      titleCard.style.display = "block";
+      document.getElementById("titleAnalyzerResults").innerHTML = `
+        <p><strong>Discovered Title:</strong> ${escapeHtml(data.title)}</p>
+        <p><strong>Length:</strong> ${data.title.length} characters ${data.title.length >= 10 && data.title.length <= 60 ? '<span class="badge badge-green">Optimal</span>' : '<span class="badge badge-orange">Needs Adjustment</span>'}</p>`;
+    } else { titleCard.style.display = "none"; }
+  }
+
+  const metaCard = document.getElementById("metaAnalyzerCard");
+  if (metaCard) {
+    if (data?.metaDescription) {
+      metaCard.style.display = "block";
+      document.getElementById("metaAnalyzerResults").innerHTML = `
+        <p><strong>Discovered Meta Description:</strong> ${escapeHtml(data.metaDescription)}</p>
+        <p><strong>Length:</strong> ${data.metaDescription.length} characters ${data.metaDescription.length >= 50 && data.metaDescription.length <= 160 ? '<span class="badge badge-green">Optimal</span>' : '<span class="badge badge-orange">Needs Adjustment</span>'}</p>`;
+    } else { metaCard.style.display = "none"; }
+  }
+}
+
+function renderHeadings(data) {
+  const headingCard = document.getElementById("headingCard");
+  if (!headingCard) return;
+
+  const h2s = safeArray(data.h2s);
+  const h3s = safeArray(data.h3s);
+  if (h2s.length === 0 && h3s.length === 0) { headingCard.style.display = "none"; return; }
+  headingCard.style.display = "block";
+
+  const h1Deduction = safeArray(safeGet(data, "seo.deductions")).find(d => d.factor && d.factor.startsWith("H1"));
+
+  document.getElementById("headingResults").innerHTML = `
+    <p><strong>H2 Subsection Count:</strong> ${h2s.length} detected</p>
+    <p><strong>H3 Topic Count:</strong> ${h3s.length} detected</p>
+    ${h1Deduction ? `<p><span class="badge badge-orange">H1 Notice</span> ${escapeHtml(h1Deduction.reason)}</p>` : `<p><span class="badge badge-green">H1 Structure OK</span></p>`}
+    ${h2s.length > 0 ? `<details><summary>View H2 Headings (${h2s.length})</summary><ul>${h2s.slice(0, 20).map(h => `<li>${escapeHtml(h)}</li>`).join('')}</ul></details>` : ''}
+    ${h3s.length > 0 ? `<details><summary>View H3 Headings (${h3s.length})</summary><ul>${h3s.slice(0, 20).map(h => `<li>${escapeHtml(h)}</li>`).join('')}</ul></details>` : ''}
+  `;
+}
+
+function renderInternalLinks(data) {
+  const internalCard = document.getElementById("internalLinkCard");
+  if (!internalCard) return;
+
+  const linkDeduction = safeArray(safeGet(data, "seo.deductions")).find(d => d.factor === "Internal Links");
+  internalCard.style.display = "block";
+
+  if (linkDeduction) {
+    document.getElementById("internalLinkResults").innerHTML = `
+      <p><span class="badge badge-red">Issue Detected</span></p>
+      <p>${escapeHtml(linkDeduction.reason)}</p>`;
+  } else {
+    document.getElementById("internalLinkResults").innerHTML = `
+      <p><span class="badge badge-green">No Internal Link Deductions</span></p>
+      <p>The SEO audit did not flag any internal linking issues on this page. Detailed link-depth and anchor-diversity metrics are not currently exposed by the API for direct display.</p>`;
+  }
+}
+
+function renderImageSeo(data) {
+  const imageCard = document.getElementById("imageSeoCard");
+  if (!imageCard) return;
+
+  const imgDeduction = safeArray(safeGet(data, "seo.deductions")).find(d => d.factor === "Image Alt Tags");
+  imageCard.style.display = "block";
+
+  if (imgDeduction) {
+    const match = imgDeduction.reason.match(/(\d+)\s+out of\s+(\d+)/i);
+    const missing = match ? match[1] : "Some";
+    const total = match ? match[2] : "images";
+    document.getElementById("imageSeoResults").innerHTML = `
+      <p><strong>Images Missing ALT Attributes:</strong> ${escapeHtml(missing)} out of ${escapeHtml(total)}</p>
+      <p><span class="badge badge-orange">Action Needed</span> ${escapeHtml(imgDeduction.reason)}</p>`;
+  } else {
+    document.getElementById("imageSeoResults").innerHTML = `<p><span class="badge badge-green">All Detected Images Have ALT Text</span></p>`;
+  }
+}
+
+function renderEntities(data) {
+  const entityCard = document.getElementById("entityCard");
+  if (!entityCard) return;
+
+  const ent = data.entityDetails || {};
+  if (!ent || Object.keys(ent).length === 0) { entityCard.style.display = "none"; return; }
+  entityCard.style.display = "block";
+
+  const listOrEmpty = (arr) => safeArray(arr).length > 0 ? escapeHtml(safeArray(arr).join(', ')) : 'None detected';
+
+  document.getElementById("entityResults").innerHTML = `
+    <p><strong>Total Entities Identified:</strong> ${safeText(ent.totalEntityCount, "0")}</p>
+    <p><strong>Brands:</strong> ${listOrEmpty(ent.brands)}</p>
+    <p><strong>Organizations:</strong> ${listOrEmpty(ent.organizations)}</p>
+    <p><strong>Products:</strong> ${listOrEmpty(ent.products)}</p>
+    <p><strong>Services:</strong> ${listOrEmpty(ent.services)}</p>
+    <p><strong>People:</strong> ${listOrEmpty(ent.people)}</p>
+    <p><strong>Locations:</strong> ${listOrEmpty(ent.locations)}</p>
+    <p><strong>Social Profiles:</strong> ${listOrEmpty(ent.socialProfiles)}</p>
+  `;
+}
+
+function renderEeat(data) {
+  const eeatCard = document.getElementById("eeatCard");
+  if (!eeatCard) return;
+
+  const metrics = safeGet(data, "eeat.auditMetrics") || {};
+  if (Object.keys(metrics).length === 0) { eeatCard.style.display = "none"; return; }
+  eeatCard.style.display = "block";
+
+  const badge = (label, ok) => `<span class="badge ${ok ? 'badge-green' : 'badge-red'}">${escapeHtml(label)}</span>`;
+
+  document.getElementById("eeatResults").innerHTML = `
+    <p><strong>EEAT Signal Grade:</strong> ${escapeHtml(safeText(safeGet(data, "eeat.status")))}</p>
+    <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;">
+      ${badge("About Page", metrics.hasAbout)}
+      ${badge("Contact Page", metrics.hasContact)}
+      ${badge("Privacy Policy", metrics.hasPrivacy)}
+      ${badge("Terms of Service", metrics.hasTerms)}
+      ${badge("Author Attribution", metrics.hasAuthor)}
+      ${badge("Organization Schema", metrics.organizationDetected)}
+      ${badge("HTTPS Secure", metrics.isHttps)}
+      ${badge("Credential Terms Found", metrics.matchesCredentials)}
+      ${badge("Brand Legacy Signals", metrics.matchesYears)}
+    </div>
+    <p style="margin-top:12px;"><strong>Outbound Authority Links:</strong> ${safeText(metrics.externalRefLinksCount, "0")}</p>
+    ${safeArray(safeGet(data, "eeat.issues")).length > 0 ? `<details style="margin-top:10px;"><summary>View All Issues (${safeArray(safeGet(data,"eeat.issues")).length})</summary><ul>${safeArray(safeGet(data,"eeat.issues")).map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul></details>` : ''}
+  `;
+}
+
+function renderSchema(data) {
+  const schemaCard = document.getElementById("schemaCard");
+  if (!schemaCard) return;
+
+  const detectedList = safeArray(safeGet(data, "schema.detectedTypes"));
+  const recommendedList = safeArray(data.recommendedSchemas);
+  if (detectedList.length === 0 && recommendedList.length === 0) { schemaCard.style.display = "none"; return; }
+  schemaCard.style.display = "block";
+
+  const detectedStr = detectedList.length > 0
+    ? detectedList.map(s => `<span class="badge badge-green" style="margin:2px;">${escapeHtml(s)}</span>`).join('')
+    : `<span class="badge badge-red">No Schema Markup Detected</span>`;
+
+  const recommendedStr = recommendedList.length > 0
+    ? recommendedList.map(s => `<span class="badge badge-purple" style="margin:2px;">${escapeHtml(s)}</span>`).join('')
+    : `<span>No recommendations required</span>`;
+
+  const validation = safeGet(data, "schema.validation");
+  const validationHtml = validation ? `
+    <p style="margin-top:15px;"><strong>JSON-LD Validation:</strong>
+      <span class="badge ${validation.invalidBlocks > 0 ? 'badge-red' : 'badge-green'}">${validation.validBlocks} valid / ${validation.invalidBlocks} invalid</span>
+    </p>
+    ${validation.issues?.length ? `<ul>${validation.issues.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>` : ''}
+  ` : '';
+
+  const rawSchema = safeText(data.schemaRecommendationsBlock, "");
+  const schemaCodeHtml = rawSchema ? `
+    <div class="ai-box" style="margin-top:15px;">
+      <strong>Recommended Structured Markup Draft:</strong>
+      <pre>${escapeHtml(rawSchema)}</pre>
+      <button type="button" onclick="copyToClipboard(${JSON.stringify(rawSchema)}, this)"><span aria-hidden="true">📋</span> Copy Markup</button>
+    </div>` : '';
+
+  document.getElementById("schemaResults").innerHTML = `
+    <p><strong>Detected Schemas on Domain:</strong></p>
+    <div style="margin-bottom:15px;">${detectedStr}</div>
+    <p><strong>Recommended Schemas to Deploy:</strong></p>
+    <div style="margin-bottom:10px;">${recommendedStr}</div>
+    ${validationHtml}
+    ${schemaCodeHtml}
+  `;
+}
+
+function renderTopicalAuthority(data) {
+  const tCard = document.getElementById("topicalAuthorityCard");
+  if (!tCard) return;
+
+  const topical = data.topicalAuthority;
+  if (!topical) { tCard.style.display = "none"; return; }
+  tCard.style.display = "block";
+
+  const clustersHtml = safeArray(topical.clusters).map(cls => `
+    <div class="ai-box" style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+      <span><strong>${escapeHtml(cls.name)}</strong> <small>(${cls.coverageCount} matched signals)</small></span>
+      <span class="badge ${cls.status === 'Active' ? 'badge-green' : 'badge-orange'}">${escapeHtml(cls.status)}</span>
+    </div>`).join('');
+
+  document.getElementById("topicalAuthorityContent").innerHTML = `
+    <p><strong>Authority Score:</strong> ${topical.authorityScore != null ? topical.authorityScore + '/100' : 'Data unavailable'}</p>
+    <p><strong>Status:</strong> <span class="badge badge-info">${escapeHtml(safeText(topical.status))}</span></p>
+    <p><strong>Intent Cluster Coverage:</strong> ${topical.coveragePercent != null ? topical.coveragePercent + '%' : 'Data unavailable'}</p>
+    <div style="margin-top:15px;"><strong>Dynamic Topical Clusters:</strong>${clustersHtml || '<p style="color:var(--text-muted)">No active topical clusters parsed.</p>'}</div>
+  `;
+}
+
+function renderSemanticSeo(data) {
+  const sCard = document.getElementById("semanticSEOCard");
+  if (!sCard) return;
+
+  const semantic = data.semantic;
+  if (!semantic) { sCard.style.display = "none"; return; }
+  sCard.style.display = "block";
+
+  const missingClusters = safeArray(semantic.clusters).filter(c => c.status === "Missing");
+  const gapBadges = missingClusters.map(c => `<span class="badge badge-orange" style="margin:2px;">${escapeHtml(c.name)}</span>`).join('');
+
+  document.getElementById("semanticSEOContent").innerHTML = `
+    <p><strong>Semantic Topic Coverage:</strong> ${semantic.coveragePercent != null ? semantic.coveragePercent + '%' : 'Data unavailable'}</p>
+    <p><strong>Total Extracted Entities:</strong> ${safeText(semantic.entities?.totalEntityCount, "0")}</p>
+    <p><strong>Uncovered Intent Clusters:</strong></p>
+    <div style="margin-top:5px;">${gapBadges || 'No immediate semantic gaps identified'}</div>
+  `;
+}
+
+function renderCitationOpportunities(data) {
+  const oppCard = document.getElementById("citationOppCard");
+  if (!oppCard) return;
+
+  const engines = safeGet(data, "citation.engines") || {};
+  const weakEngines = Object.entries(engines).filter(([, v]) => safeNumber(v?.score) != null && v.score < 60);
+  if (weakEngines.length === 0) { oppCard.style.display = "none"; return; }
+  oppCard.style.display = "block";
+
+  const engineLabels = { chatgpt: "ChatGPT", gemini: "Gemini", claude: "Claude", perplexity: "Perplexity", copilot: "Copilot", mistral: "Mistral" };
+
+  document.getElementById("citationOppContent").innerHTML = weakEngines.map(([key, v]) => `
+    <div class="ai-box">
+      <strong>${escapeHtml(engineLabels[key] || key)} Engine Opportunity:</strong>
+      <p>Current citation likelihood is scored as "${escapeHtml(v.status)}" at ${v.score}%.</p>
+      <span class="badge badge-orange" style="margin-top:5px;">Priority: ${v.score < 40 ? 'High' : 'Medium'}</span>
+      <p style="margin-top:5px; font-size:13px; color:var(--text-muted);">Improving structured data coverage and direct-answer formatting typically raises this engine's citation probability.</p>
+    </div>`).join('');
+}
+
+function renderTrustSignals(data) {
+  const trCard = document.getElementById("trustSignalsCard");
+  if (!trCard) return;
+
+  const trust = data.trustSignals;
+  if (!trust) { trCard.style.display = "none"; return; }
+  trCard.style.display = "block";
+
+  document.getElementById("trustSignalsContent").innerHTML = `
+    <p><strong>Platform Trust Score:</strong> ${trust.trustScore != null ? trust.trustScore + '/100' : 'Data unavailable'}</p>
+    <p><strong>Status:</strong> <span class="badge badge-info">${escapeHtml(safeText(trust.status))}</span></p>
+    ${safeArray(trust.factors).length > 0 ? `<h4>Verified Signals</h4><ul>${trust.factors.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>` : ''}
+    ${safeArray(trust.issues).length > 0 ? `<h4>Outstanding Gaps</h4><ul>${trust.issues.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>` : ''}
+  `;
+}
+
+function renderLocalSeo(data) {
+  const lCard = document.getElementById("localSeoCard");
+  if (!lCard) return;
+
+  const locations = safeArray(safeGet(data, "entityDetails.locations"));
+  const hasLocalBusinessSchema = safeArray(safeGet(data, "schema.detectedTypes")).includes("LocalBusiness");
+  const napFactor = safeArray(safeGet(data, "trust.factors")).find(f => f.toLowerCase().includes("nap"));
+  const napIssue = safeArray(safeGet(data, "trust.issues")).find(i => i.toLowerCase().includes("nap"));
+
+  if (locations.length === 0 && !hasLocalBusinessSchema && !napFactor && !napIssue) { lCard.style.display = "none"; return; }
+  lCard.style.display = "block";
+
+  document.getElementById("localSEOContent").innerHTML = `
+    <p><strong>Detected Locations:</strong> ${locations.length > 0 ? escapeHtml(locations.join(', ')) : 'None detected'}</p>
+    <p><strong>LocalBusiness JSON-LD:</strong> ${hasLocalBusinessSchema ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Missing</span>'}</p>
+    <p><strong>NAP Consistency:</strong> ${napFactor ? `<span class="badge badge-green">Verified</span> ${escapeHtml(napFactor)}` : napIssue ? `<span class="badge badge-red">Incomplete</span> ${escapeHtml(napIssue)}` : 'Data unavailable'}</p>
+  `;
+}
+
+// =========================================================================
+// ROADMAP
+// =========================================================================
 async function generateRoadmap() {
   const urlEl = document.getElementById("url");
-  if (!urlEl) return;
+  const urlErrEl = document.getElementById("urlFieldError");
+  if (!validateRequiredField(urlEl, urlErrEl, "Please enter a domain target.")) { urlEl?.focus(); return; }
   const url = urlEl.value.trim();
-  if (!url) return alert("Domain target required");
 
-  showLoading("Generating Visibility Roadmap...", "Constructing chronological workflow and estimating optimization weights");
+  setButtonBusy("roadmapBtn", true);
+  showLoading("Generating Visibility Roadmap...", "Constructing prioritized optimization checklist");
   try {
-    const res = await fetch(`${window.API_BASE}/roadmap?url=${encodeURIComponent(url)}`);
-    const responseData = await res.json();
-    const data = responseData.data || responseData;
+    const data = await apiFetch(`/roadmap?url=${encodeURIComponent(url)}`);
     hideLoading();
+
+    if (data.blocked) { renderBlockedState(data); return; }
 
     const roadCard = document.getElementById("roadmapCard");
-    if (roadCard) {
-      const roadmapItems = safeArray(data?.roadmap);
-      if (roadmapItems.length > 0) {
-        roadCard.style.display = "block";
-        
-        const currentAIVisibility = safeNumber(data?.currentAIVisibility || data?.currentScore);
-        const potentialAIVisibility = safeNumber(data?.potentialAIVisibility || data?.potentialScore);
-        const totalRoadmapImpact = safeNumber(data?.totalRoadmapImpact);
-
-        const stepsEl = document.getElementById("roadmapSteps");
-        if (stepsEl) {
-          stepsEl.innerHTML = `
-            <div style="text-align:center; margin-bottom:20px;">
-              <span style="font-size:32px; font-weight:800; color:var(--accent-primary);">${currentAIVisibility != null ? currentAIVisibility + '%' : 'Data unavailable'} → ${potentialAIVisibility != null ? potentialAIVisibility + '%' : 'Data unavailable'} Potential</span>
-              <p style="margin-top:6px; opacity:0.8;">Actionable SaaS Optimization Checklist (Total Roadmap Impact: +${totalRoadmapImpact ?? 0}%)</p>
-            </div>
-            <div class="timeline">
-              ${roadmapItems.map(step => `
-                <div class="timeline-item">
-                  <div class="timeline-dot ${step?.priority === 'CRITICAL' ? 'critical' : 'high'}"></div>
-                  <div class="ai-box" style="margin-top:0;">
-                    <strong>Step ${step?.step}: ${escapeHtml(step?.task)}</strong>
-                    <span class="badge ${step?.priority === 'CRITICAL' ? 'badge-red' : 'badge-orange'}" style="margin-left:8px;">${step?.priority}</span>
-                    <p style="margin-top:6px;"><strong>Objective:</strong> ${escapeHtml(step?.why)}</p>
-                    <p style="font-size:13px; color:var(--text-muted);">Impact value: +${step?.impact}% | Implementation: ${step?.effort}</p>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          `;
-        }
-      } else {
-        roadCard.style.display = "none";
-      }
+    const roadmapItems = safeArray(data.roadmap);
+    if (roadmapItems.length === 0) {
+      roadCard.style.display = "block";
+      document.getElementById("roadmapSteps").innerHTML = emptyStateHtml("🗺️", "No Roadmap Items", "This domain did not trigger any prioritized recommendations.");
+      return;
     }
-  } catch(err) {
+    roadCard.style.display = "block";
+
+    const current = safeNumber(safeGet(data, "scores.currentAIVisibility"));
+    const potential = safeNumber(safeGet(data, "scores.potentialAIVisibility"));
+
+    document.getElementById("roadmapSteps").innerHTML = `
+      <div style="text-align:center; margin-bottom:20px;">
+        <span style="font-size:32px; font-weight:800; color:var(--accent-primary);">${current != null ? current + '%' : 'Data unavailable'} → ${potential != null ? potential + '%' : 'Data unavailable'} Potential</span>
+        <p style="margin-top:6px; opacity:0.8;">Prioritized optimization checklist derived from your live audit</p>
+      </div>
+      <div class="timeline">
+        ${roadmapItems.map((step, idx) => `
+          <div class="timeline-item">
+            <div class="timeline-dot ${idx === 0 ? 'critical' : idx < 3 ? 'high' : 'medium'}"></div>
+            <div class="ai-box" style="margin-top:0;">
+              <strong>Step ${idx + 1}:</strong> ${escapeHtml(step)}
+            </div>
+          </div>`).join('')}
+      </div>`;
+  } catch (err) {
     hideLoading();
-    alert("Roadmap generation error: " + err.message);
+    showToast("Roadmap generation error: " + err.message, "error");
+  } finally {
+    setButtonBusy("roadmapBtn", false);
   }
 }
 
-// ==== KEYWORD THEFT ====
+// =========================================================================
+// KEYWORD THEFT — dedicated /keyword-theft endpoint, sortable table
+// =========================================================================
+let keywordTheftDataCache = [];
+let keywordTheftSortState = { key: null, dir: 1 };
+
 async function keywordTheft() {
   const urlEl = document.getElementById("url");
   const compEl = document.getElementById("competitorUrl");
-  if (!urlEl || !compEl) return;
+  const urlErrEl = document.getElementById("urlFieldError");
+  const compErrEl = document.getElementById("competitorFieldError");
+
+  const urlValid = validateRequiredField(urlEl, urlErrEl, "Please enter your domain.");
+  const compValid = validateRequiredField(compEl, compErrEl, "Please enter a competitor domain.");
+  if (!urlValid || !compValid) return;
 
   const url = urlEl.value.trim();
   const comp = compEl.value.trim();
-  if (!url || !comp) return alert("Both targets required.");
 
-  showLoading("Parsing Keyword Intelligence...", "Analyzing competitor semantic anchor texts and keyword clusters");
+  setButtonBusy("theftBtn", true);
+  showLoading("Parsing Keyword Intelligence...", "Comparing keyword footprints between both domains");
   try {
-    const res = await fetch(`${window.API_BASE}/content-gap?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
-    const responseData = await res.json();
-    const data = responseData.data || responseData;
+    const data = await apiFetch(`/keyword-theft?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     hideLoading();
 
-    const theftCard = document.getElementById("keywordTheftCard");
-    if (theftCard) {
-      const missingKeywords = safeArray(data?.keywordGap?.missingKeywords || data?.keywordGaps);
-      if (missingKeywords.length > 0) {
-        theftCard.style.display = "block";
-        const resultsEl = document.getElementById("keywordTheftResults");
-        if (resultsEl) {
-          resultsEl.innerHTML = `
-            <p style="margin-bottom:12px;"><strong>High-Yield Opportunity Targets (Steal Metrics):</strong></p>
-            <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px;">
-              ${missingKeywords.map(k => `<span class="badge badge-purple" style="font-size:12px; padding:6px 12px;">${escapeHtml(k)}</span>`).join('')}
-            </div>
-          `;
-        }
-      } else {
-        theftCard.style.display = "none";
-      }
+    if (data.competitorBlocked || !data.success) {
+      showToast(data.reason || "Keyword theft analysis unavailable.", "error");
+      return;
     }
-  } catch(err) {
+
+    keywordTheftDataCache = safeArray(data.stolenKeywords);
+    const theftCard = document.getElementById("keywordTheftCard");
+    if (keywordTheftDataCache.length === 0) {
+      theftCard.style.display = "block";
+      document.getElementById("keywordTheftResults").innerHTML = emptyStateHtml("💎", "No Keyword Gaps Found", "Your competitor doesn't appear to rank for keywords you're missing.");
+      return;
+    }
+    theftCard.style.display = "block";
+    renderKeywordTheftTable();
+  } catch (err) {
     hideLoading();
-    alert("Theft routine failed: " + err.message);
+    showToast("Keyword theft analysis failed: " + err.message, "error");
+  } finally {
+    setButtonBusy("theftBtn", false);
   }
 }
 
-// ==== GAP ANALYSIS ====
+function renderKeywordTheftTable() {
+  const resultsEl = document.getElementById("keywordTheftResults");
+  if (!resultsEl) return;
+
+  let rows = [...keywordTheftDataCache];
+  if (keywordTheftSortState.key) {
+    rows.sort((a, b) => (a[keywordTheftSortState.key] - b[keywordTheftSortState.key]) * keywordTheftSortState.dir);
+  }
+
+  const sortIndicator = (key) => keywordTheftSortState.key === key ? (keywordTheftSortState.dir === 1 ? ' ▲' : ' ▼') : '';
+
+  resultsEl.innerHTML = `
+    <p style="margin-bottom:12px;"><strong>${keywordTheftDataCache.length}</strong> high-yield opportunity keyword(s) your competitor ranks for:</p>
+    <div class="table-scroll-wrap">
+      <table>
+        <caption class="visually-hidden">Competitor keyword opportunities sorted by column</caption>
+        <thead>
+          <tr>
+            <th scope="col"><button type="button" onclick="sortKeywordTheft('keyword')" style="background:none; color:inherit; padding:0; font-weight:700;">Keyword${sortIndicator('keyword')}</button></th>
+            <th scope="col"><button type="button" onclick="sortKeywordTheft('searchVolume')" style="background:none; color:inherit; padding:0; font-weight:700;">Search Volume${sortIndicator('searchVolume')}</button></th>
+            <th scope="col"><button type="button" onclick="sortKeywordTheft('difficulty')" style="background:none; color:inherit; padding:0; font-weight:700;">Difficulty${sortIndicator('difficulty')}</button></th>
+            <th scope="col"><button type="button" onclick="sortKeywordTheft('opportunityScore')" style="background:none; color:inherit; padding:0; font-weight:700;">Opportunity${sortIndicator('opportunityScore')}</button></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(k => `
+            <tr>
+              <td>${escapeHtml(k.keyword)}</td>
+              <td>${escapeHtml(String(k.searchVolume))}</td>
+              <td><span class="badge ${k.difficulty > 70 ? 'badge-red' : k.difficulty > 40 ? 'badge-orange' : 'badge-green'}">${k.difficulty}</span></td>
+              <td><span class="badge ${k.opportunityScore > 70 ? 'badge-green' : 'badge-neutral'}">${k.opportunityScore}</span></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function sortKeywordTheft(key) {
+  if (keywordTheftSortState.key === key) { keywordTheftSortState.dir *= -1; }
+  else { keywordTheftSortState.key = key; keywordTheftSortState.dir = -1; }
+  renderKeywordTheftTable();
+}
+
+// =========================================================================
+// GAP ANALYSIS
+// =========================================================================
 async function gapAnalysis() {
   const urlEl = document.getElementById("url");
   const compEl = document.getElementById("competitorUrl");
-  if (!urlEl || !compEl) return;
+  const urlErrEl = document.getElementById("urlFieldError");
+  const compErrEl = document.getElementById("competitorFieldError");
+
+  const urlValid = validateRequiredField(urlEl, urlErrEl, "Please enter your domain.");
+  const compValid = validateRequiredField(compEl, compErrEl, "Please enter a competitor domain.");
+  if (!urlValid || !compValid) return;
 
   const url = urlEl.value.trim();
   const comp = compEl.value.trim();
-  if (!url || !comp) return alert("Both targets required.");
 
-  showLoading("Finding Semantic Gaps...", "Cross-referencing domain taxonomies and comparing topical coverage percent");
+  setButtonBusy("gapBtn", true);
+  showLoading("Finding Content Gaps...", "Cross-referencing heading structures, keywords, and schema coverage");
   try {
-    const res = await fetch(`${window.API_BASE}/content-gap?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
-    const responseData = await res.json();
-    const data = responseData.data || responseData;
+    const data = await apiFetch(`/content-gap?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     hideLoading();
 
-    const gapCard = document.getElementById("gapCard");
-    if (gapCard) {
-      const missingTopics = safeArray(data?.gapAnalysis?.missingTopics || data?.headingGaps);
-      if (missingTopics.length > 0) {
-        gapCard.style.display = "block";
-        const gapContent = document.getElementById("gapContent");
-        if (gapContent) {
-          gapContent.innerHTML = `
-            <div class="grid-3" style="margin-bottom:20px;">
-              <div class="metric-box" style="background:#111827; border: 1px solid var(--accent-danger);">
-                <div class="metric-value" style="color:var(--accent-danger)">${missingTopics.length}</div>
-                <div class="metric-label">Missing Gaps</div>
-              </div>
-              <div class="metric-box" style="background:#111827; border: 1px solid var(--accent-warning);">
-                <div class="metric-value" style="color:var(--accent-warning)">${data?.contentLengthDiff ?? 'Data unavailable'}</div>
-                <div class="metric-label">Content Diff (Words)</div>
-              </div>
-              <div class="metric-box" style="background:#111827; border: 1px solid var(--accent-success);">
-                <div class="metric-value" style="color:var(--accent-success)">${safeArray(data?.schemaGaps).length}</div>
-                <div class="metric-label">Schema Gaps</div>
-              </div>
-            </div>
-            <p><strong>Topical Coverage Status:</strong> <span class="badge badge-purple">${escapeHtml(safeText(data?.topicalCoverageStatus))}</span></p>
-            <p style="margin-top:15px;"><strong>Identified Crucial Topic Gaps:</strong></p>
-            <ul style="list-style-type:none; padding-left:0;">
-              ${missingTopics.map((topic, index) => `
-                <li onclick="this.style.color='var(--accent-success)'" style="cursor:pointer; padding:12px; background:var(--bg-body); border-radius:8px; margin-bottom:8px; border-left:3px solid var(--accent-danger); transition:0.2s; font-weight:${index < 3 ? 'bold' : 'normal'};">
-                  ${index < 3 ? '🚨 [CRITICAL]' : '❌'} ${escapeHtml(topic)}
-                </li>
-              `).join('')}
-            </ul>
-          `;
-        }
-      } else {
-        gapCard.style.display = "block";
-        const gapContent = document.getElementById("gapContent");
-        if (gapContent) {
-          gapContent.innerHTML = `<p>No topical gaps detected.</p>`;
-        }
-      }
+    if (!data.success) {
+      showToast(data.reason || "Gap analysis unavailable.", "error");
+      return;
     }
-  } catch(err) {
+
+    const gaps = safeGet(data, "comparison.gaps") || {};
+    const gapCard = document.getElementById("gapCard");
+    gapCard.style.display = "block";
+
+    const headingGaps = safeArray(gaps.headingGaps);
+    const missingKeywords = safeArray(safeGet(data, "keywordGap.missingKeywords"));
+
+    if (headingGaps.length === 0 && missingKeywords.length === 0) {
+      document.getElementById("gapContent").innerHTML = emptyStateHtml("🔍", "No Significant Gaps", "Your content coverage is competitive with this domain.");
+      return;
+    }
+
+    document.getElementById("gapContent").innerHTML = `
+      <div class="grid-3" style="margin-bottom:20px;">
+        <div class="metric-box" style="background:#111827; border:1px solid var(--accent-danger);">
+          <div class="metric-value" style="color:var(--accent-danger)">${headingGaps.length}</div>
+          <div class="metric-label">Heading/Topic Gaps</div>
+        </div>
+        <div class="metric-box" style="background:#111827; border:1px solid var(--accent-warning);">
+          <div class="metric-value" style="color:var(--accent-warning)">${gaps.contentLengthDiff ?? 'Data unavailable'}</div>
+          <div class="metric-label">Content Diff (Words)</div>
+        </div>
+        <div class="metric-box" style="background:#111827; border:1px solid var(--accent-success);">
+          <div class="metric-value" style="color:var(--accent-success)">${safeArray(gaps.schemaGaps).length}</div>
+          <div class="metric-label">Schema Gaps</div>
+        </div>
+      </div>
+      <p><strong>Competitor Has More Words:</strong> ${gaps.competitorHasMoreWords ? '<span class="badge badge-orange">Yes</span>' : '<span class="badge badge-green">No</span>'}</p>
+      ${headingGaps.length > 0 ? `
+        <p style="margin-top:15px;"><strong>Missing Topic Headings:</strong></p>
+        <ul style="list-style-type:none; padding-left:0;">
+          ${headingGaps.map((topic, idx) => `<li style="padding:12px; background:var(--bg-body); border-radius:8px; margin-bottom:8px; border-left:3px solid var(--accent-danger); font-weight:${idx < 3 ? 'bold' : 'normal'};">${idx < 3 ? '🚨 [HIGH]' : '❌'} ${escapeHtml(topic)}</li>`).join('')}
+        </ul>` : ''}
+      ${missingKeywords.length > 0 ? `
+        <p style="margin-top:15px;"><strong>Missing Keywords:</strong></p>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">${missingKeywords.map(k => `<span class="badge badge-purple">${escapeHtml(k)}</span>`).join('')}</div>` : ''}
+    `;
+  } catch (err) {
     hideLoading();
-    alert("Gap analysis failure: " + err.message);
+    showToast("Gap analysis failed: " + err.message, "error");
+  } finally {
+    setButtonBusy("gapBtn", false);
   }
 }
 
-// ==== COMPARE COMPETITOR ====
+// =========================================================================
+// COMPARE COMPETITOR
+// =========================================================================
 async function compareCompetitor() {
   const urlEl = document.getElementById("url");
   const compEl = document.getElementById("competitorUrl");
-  if (!urlEl || !compEl) return;
+  const urlErrEl = document.getElementById("urlFieldError");
+  const compErrEl = document.getElementById("competitorFieldError");
+
+  const urlValid = validateRequiredField(urlEl, urlErrEl, "Please enter your domain.");
+  const compValid = validateRequiredField(compEl, compErrEl, "Please enter a competitor domain.");
+  if (!urlValid || !compValid) return;
 
   const url = urlEl.value.trim();
   const comp = compEl.value.trim();
-  if (!url || !comp) return alert("Please specify both targets.");
 
-  showLoading("Benchmarking Domains...", "Analyzing competitor SEO architectures and citation likelihood indexes");
+  setButtonBusy("compareBtn", true);
+  showLoading("Benchmarking Domains...", "Analyzing competitor SEO, AEO, and trust architectures");
   try {
-    const res = await fetch(`${window.API_BASE}/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
-    const responseData = await res.json();
-    const data = responseData.data || responseData;
+    const data = await apiFetch(`/compare?url=${encodeURIComponent(url)}&competitor=${encodeURIComponent(comp)}`);
     hideLoading();
+
+    if (!data.success) {
+      showToast(data.reason || "Comparison unavailable.", "error");
+      return;
+    }
 
     const compCard = document.getElementById("competitorCard");
-    if (compCard) {
-      const sites = safeArray(data?.sites);
-      if (sites.length > 0) {
-        compCard.style.display = "block";
-        
-        const userSite = sites[0] || {};
-        const compSite = sites[1] || {};
+    compCard.style.display = "block";
 
-        let winnerHtml = `<span class="badge badge-green">${escapeHtml(data?.winnerReason || "Live verification complete")}</span>`;
+    const comparison = data.comparison || {};
+    const site1Score = safeNumber(safeGet(data, "scores.site1"));
+    const site2Score = safeNumber(safeGet(data, "scores.site2"));
+    const yourLabel = cleanDomainBrand(url);
+    const compLabel = cleanDomainBrand(comp);
 
-        const detailsEl = document.getElementById("comparisonDetails");
-        if (detailsEl) {
-          detailsEl.innerHTML = `
-            <div style="margin-bottom:20px;">
-              <strong>AI Selection Winner:</strong> ${winnerHtml}
-            </div>
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-top:15px;">
-              <div class="ai-box" style="border-top:4px solid var(--accent-primary); margin-top:0;">
-                <h4 style="margin:0 0 10px 0;">${escapeHtml(cleanDomainBrand(userSite?.url))} (You)</h4>
-                <p>Overall AI Score: <strong>${userSite?.aiVisibilityScore != null ? userSite.aiVisibilityScore + '%' : 'Data unavailable'}</strong></p>
-                <p>Technical SEO: <strong>${userSite?.seoScore != null ? userSite.seoScore + '%' : 'Data unavailable'}</strong></p>
-                <p>AEO Score: <strong>${userSite?.aeoScore != null ? userSite.aeoScore + '%' : 'Data unavailable'}</strong></p>
-              </div>
-              <div class="ai-box" style="border-top:4px solid var(--accent-danger); margin-top:0;">
-                <h4 style="margin:0 0 10px 0;">${escapeHtml(cleanDomainBrand(compSite?.url))} (Competitor)</h4>
-                <p>Overall AI Score: <strong>${compSite?.aiVisibilityScore != null ? compSite.aiVisibilityScore + '%' : 'Data unavailable'}</strong></p>
-                <p>Technical SEO: <strong>${compSite?.seoScore != null ? compSite.seoScore + '%' : 'Data unavailable'}</strong></p>
-                <p>AEO Score: <strong>${compSite?.aeoScore != null ? compSite.aeoScore + '%' : 'Data unavailable'}</strong></p>
-              </div>
-            </div>
-          `;
-        }
+    const metricRow = (label, m) => m ? `
+      <tr>
+        <td>${escapeHtml(label)}</td>
+        <td>${m.target}</td>
+        <td>${m.competitor}</td>
+        <td><span class="badge ${m.leader === 'You' ? 'badge-green' : m.leader === 'Competitor' ? 'badge-red' : 'badge-neutral'}">${escapeHtml(m.leader)}</span></td>
+      </tr>` : '';
 
-        const compCanvas = document.getElementById("comparisonChart");
-        if (compCanvas) {
-          if (comparisonChart) comparisonChart.destroy();
-          comparisonChart = new Chart(compCanvas, {
-            type: 'bar',
-            data: {
-              labels: sites.map(s => cleanDomainBrand(s?.url)),
-              datasets: [{
-                label: "AI Visibility Score",
-                data: sites.map(s => safeNumber(s?.aiVisibilityScore)),
-                backgroundColor: ["#3b82f6", "#ef4444"]
-              }]
-            },
-            options: {
-              responsive: true,
-              scales: { y: { beginAtZero: true, max: 100 } }
-            }
-          });
-        }
-      } else {
-        compCard.style.display = "none";
-      }
+    document.getElementById("comparisonDetails").innerHTML = `
+      <div style="margin-bottom:20px;">
+        <strong>AI Selection Winner:</strong> <span class="badge badge-green">${escapeHtml(safeText(comparison.winner))}</span>
+        <p style="margin-top:8px;">${escapeHtml(safeText(comparison.winnerReason))}</p>
+      </div>
+      <div class="table-scroll-wrap">
+        <table>
+          <caption class="visually-hidden">Head-to-head metric comparison</caption>
+          <thead><tr><th scope="col">Metric</th><th scope="col">${escapeHtml(yourLabel)} (You)</th><th scope="col">${escapeHtml(compLabel)}</th><th scope="col">Leader</th></tr></thead>
+          <tbody>
+            ${metricRow('SEO', comparison.metrics?.seo)}
+            ${metricRow('AEO', comparison.metrics?.aeo)}
+            ${metricRow('E-E-A-T', comparison.metrics?.eeat)}
+            ${metricRow('Authority', comparison.metrics?.authority)}
+            ${metricRow('Trust', comparison.metrics?.trust)}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    const compCanvas = document.getElementById("comparisonChart");
+    if (compCanvas && typeof Chart !== "undefined") {
+      if (comparisonChart) comparisonChart.destroy();
+      comparisonChart = new Chart(compCanvas, {
+        type: 'bar',
+        data: {
+          labels: [yourLabel, compLabel],
+          datasets: [{ label: "Overall AI Visibility Score", data: [site1Score ?? 0, site2Score ?? 0], backgroundColor: ["#3b82f6", "#ef4444"] }]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+      });
     }
-  } catch(err) {
+  } catch (err) {
     hideLoading();
-    alert("Error performing comparison: " + err.message);
+    showToast("Comparison failed: " + err.message, "error");
+  } finally {
+    setButtonBusy("compareBtn", false);
   }
 }
 
-// ==== BRIEF CARD ====
+// =========================================================================
+// CONTENT BRIEF — real /content-brief endpoint
+// =========================================================================
 async function contentBrief() {
-  const kwEl = document.getElementById("keyword");
-  if (!kwEl || !kwEl.value.trim()) return alert("Please specify the target context keyword.");
+  const urlEl = document.getElementById("url");
+  const urlErrEl = document.getElementById("urlFieldError");
+  if (!validateRequiredField(urlEl, urlErrEl, "Please enter a domain target for the content brief.")) { urlEl?.focus(); return; }
+  const url = urlEl.value.trim();
+  const keyword = getKeywordValue();
 
-  showLoading("Generating Content Brief...", "Synthesizing AI direct answers and recommended heading outlines");
+  setButtonBusy("briefBtn", true);
+  showLoading("Generating Content Brief...", "Synthesizing recommended structure and keyword targets");
   try {
+    const data = await apiFetch(`/content-brief?url=${encodeURIComponent(url)}`);
     hideLoading();
+
+    if (data.blocked) { renderBlockedState(data); return; }
+
     const briefCard = document.getElementById("briefCard");
-    if (briefCard) {
-      briefCard.style.display = "block";
-      const briefResults = document.getElementById("briefResults");
-      if (briefResults) {
-        briefResults.innerHTML = `
-          <p><strong>Primary Recommended Title Hook:</strong> Guide to ${escapeHtml(kwEl.value.trim())}</p>
-          <p><strong>Target Word Count Objective:</strong> 1,200 - 1,500 words</p>
-          <div class="ai-box" style="border-left:4px solid var(--accent-success)">
-            <strong>Optimal AI Direct Answer Copy Box Template (AEO optimized):</strong>
-            <p style="margin-top:6px;">"${escapeHtml(kwEl.value.trim())} is a critical strategic framework. According to expert reviews, the primary benefit of deploying this setup lies in driving scalable growth matrices..."</p>
-          </div>
-        `;
-      }
-    }
-  } catch(e) {
+    briefCard.style.display = "block";
+    const brief = data.brief || {};
+
+    document.getElementById("briefResults").innerHTML = `
+      <p><strong>Recommended Title Hook:</strong> ${escapeHtml(keyword ? `Guide to ${keyword}` : `Comprehensive Guide: ${safeText(data.title, 'Your Topic')}`)}</p>
+      <p><strong>Target Word Count:</strong> ${safeText(brief.targetWordCount, 'Data unavailable')} words</p>
+      ${safeArray(brief.recommendedHeadings).length > 0 ? `<h4>Recommended Headings</h4><ul>${brief.recommendedHeadings.map(h => `<li>${escapeHtml(h)}</li>`).join('')}</ul>` : ''}
+      ${safeArray(brief.targetKeywords).length > 0 ? `<h4>Target Keywords</h4><div style="display:flex; flex-wrap:wrap; gap:6px;">${brief.targetKeywords.map(k => `<span class="badge badge-purple">${escapeHtml(k)}</span>`).join('')}</div>` : ''}
+      ${safeArray(brief.recommendedSchemas).length > 0 ? `<h4>Recommended Schemas</h4><div style="display:flex; flex-wrap:wrap; gap:6px;">${brief.recommendedSchemas.map(s => `<span class="badge badge-info">${escapeHtml(s)}</span>`).join('')}</div>` : ''}
+    `;
+  } catch (err) {
     hideLoading();
+    showToast("Content brief generation failed: " + err.message, "error");
+  } finally {
+    setButtonBusy("briefBtn", false);
   }
 }
 
-// ==== AI AUTOPILOT ====
+// =========================================================================
+// AUTOPILOT — real /autopilot endpoint
+// =========================================================================
 async function runAutopilot() {
-  if (!lastScanData) return alert("Please run a standard scan audit first to populate data vector logs.");
-  
-  showLoading("Triggering AI Autopilot...", "Compiling programmatic recommendations and constructing action cards");
+  const urlEl = document.getElementById("url");
+  const urlErrEl = document.getElementById("urlFieldError");
+  if (!validateRequiredField(urlEl, urlErrEl, "Please enter a domain target.")) { urlEl?.focus(); return; }
+  const url = urlEl.value.trim();
+
+  setButtonBusy("autopilotBtn", true);
+  showLoading("Triggering AI Autopilot...", "Compiling prioritized action cards from your live audit");
   try {
+    const data = lastScanData && lastScanData.resolvedUrl && cleanDomainBrand(lastScanData.resolvedUrl) === cleanDomainBrand(url)
+      ? { autopilot: { tasks: safeArray(lastScanData.aiAutopilot) } }
+      : await apiFetch(`/autopilot?url=${encodeURIComponent(url)}`);
     hideLoading();
+
+    if (data.blocked) { renderBlockedState(data); return; }
+
     const autoCard = document.getElementById("autopilotCard");
-    if (autoCard) {
-      const autopilotTasks = safeArray(lastScanData?.aiAutopilot || lastScanData?.autopilot?.tasks);
-      if (autopilotTasks.length > 0) {
-        autoCard.style.display = "block";
-        const autopilotResults = document.getElementById("autopilotResults");
-        if (autopilotResults) {
-          autopilotResults.innerHTML = `
-            <p style="margin-bottom:16px;">AI Autopilot parsed high-contrast optimization targets recursively:</p>
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
-              ${autopilotTasks.map(t => `
-                <div class="ai-box" style="border-top: 4px solid ${t?.priority === 'CRITICAL' ? 'var(--accent-danger)' : 'var(--accent-warning)'}; margin-top:0;">
-                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <strong>${escapeHtml(t?.task)}</strong>
-                    <span class="badge ${t?.priority === 'CRITICAL' ? 'badge-red' : 'badge-orange'}">${t?.priority}</span>
-                  </div>
-                  <p style="font-size:13px; color:var(--text-muted); margin:0;">Impact metric: +${t?.impact}% | Implementation: ${t?.effort}</p>
-                </div>
-              `).join('')}
-            </div>
-          `;
-        }
-      } else {
-        autoCard.style.display = "none";
-      }
+    const tasks = safeArray(safeGet(data, "autopilot.tasks"));
+    if (tasks.length === 0) {
+      autoCard.style.display = "block";
+      document.getElementById("autopilotResults").innerHTML = emptyStateHtml("🚀", "No Autopilot Tasks", "No high-impact automated tasks were identified for this domain.");
+      return;
     }
-  } catch(e) {
+    autoCard.style.display = "block";
+
+    document.getElementById("autopilotResults").innerHTML = `
+      <p style="margin-bottom:16px;">AI Autopilot identified ${tasks.length} prioritized optimization task(s):</p>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+        ${tasks.map(t => `
+          <div class="ai-box" style="border-top:4px solid ${t.priority === 'HIGH' ? 'var(--accent-danger)' : t.priority === 'MEDIUM' ? 'var(--accent-warning)' : 'var(--accent-primary)'}; margin-top:0;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong>${escapeHtml(t.title)}</strong>
+              <span class="badge ${t.priority === 'HIGH' ? 'badge-red' : t.priority === 'MEDIUM' ? 'badge-orange' : 'badge-info'}">${escapeHtml(t.priority)}</span>
+            </div>
+            <p style="margin:0;">${escapeHtml(t.description)}</p>
+            <p style="font-size:13px; color:var(--text-muted); margin-top:6px;">Estimated Impact: +${t.impact}%</p>
+          </div>`).join('')}
+      </div>`;
+  } catch (err) {
     hideLoading();
+    showToast("Autopilot failed: " + err.message, "error");
+  } finally {
+    setButtonBusy("autopilotBtn", false);
   }
 }
 
-// ==== HISTORY SYSTEM ====
+// =========================================================================
+// HISTORY — server-backed /history plus local re-audit convenience
+// =========================================================================
 function saveLocalHistory(url, data) {
   try {
     let history = JSON.parse(localStorage.getItem('scanHistory') || '[]');
     history = history.filter(h => h.url.toLowerCase() !== url.toLowerCase());
-
-    const record = {
-      url: url,
-      score: data?.overallAIVisibilityScore || data?.score || 0,
-      seoScore: data?.score || data?.seoScore || 0,
-      aeoScore: data?.aeoScore || 0,
+    history.unshift({
+      url,
+      score: data?.overallAIVisibilityScore ?? 0,
+      seoScore: data?.seoScore ?? 0,
+      aeoScore: data?.aeoScore ?? 0,
       timestamp: new Date().toISOString()
-    };
-    history.unshift(record);
+    });
     if (history.length > 20) history.pop();
     localStorage.setItem('scanHistory', JSON.stringify(history));
-  } catch(e) {
-    console.error("Local history save skipped", e);
-  }
+  } catch (e) { console.error("Local history save skipped", e); }
 }
 
-function loadHistory() {
-  try {
-    const history = JSON.parse(localStorage.getItem('scanHistory') || '[]');
-    const resultEl = document.getElementById("result");
-    if (!resultEl) return;
+function clearLocalHistory() {
+  localStorage.removeItem('scanHistory');
+  showToast("Local history cleared.", "success");
+  loadHistory();
+}
 
-    if (history.length === 0) {
-      resultEl.innerHTML = `<div class="card">No local history available yet. Perform a scan to log outputs.</div>`;
-      return;
-    }
-    resultEl.innerHTML = `
-      <h3> Scanned Domains Logs</h3>
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
-        ${history.map(h => `
-          <div class="ai-box" style="display:flex; flex-direction:column; justify-content:space-between; margin-top:0;">
-            <div>
-              <p><strong>Domain:</strong> ${escapeHtml(h?.url)}</p>
-              <p>AI Score: <strong>${h?.score ?? 'Data unavailable'}%</strong> | SEO: ${h?.seoScore ?? 'Data unavailable'}% | AEO: ${h?.aeoScore ?? 'Data unavailable'}%</p>
-              <small>Parsed Date: ${new Date(h?.timestamp).toLocaleString()}</small>
-            </div>
-            <button onclick="retriggerAudit('${escapeHtml(h?.url)}')" style="font-size:11px; padding:8px 14px; background:var(--accent-primary); margin-top:10px; width:100%;">Re-Audit</button>
-          </div>
-        `).join('')}
-      </div>
-    `;
-  } catch(e) {}
+async function loadHistory() {
+  const panel = document.getElementById("historyPanel");
+  const content = document.getElementById("historyPanelContent");
+  if (!panel || !content) return;
+  panel.style.display = "block";
+  content.innerHTML = `<p>Loading history…</p>`;
+
+  let serverHistory = [];
+  try {
+    serverHistory = safeArray(await apiFetch(`/history`));
+  } catch (e) {
+    serverHistory = [];
+  }
+
+  const localHistory = JSON.parse(localStorage.getItem('scanHistory') || '[]');
+
+  historyRecordsCache = serverHistory.length > 0
+    ? serverHistory.map(h => ({ url: h.url, title: h.title, score: h.score, timestamp: h.timestamp, source: "server" }))
+    : localHistory.map(h => ({ url: h.url, title: h.url, score: h.score, timestamp: h.timestamp, source: "local" }));
+
+  renderHistoryTable(historyRecordsCache);
+}
+
+function renderHistoryTable(records) {
+  const content = document.getElementById("historyPanelContent");
+  if (!content) return;
+
+  if (records.length === 0) {
+    content.innerHTML = emptyStateHtml("📊", "No Scan History Yet", "Run a scan to populate this log.");
+    return;
+  }
+
+  content.innerHTML = `
+    <div class="table-scroll-wrap">
+      <table>
+        <caption class="visually-hidden">Recent scan history</caption>
+        <thead><tr><th scope="col">Domain</th><th scope="col">AI Visibility Score</th><th scope="col">Scanned At</th><th scope="col">Action</th></tr></thead>
+        <tbody>
+          ${records.map(h => `
+            <tr>
+              <td>${escapeHtml(safeText(h.title || h.url))}</td>
+              <td><span class="badge ${getProgressColor(h.score) === '#10b981' ? 'badge-green' : 'badge-neutral'}">${safeText(h.score, '0')}%</span></td>
+              <td>${h.timestamp ? new Date(h.timestamp).toLocaleString() : 'Data unavailable'}</td>
+              <td><button type="button" onclick="retriggerAudit('${escapeHtml(h.url).replace(/'/g, "&#39;")}')" style="font-size:11px; padding:8px 14px;">Re-Audit</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function filterHistoryTable() {
+  const query = (document.getElementById("historySearchInput")?.value || "").toLowerCase();
+  const filtered = historyRecordsCache.filter(h => (h.url || "").toLowerCase().includes(query) || (h.title || "").toLowerCase().includes(query));
+  renderHistoryTable(filtered);
 }
 
 function retriggerAudit(url) {
@@ -2173,16 +2518,33 @@ function retriggerAudit(url) {
   scan();
 }
 
+// =========================================================================
+// UTILITIES
+// =========================================================================
 function copyToClipboard(text, btn) {
   navigator.clipboard.writeText(text).then(() => {
     const raw = btn.textContent;
     btn.textContent = "Copied!";
+    showToast("Markup copied to clipboard.", "success", 2500);
     setTimeout(() => { btn.textContent = raw; }, 1500);
+  }).catch(() => {
+    showToast("Could not copy to clipboard.", "error");
   });
 }
 
 function downloadPDF() {
-  window.print();
+  if (typeof html2pdf === "undefined") {
+    showToast("PDF export library did not load. Try refreshing the page.", "error");
+    return;
+  }
+  const el = document.getElementById("mainContent");
+  html2pdf().from(el).set({
+    margin: 10,
+    filename: `aegis-ai-visibility-report-${Date.now()}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, backgroundColor: document.body.classList.contains('light') ? '#ffffff' : '#0b0f19' },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  }).save();
 }
 </script>
 </body>

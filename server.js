@@ -513,37 +513,82 @@ export function isValidJsonLdNode(item) {
   return true;
 }
 
-export function detectBlockedReason(html, status) {
+export function detectBlockedReason(html, status, redirectCount = 0) {
   const text = safeText(html).toLowerCase();
+  const signals = [];
 
   if (status === 403 || status === 401) {
-    return { blocked: true, system: "Cloudflare/CDN Forbidden", reason: "Server returned a security response status of 403/401." };
+    return { blocked: true, system: "Cloudflare/CDN Forbidden", reason: "Server returned a security response status of 403/401.", signals: ["http_403_401"] };
   }
   if (status === 404) {
-    return { blocked: true, system: "Not Found", reason: "Target document could not be located (404)." };
+    return { blocked: true, system: "Not Found", reason: "Target document could not be located (404).", signals: ["http_404"] };
   }
   if (status === 429) {
-    return { blocked: true, system: "Rate Limiter Block", reason: "Target endpoint rate-limited the crawler." };
+    return { blocked: true, system: "Rate Limiter Block", reason: "Target endpoint rate-limited the crawler.", signals: ["http_429"] };
   }
   if (status >= 500) {
-    return { blocked: true, system: "Origin Server Error", reason: `Target returned a server-side error status (${status}).` };
+    return { blocked: true, system: "Origin Server Error", reason: `Target returned a server-side error status (${status}).`, signals: ["http_5xx"] };
   }
+
   if (text.includes("cloudflare") || text.includes("cf-browser-verification") || text.includes("ray id:") || text.includes("cf-chl-bypass") || text.includes("__cf_chl")) {
-    return { blocked: true, system: "Cloudflare Turnstile", reason: "Cloudflare challenge page detected." };
+    return { blocked: true, system: "Cloudflare Turnstile", reason: "Cloudflare challenge page detected.", signals: ["cloudflare_challenge"] };
   }
   if (text.includes("captcha") || text.includes("recaptcha") || text.includes("hcaptcha") || text.includes("verify you are human") || text.includes("are you a robot")) {
-    return { blocked: true, system: "CAPTCHA Block", reason: "Page validation challenge triggered." };
+    return { blocked: true, system: "CAPTCHA Block", reason: "Page validation challenge triggered.", signals: ["captcha"] };
   }
   if (text.includes("just a moment") && text.includes("checking your browser")) {
-    return { blocked: true, system: "DDoS Mitigation Screen", reason: "Active browser checking screen encountered." };
+    return { blocked: true, system: "DDoS Mitigation Screen", reason: "Active browser checking screen encountered.", signals: ["js_challenge"] };
   }
   if (text.includes("access denied") || text.includes("you don't have permission")) {
-    return { blocked: true, system: "Access Denied", reason: "Server explicitly denied access to the requested resource." };
+    return { blocked: true, system: "Access Denied", reason: "Server explicitly denied access to the requested resource.", signals: ["access_denied"] };
   }
   if (text.includes("pardon our interruption") || text.includes("unusual traffic")) {
-    return { blocked: true, system: "Bot Mitigation Interstitial", reason: "Target displayed a bot-mitigation interstitial page." };
+    return { blocked: true, system: "Bot Mitigation Interstitial", reason: "Target displayed a bot-mitigation interstitial page.", signals: ["bot_interstitial"] };
   }
-  return { blocked: false, system: null, reason: null };
+
+  // WAF signatures — generic vendor fingerprints beyond Cloudflare.
+  const wafSignatures = [
+    "web application firewall", "blocked by security policy", "incapsula incident",
+    "sucuri website firewall", "mod_security", "akamai reference number",
+    "request blocked by imperva", "the requested url was rejected"
+  ];
+  const matchedWaf = wafSignatures.find(sig => text.includes(sig));
+  if (matchedWaf) {
+    return { blocked: true, system: "Web Application Firewall", reason: `WAF signature detected: "${matchedWaf}".`, signals: ["waf_signature"] };
+  }
+
+  // Login-wall detection — content is gated behind authentication rather
+  // than genuinely blocked, but downstream SEO analysis would be equally
+  // meaningless since we're not seeing the real page.
+  const loginPhrases = [
+    "please sign in to continue", "please log in to continue", "you must log in",
+    "login required to view this page", "sign in to view this content", "you need to be logged in"
+  ];
+  const matchedLogin = loginPhrases.find(p => text.includes(p));
+  const hasPasswordField = /<input[^>]+type=["']password["']/i.test(html);
+  if (matchedLogin || (hasPasswordField && text.length < 2500)) {
+    return { blocked: true, system: "Authentication Wall", reason: matchedLogin ? `Login-gated content detected: "${matchedLogin}".` : "Password field detected on a very short page, indicating a login gate rather than real content.", signals: ["login_wall"] };
+  }
+
+  // Soft-404: HTTP 200 but the page body indicates the resource doesn't
+  // exist. Requires BOTH a not-found phrase AND thin content, to avoid
+  // false-positives on pages that merely mention "404" in passing (e.g. a
+  // blog post about HTTP status codes).
+  const notFoundPhrases = [
+    "page not found", "404 error", "content not available", "this page doesn't exist",
+    "the page you are looking for", "we couldn't find that page", "oops! that page can't be found"
+  ];
+  const matchedNotFound = notFoundPhrases.find(p => text.includes(p));
+  const visibleTextLength = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
+  if (matchedNotFound && visibleTextLength < 1200) {
+    return { blocked: true, system: "Soft 404", reason: `Page returned HTTP 200 but content indicates a not-found state: "${matchedNotFound}".`, signals: ["soft_404"] };
+  }
+
+  if (redirectCount > 5) {
+    signals.push("excessive_redirects");
+  }
+
+  return { blocked: false, system: null, reason: null, signals };
 }
 
 // =========================================================================
@@ -689,6 +734,8 @@ setInterval(() => {
 
 export async function fetchAxios(url) {
   const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+  const redirectChain = [];
+
   const response = await axios.get(url, {
     headers: {
       "User-Agent": ua,
@@ -707,17 +754,27 @@ export async function fetchAxios(url) {
     httpsAgent: new https.Agent({
       rejectUnauthorized: false,
       keepAlive: true
-    })
+    }),
+    // follow-redirects (axios's underlying transport) invokes this on every
+    // hop, giving us a real, ordered redirect chain rather than an estimate.
+    beforeRedirect: (options, responseDetails) => {
+      redirectChain.push({
+        from: responseDetails?.headers?.location ? options.href : undefined,
+        status: responseDetails?.statusCode,
+        location: responseDetails?.headers?.location
+      });
+    }
   });
 
   return {
     html: typeof response.data === "string" ? response.data : JSON.stringify(response.data),
     status: response.status,
     headers: response.headers || {},
-    finalUrl: response.request?.res?.responseUrl || url
+    finalUrl: response.request?.res?.responseUrl || url,
+    redirectChain,
+    redirectCount: redirectChain.length
   };
 }
-
 export async function fetchPlaywright(url) {
   const browser = await getBrowserInstance();
   if (!browser) return null;
@@ -835,19 +892,85 @@ function withHardTimeout(promise, ms, label) {
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
+/**
+ * Produces a confidence score (how sure we are this crawl reflects the real
+ * page) and a quality score (how complete/parseable the captured content
+ * is). Both are evidence-based composites, not static guesses — this is
+ * what downstream code checks before trusting a crawl enough to score it.
+ */
+export function assessCrawlReliability({ html, status, blockCheck, redirectCount, crawlMethod, contentLength }) {
+  const metrics = [];
 
+  metrics.push(buildMetric({
+    name: "HTTP Status Validity",
+    raw: (status >= 200 && status < 400) ? 25 : 0,
+    max: 25, weight: 25,
+    reason: (status >= 200 && status < 400) ? "Server returned a successful status code." : `Server returned a non-success status code (${status}).`,
+    evidence: `Final HTTP status: ${status}.`,
+    recommendation: "Investigate why the server is not returning a 2xx/3xx status for this URL."
+  }));
+
+  metrics.push(buildMetric({
+    name: "Unblocked Access",
+    raw: blockCheck?.blocked ? 0 : 30,
+    max: 30, weight: 30,
+    reason: blockCheck?.blocked ? `Access was blocked: ${blockCheck.system}.` : "No bot-mitigation, WAF, login-wall, or soft-404 signals detected.",
+    evidence: blockCheck?.blocked ? safeText(blockCheck.reason) : "Crawl completed without triggering any known block signature.",
+    recommendation: "Consider IP allowlisting the crawler or reviewing this domain's bot-protection configuration."
+  }));
+
+  const isValidHtml = html && html.toLowerCase().includes("<html") && html.toLowerCase().includes("</html>");
+  metrics.push(buildMetric({
+    name: "Document Structural Validity",
+    raw: isValidHtml ? 20 : 0,
+    max: 20, weight: 20,
+    reason: isValidHtml ? "Response contains a well-formed HTML document." : "Response does not contain a complete/valid HTML document.",
+    evidence: `Content length: ${contentLength || 0} bytes. Contains <html>/</html>: ${isValidHtml}.`,
+    recommendation: "Verify the target serves valid server-rendered or client-rendered HTML to standard crawlers."
+  }));
+
+  metrics.push(buildMetric({
+    name: "Redirect Chain Health",
+    raw: redirectCount <= 2 ? 15 : redirectCount <= 5 ? 8 : 0,
+    max: 15, weight: 15,
+    reason: redirectCount === 0 ? "No redirects encountered." : redirectCount <= 2 ? "Minimal, healthy redirect chain." : redirectCount <= 5 ? "Moderate redirect chain length." : "Excessive redirect chain detected.",
+    evidence: `${redirectCount} redirect hop(s) followed before reaching final content.`,
+    recommendation: "Reduce redirect chain length; each hop adds latency and dilutes link equity."
+  }));
+
+  metrics.push(buildMetric({
+    name: "Content Substantiality",
+    raw: (contentLength || 0) >= 1500 ? 10 : 0,
+    max: 10, weight: 10,
+    reason: (contentLength || 0) >= 1500 ? "Response body is substantial enough for reliable analysis." : "Response body is too small to reliably represent real page content.",
+    evidence: `Captured content length: ${contentLength || 0} bytes.`,
+    recommendation: "If this persists, the page may require JavaScript rendering or is serving a stub/error page."
+  }));
+
+  const result = aggregateMetrics(metrics);
+
+  return {
+    confidenceScore: result.score,
+    qualityScore: clamp(Math.round((result.score * 0.7) + (crawlMethod === "PLAYWRIGHT_RENDERED" ? 30 : 20))),
+    status: result.status,
+    metrics: result.metrics,
+    reliable: result.score >= 60
+  };
+}
 export async function smartCrawl(url) {
   let result = null;
   let crawlMethod = "STANDARD_GET";
   let status = 500;
   let retryCount = 0;
+  let redirectCount = 0; 
   let infiniteScrollDetected = false;
 
   try {
-    const outcome = await withHardTimeout(withRetry(() => fetchAxios(url), 2, 1200), CRAWL_HARD_TIMEOUT_MS, "Standard fetch");
+   const outcome = await withHardTimeout(withRetry(() => fetchAxios(url), 2, 1200), CRAWL_HARD_TIMEOUT_MS, "Standard fetch");
     result = outcome.result;
     retryCount = outcome.attempts - 1;
     status = result?.status || 500;
+    redirectCount = safeNumber(result?.redirectCount, 0);
   } catch (err) {
     retryCount = safeNumber(err?.attempts, 1) - 1;
     logger.warn("CRAWL", "standard_fetch_failed", { url, error: err.message, retryCount });
@@ -856,7 +979,7 @@ export async function smartCrawl(url) {
   let html = result?.html || "";
   let finalUrl = result?.finalUrl || url;
 
-  let blockCheck = detectBlockedReason(html, status);
+ let blockCheck = detectBlockedReason(html, status, redirectCount);
 
   const requiresUpgrade =
     blockCheck.blocked ||
@@ -870,7 +993,7 @@ export async function smartCrawl(url) {
     try {
       const pwResult = await withHardTimeout(fetchPlaywright(url), CRAWL_HARD_TIMEOUT_MS, "Headless render");
       if (pwResult && pwResult.html && pwResult.html.length >= 300) {
-        const pwBlockCheck = detectBlockedReason(pwResult.html, pwResult.status);
+      const pwBlockCheck = detectBlockedReason(pwResult.html, pwResult.status, redirectCount);
         infiniteScrollDetected = !!pwResult.infiniteScrollDetected;
         if (!pwBlockCheck.blocked) {
           html = pwResult.html;
@@ -898,6 +1021,28 @@ export async function smartCrawl(url) {
     };
   }
 
+const reliability = assessCrawlReliability({
+    html,
+    status,
+    blockCheck,
+    redirectCount,
+    crawlMethod,
+    contentLength: html ? html.length : 0
+  });
+
+  // A crawl can pass every individual block-signature check yet still be
+  // unreliable enough (e.g. garbled partial content) that scoring it would
+  // produce meaningless results. Escalate low-confidence crawls into the
+  // same blocked-response path so downstream scoring is skipped honestly.
+  if (!blockCheck.blocked && !reliability.reliable) {
+    blockCheck = {
+      blocked: true,
+      system: "Low Crawl Confidence",
+      reason: `Crawl confidence score (${reliability.confidenceScore}/100) fell below the reliability threshold; downstream SEO analysis was skipped to avoid generating scores from unreliable data.`,
+      signals: ["low_confidence"]
+    };
+  }
+
   return {
     html,
     finalUrl,
@@ -905,11 +1050,12 @@ export async function smartCrawl(url) {
     crawlMethod,
     blockCheck,
     retryCount,
+    redirectCount,
     infiniteScrollDetected,
-    contentLength: html ? html.length : 0
+    contentLength: html ? html.length : 0,
+    reliability
   };
 }
-
 // =========================================================================
 // ========== SECTION 5: STRUCTURAL ANALYSIS & HTML EXTRACTION ENGINE ======
 // =========================================================================
@@ -2781,7 +2927,11 @@ export function buildBlockedPayload(url, crawl) {
     crawlMethod: crawl?.crawlMethod || "STANDARD_GET",
     retryCount: safeNumber(crawl?.retryCount, 0),
     protectionType: crawl?.blockCheck?.system || "Unknown",
-    resolvedUrl: crawl?.finalUrl || url
+    resolvedUrl: crawl?.finalUrl || url,
+    crawlConfidence: crawl?.reliability?.confidenceScore ?? 0,
+    crawlQuality: crawl?.reliability?.qualityScore ?? 0,
+    blockSignals: safeArray(crawl?.blockCheck?.signals),
+    redirectCount: safeNumber(crawl?.redirectCount, 0)
   };
 }
 
@@ -3036,7 +3186,10 @@ export async function analyzeSingleUrl(url) {
         url: crawl.finalUrl,
         duration: loadTimeMs,
         retryCount: crawl.retryCount,
-        infiniteScrollDetected: crawl.infiniteScrollDetected
+        infiniteScrollDetected: crawl.infiniteScrollDetected,
+        redirectCount: crawl.redirectCount,
+        confidenceScore: crawl.reliability?.confidenceScore,
+        qualityScore: crawl.reliability?.qualityScore
       },
       robots: {
         found: robotsData.found,

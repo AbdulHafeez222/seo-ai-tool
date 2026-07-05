@@ -1983,8 +1983,7 @@ export function auditPageSchemas($, html) {
     richResultEligibility: requiredPropertyValidation
   };
 }
- site type from existing signals (schema already present, URL patterns, entity data) and prioritizes recommendations accordingly instead of listing all 14 types flatly.
-javascript/**
+ 
  * Infers the most likely website type from existing evidence (detected
  * schema, URL path patterns, and extracted entities) so schema
  * recommendations can be prioritized rather than generic.

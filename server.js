@@ -3537,8 +3537,6 @@ export function buildBlockedPayload(url, crawl) {
     crawlQuality: crawl?.reliability?.qualityScore ?? 0,
     blockSignals: safeArray(crawl?.blockCheck?.signals),
     redirectCount: safeNumber(crawl?.redirectCount, 0)
-    contentQuality: contentQualityAudit,
-      semanticSeoDetail: semanticSeoAudit,
   };
 }
 
@@ -3645,7 +3643,6 @@ export async function analyzeSingleUrl(url) {
       sitemapData,
       redirectCount: crawl.redirectCount,
       httpVersion: crawl.httpVersion,
-      httpVersion: result?.httpVersion || null,
       mixedContent,
       brokenAssetData
     });
@@ -3676,7 +3673,8 @@ export async function analyzeSingleUrl(url) {
       resolvedUrl: crawl.finalUrl,
       topicalAuthority: { clusters, coveragePercent }
     };
-
+    const contentQualityAudit = calculateContentQualityScore(pageData, $);
+    const semanticSeoAudit = calculateSemanticSeoScore(enrichedPageData, clusters, coveragePercent);
     const authorityAudit = calculateDynamicAuthority(enrichedPageData);
     const trustAudit = scanDynamicTrustSignals($, crawl.html, crawl.finalUrl, enrichedPageData);
 
@@ -3684,7 +3682,7 @@ export async function analyzeSingleUrl(url) {
    const websiteType = inferWebsiteType(schemasDetected.detectedTypes, { ...pageData, resolvedUrl: crawl.finalUrl });
    const schemaBlock = buildSchemaRecommendations(schemasDetected.detectedTypes, pageData.title, pageData.metaDescription, crawl.finalUrl, websiteType);
     const imageSeoAudit = calculateImageSeoScore(pageData);
-    const internalLinkAudit = calculateInternalLinkScoreDetailed(pageData.linkAnalysisDetail);
+   const internalLinkAudit = calculateInternalLinkScoreDetailed(pageData.linkAnalysisDetail, seoAudit.brokenLinkSample, $);
     const localSeoAudit = calculateLocalSeoScore(pageData, schemasDetected);
     const aiEngineCitations = estimateAIEngineCitations({
       hasFAQ: schemasDetected.detectedTypes.some(t => String(t).toLowerCase() === "faqpage"),
@@ -3877,6 +3875,8 @@ export async function analyzeSingleUrl(url) {
       },
       imageSeo: imageSeoAudit,
       internalLinkDetail: internalLinkAudit,
+      contentQuality: contentQualityAudit,
+      semanticSeoDetail: semanticSeoAudit,
       localSEO: {
         localScore: localSeoAudit.score,
         napConsistency: localSeoAudit.metrics.find(m => m.metric.includes("NAP"))?.reason,

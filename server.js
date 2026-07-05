@@ -365,6 +365,47 @@ export function aggregateMetrics(metrics) {
     totalExpectedImprovement: Math.round(metrics.reduce((s, m) => s + m.expectedImprovement, 0) * 100) / 100
   };
 }
+/**
+ * Classifies a failed metric into a Priority/Impact/Difficulty recommendation
+ * object purely from its own weight/expectedImprovement — no static or
+ * guessed values, no randomness.
+ */
+export function classifyRecommendation(metric) {
+  const impact = metric.expectedImprovement;
+  const priority = impact >= 10 ? "HIGH" : impact >= 5 ? "MEDIUM" : "LOW";
+  const difficulty = /schema|https|canonical|meta|alt|viewport/i.test(metric.metric) ? "EASY"
+    : /content|depth|readab|entity|link/i.test(metric.metric) ? "MODERATE"
+    : "MODERATE";
+  return {
+    metric: metric.metric,
+    priority,
+    impact: priority,
+    difficulty,
+    recommendation: metric.recommendation,
+    estimatedGain: impact
+  };
+}
+
+/**
+ * Wraps an aggregateMetrics() result into the enterprise-standard score
+ * object shape required across every scoring category. Purely additive —
+ * every existing field the aggregateMetrics result already carries (score,
+ * status, metrics, etc.) is preserved unchanged; this only appends the new
+ * standardized keys on top so existing frontend/API consumers are unaffected.
+ */
+export function buildStandardizedScoreOutput(aggregateResult, categoryWeight = 100) {
+  const failed = aggregateResult.metrics.filter(m => !m.passed);
+  return {
+    ...aggregateResult,
+    maxScore: 100,
+    weight: categoryWeight,
+    evidence: aggregateResult.metrics.map(m => `${m.metric}: ${m.evidence}`),
+    penalties: failed.map(m => ({ metric: m.metric, penalty: m.expectedImprovement, reason: m.reason })),
+    recommendations: failed.map(classifyRecommendation),
+    expectedGain: aggregateResult.totalExpectedImprovement
+  };
+}
+
 export const cleanText = (input) => {
   let text = safeText(input);
   for (const pattern of BAD_PATTERNS) {
@@ -3643,6 +3684,63 @@ export function calculateLocalSeoScore(pageData, schemaAudit) {
 
   return aggregateMetrics(metrics);
 }
+
+// =========================================================================
+// ========== SECTION 13.5: GEO (GENERATIVE ENGINE OPTIMIZATION) SCORE =====
+// =========================================================================
+
+/**
+ * GEO Score: composite visibility-readiness score for generative AI engines.
+ * Reuses already-computed evidence from semanticSeoAudit, authorityAudit,
+ * and schemaAudit rather than recalculating entity/topic/schema signals a
+ * second time — no duplicated scoring logic.
+ */
+export function calculateGeoScore(pageData, semanticSeoAudit, authorityAudit, schemaAudit, aeoStructuralMetrics) {
+  const entityCount = safeNumber(pageData?.entityDetails?.totalEntityCount);
+  const verifiedRatio = entityCount > 0 ? safeNumber(pageData?.entityDetails?.verifiedEntityCount) / entityCount : 0;
+
+  const metrics = [
+    buildMetric({
+      name: "Entity Coverage", raw: Math.round((clamp(entityCount, 0, 20) / 20) * 20), max: 20, weight: 20,
+      reason: `${entityCount} distinct entities detected (${(verifiedRatio * 100).toFixed(0)}% verified via structured data).`,
+      evidence: `Verified: ${safeNumber(pageData?.entityDetails?.verifiedEntityCount)}. Total: ${entityCount}.`,
+      recommendation: "Reference more specific, structured-data-backed entities relevant to the topic."
+    }),
+    buildMetric({
+      name: "Schema Signals", raw: Math.round((safeArray(schemaAudit?.detectedTypes).length / 5) * 20), max: 20, weight: 20,
+      reason: `${safeArray(schemaAudit?.detectedTypes).length} schema type(s) detected.`,
+      evidence: `Detected: ${safeArray(schemaAudit?.detectedTypes).join(", ") || "none"}.`,
+      recommendation: "Deploy additional relevant schema.org types to strengthen machine-readability."
+    }),
+    buildMetric({
+      name: "Content Freshness", raw: pageData?.modifiedDate ? 15 : 0, max: 15, weight: 15,
+      reason: pageData?.modifiedDate ? "Last-modified timestamp detected." : "No last-modified timestamp detected.",
+      evidence: pageData?.modifiedDate ? `Last modified: ${pageData.modifiedDate}.` : "No dateModified property or article:modified_time meta tag found.",
+      recommendation: "Expose a dateModified value so generative engines can weigh content recency."
+    }),
+    buildMetric({
+      name: "Topical Authority", raw: Math.round((safeNumber(authorityAudit?.authorityScore) / 100) * 20), max: 20, weight: 20,
+      reason: `Authority score: ${safeNumber(authorityAudit?.authorityScore)}/100.`,
+      evidence: `Derived from existing Authority scoring (topical coverage, entity representation, link structure).`,
+      recommendation: "Improve topical authority signals per the Authority score's own recommendations."
+    }),
+    buildMetric({
+      name: "Semantic Coverage", raw: Math.round((safeNumber(semanticSeoAudit?.score) / 100) * 15), max: 15, weight: 15,
+      reason: `Semantic SEO score: ${safeNumber(semanticSeoAudit?.score)}/100.`,
+      evidence: `Derived from existing Semantic SEO scoring (intent clusters, knowledge-graph groundedness).`,
+      recommendation: "Improve semantic coverage per the Semantic SEO score's own recommendations."
+    }),
+    buildMetric({
+      name: "AI-Friendly Formatting", raw: (aeoStructuralMetrics?.hasDirectAnswer ? 5 : 0) + (aeoStructuralMetrics?.listItemsCount > 0 ? 5 : 0), max: 10, weight: 10,
+      reason: `Direct-answer pattern: ${Boolean(aeoStructuralMetrics?.hasDirectAnswer)}. List formatting present: ${safeNumber(aeoStructuralMetrics?.listItemsCount) > 0}.`,
+      evidence: `List item count: ${safeNumber(aeoStructuralMetrics?.listItemsCount)}.`,
+      recommendation: "Add direct-answer phrasing and list-based formatting for generative-engine extractability."
+    })
+  ];
+
+  return aggregateMetrics(metrics);
+}
+
 // =========================================================================
 // ========== SECTION 14: ENTERPRISE AI CITATION ENGINE ====================
 // =========================================================================
@@ -3739,13 +3837,23 @@ export function estimateAIEngineCitations(crawlData) {
 
     return {
       currentScore: score,
+      maxScore: 99,
+      weight: Math.round(100 / 6),
       potentialScore,
       estimatedGain: potentialScore - score,
-      evidence: `Derived from ${safeNumber(crawlData.wordCount)} words, EEAT score ${safeNumber(crawlData.eeatScore)}, topical authority ${safeNumber(crawlData.topicalAuthorityScore)}, and ${safeNumber(crawlData.internalLinkScore)}/100 internal link strength.`,
+      evidence: [`Derived from ${safeNumber(crawlData.wordCount)} words, EEAT score ${safeNumber(crawlData.eeatScore)}, topical authority ${safeNumber(crawlData.topicalAuthorityScore)}, and ${safeNumber(crawlData.internalLinkScore)}/100 internal link strength.`],
+      penalties: missing.map(m => ({ signal: m.signal, penalty: m.pointValue })),
       missingSignals: missing.map(m => m.signal),
       improvementSuggestions: missing.length > 0
         ? missing.map(m => `Address: ${m.signal} (potential +${m.pointValue} pts for this engine).`)
-        : ["No major gaps detected for this engine profile."]
+        : ["No major gaps detected for this engine profile."],
+      recommendations: missing.map(m => ({
+        metric: m.signal,
+        priority: m.pointValue >= 10 ? "HIGH" : m.pointValue >= 6 ? "MEDIUM" : "LOW",
+        impact: m.pointValue >= 10 ? "HIGH" : m.pointValue >= 6 ? "MEDIUM" : "LOW",
+        difficulty: /schema/i.test(m.signal) ? "EASY" : "MODERATE",
+        estimatedGain: m.pointValue
+      }))
     };
   };
   return {
@@ -3984,9 +4092,16 @@ export async function analyzeSingleUrl(url) {
 
   const loadTimeMs = Date.now() - startTime;
 
-  if (crawl.blockCheck && crawl.blockCheck.blocked) {
-    logger.warn("ORCHESTRATOR", "target_blocked", { url, system: crawl.blockCheck.system });
-    return buildBlockedPayload(url, crawl);
+  // Enterprise Scoring Engine gate: scoring may ONLY proceed when the Page
+  // Validation Engine classified this crawl as VALID_PAGE. Any other state
+  // (PARTIAL_PAGE, BLOCKED_PAGE, ERROR_PAGE, EMPTY_PAGE) short-circuits here
+  // with a null-score response — no SEO/AEO/GEO/EEAT/Authority/Trust/
+  // Citation calculation is ever attempted on unverified content.
+  const validationState = crawl?.pageValidation?.state;
+  if ((crawl.blockCheck && crawl.blockCheck.blocked) || validationState !== "VALID_PAGE") {
+    logger.warn("ORCHESTRATOR", "target_blocked", { url, system: crawl.blockCheck?.system, validationState });
+    const blockedPayload = buildBlockedPayload(url, crawl);
+    return { ...blockedPayload, score: null, status: "BLOCKED", reason: blockedPayload.reason };
   }
 
   try {
@@ -4048,8 +4163,8 @@ export async function analyzeSingleUrl(url) {
     const semanticSeoAudit = calculateSemanticSeoScore(enrichedPageData, clusters, coveragePercent);
     const authorityAudit = calculateDynamicAuthority(enrichedPageData);
     const trustAudit = scanDynamicTrustSignals($, crawl.html, crawl.finalUrl, enrichedPageData);
+    const geoAudit = calculateGeoScore(pageData, semanticSeoAudit, authorityAudit, schemasDetected, aeoAudit.structuralAeoMetrics);
 
-    
    const websiteType = inferWebsiteType(schemasDetected.detectedTypes, { ...pageData, resolvedUrl: crawl.finalUrl });
    const schemaBlock = buildSchemaRecommendations(schemasDetected.detectedTypes, pageData.title, pageData.metaDescription, crawl.finalUrl, websiteType);
     const imageSeoAudit = calculateImageSeoScore(pageData);
@@ -4202,6 +4317,7 @@ export async function analyzeSingleUrl(url) {
       sitemap: sitemapData,
       seoScore: seoAudit.score,
       aeoScore: aeoAudit.aeoScore,
+      geoScore: geoAudit.score,
       eeatScore: eeatAudit.score,
       authorityScore: authorityAudit.authorityScore,
       trustScore: trustAudit.trustScore,
@@ -4210,17 +4326,19 @@ export async function analyzeSingleUrl(url) {
       potentialAIVisibility: clamp(finalAIVisibilityScore + 18, 50, 99),
       entities: pageData.entities,
       entityDetails: pageData.entityDetails,
-      seo: seoAudit,
+      seo: buildStandardizedScoreOutput(seoAudit, 20),
       aeo: {
+        ...buildStandardizedScoreOutput(aeoAudit, 30),
         score: aeoAudit.aeoScore,
         readabilityScore: aeoAudit.readabilityScore,
         avgSentenceLength: aeoAudit.avgSentenceLength,
         simulations: aeoAudit.simulations
       },
-      eeat: eeatAudit,
+      geo: buildStandardizedScoreOutput(geoAudit, 100),
+      eeat: buildStandardizedScoreOutput(eeatAudit, 25),
       citation: aiEngineCitations,
-      authority: authorityAudit,
-      trust: trustAudit,
+      authority: buildStandardizedScoreOutput(authorityAudit, 15),
+      trust: buildStandardizedScoreOutput(trustAudit, 10),
       audit: {
         seo: seoAudit,
         aeo: {

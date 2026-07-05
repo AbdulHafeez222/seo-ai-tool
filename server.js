@@ -672,6 +672,191 @@ export function detectBlockedReason(html, status, redirectCount = 0) {
   return { blocked: false, system: null, reason: null, signals };
 }
 /**
+ * Supplementary block/error signatures beyond what detectBlockedReason
+ * already covers: JavaScript-required walls, bot-verification challenges,
+ * maintenance pages, generic error templates, custom 404s, and empty HTML.
+ * Kept separate so detectBlockedReason's existing, already-proven signal
+ * set is never touched.
+ */
+export function detectAdditionalPageSignatures(html, title) {
+  const text = safeText(html).toLowerCase();
+  const titleLower = safeText(title).toLowerCase();
+  const visibleTextLength = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
+
+  if (visibleTextLength < 40 || safeText(html).trim().length < 200) {
+    return { matched: true, category: "EMPTY_PAGE", system: "Empty HTML", reason: `Document contains only ${visibleTextLength} character(s) of visible text and ${safeText(html).length} total byte(s) — effectively empty.` };
+  }
+
+  const jsRequiredPhrases = ["please enable javascript", "javascript is required", "enable javascript to continue", "this site requires javascript"];
+  const matchedJsRequired = jsRequiredPhrases.find(p => text.includes(p));
+  if (matchedJsRequired) {
+    return { matched: true, category: "BLOCKED_PAGE", system: "JavaScript Required", reason: `Page requires JavaScript to render real content: "${matchedJsRequired}".` };
+  }
+
+  const botVerificationPhrases = ["verify you are a human", "bot verification", "automated access detected", "unusual activity from your browser"];
+  const matchedBotVerification = botVerificationPhrases.find(p => text.includes(p));
+  if (matchedBotVerification) {
+    return { matched: true, category: "BLOCKED_PAGE", system: "Bot Verification Challenge", reason: `Bot verification phrase detected: "${matchedBotVerification}".` };
+  }
+
+  const maintenancePhrases = ["site is under maintenance", "temporarily unavailable", "scheduled maintenance", "back soon", "we'll be back", "down for maintenance"];
+  const matchedMaintenance = maintenancePhrases.find(p => text.includes(p));
+  if (matchedMaintenance) {
+    return { matched: true, category: "ERROR_PAGE", system: "Maintenance Page", reason: `Maintenance page phrase detected: "${matchedMaintenance}".` };
+  }
+
+  const errorTemplatePhrases = ["something went wrong", "an unexpected error has occurred", "internal server error", "application error", "we're sorry, something broke", "an error occurred while processing your request"];
+  const matchedErrorTemplate = errorTemplatePhrases.find(p => text.includes(p));
+  if (matchedErrorTemplate) {
+    return { matched: true, category: "ERROR_PAGE", system: "Generic Error Template", reason: `Error template phrase detected: "${matchedErrorTemplate}".` };
+  }
+
+  const looksLike404 = /\b404\b/.test(titleLower) && visibleTextLength < 800;
+  if (looksLike404) {
+    return { matched: true, category: "ERROR_PAGE", system: "Custom 404 Page", reason: `Title references "404" alongside thin content (${visibleTextLength} chars).` };
+  }
+
+  return { matched: false, category: null, system: null, reason: null };
+}
+
+/**
+ * Page Integrity Score (0-100): evidence-based check across all 13
+ * required signals — never a static or guessed number.
+ */
+export function calculatePageIntegrityScore($, html) {
+  const metrics = [];
+
+  const title = safeText($("title").text());
+  metrics.push(buildMetric({ name: "Document Title", raw: title.length > 0 ? 8 : 0, max: 8, weight: 8, reason: title ? "Title element present." : "No <title> element found.", evidence: title ? `Title: "${title}".` : "Missing <title>.", recommendation: "Ensure the page serves a real <title> element." }));
+
+  const metaDesc = safeText($('meta[name="description"]').attr("content"));
+  metrics.push(buildMetric({ name: "Meta Description", raw: metaDesc.length > 0 ? 7 : 0, max: 7, weight: 7, reason: metaDesc ? "Meta description present." : "No meta description found.", evidence: metaDesc ? `Description present (${metaDesc.length} chars).` : "Missing meta description.", recommendation: "Ensure the page serves a real meta description." }));
+
+  const bodyText = safeText($("body").text()).replace(/\s+/g, " ").trim();
+  const bodyTextLength = bodyText.length;
+  metrics.push(buildMetric({ name: "Body Text Length", raw: bodyTextLength >= 500 ? 12 : bodyTextLength >= 150 ? 6 : 0, max: 12, weight: 12, reason: bodyTextLength >= 500 ? "Substantial visible body text." : bodyTextLength >= 150 ? "Minimal visible body text." : "Body text is too short to represent real content.", evidence: `${bodyTextLength} character(s) of visible body text.`, recommendation: "Verify the server returned complete page content, not a stub or partial render." }));
+
+  const htmlSize = safeText(html).length;
+  const tagCount = (safeText(html).match(/<[a-z][a-z0-9]*(\s|>)/gi) || []).length;
+  metrics.push(buildMetric({ name: "DOM Completeness", raw: tagCount >= 40 ? 10 : tagCount >= 15 ? 5 : 0, max: 10, weight: 10, reason: tagCount >= 40 ? "Rich DOM tag structure detected." : tagCount >= 15 ? "Sparse DOM tag structure." : "Extremely thin DOM, unlikely to be a real rendered page.", evidence: `${tagCount} HTML tag(s) across ${htmlSize} byte(s) of markup.`, recommendation: "Confirm the crawler captured the fully rendered page." }));
+
+  const hasNav = $("nav, [role='navigation'], header nav, .navbar, .nav-menu, .site-nav").length > 0;
+  metrics.push(buildMetric({ name: "Navigation Exists", raw: hasNav ? 8 : 0, max: 8, weight: 8, reason: hasNav ? "Navigation landmark detected." : "No navigation element detected.", evidence: `Nav landmark match: ${hasNav}.`, recommendation: "Verify navigation rendered." }));
+
+  const hasFooter = $("footer, [role='contentinfo'], .site-footer, .footer").length > 0;
+  metrics.push(buildMetric({ name: "Footer Exists", raw: hasFooter ? 7 : 0, max: 7, weight: 7, reason: hasFooter ? "Footer landmark detected." : "No footer element detected.", evidence: `Footer landmark match: ${hasFooter}.`, recommendation: "Verify the footer region rendered." }));
+
+  const hasMain = $("main, [role='main'], article, .main-content, #main, #content").length > 0;
+  metrics.push(buildMetric({ name: "Main Content Exists", raw: hasMain ? 10 : 0, max: 10, weight: 10, reason: hasMain ? "Main content landmark detected." : "No main/article content landmark detected.", evidence: `Main content landmark match: ${hasMain}.`, recommendation: "Verify the primary content region rendered." }));
+
+  const h1Count = $("h1").length;
+  const h2Count = $("h2").length;
+  metrics.push(buildMetric({ name: "Heading Structure", raw: (h1Count > 0 ? 5 : 0) + (h2Count > 0 ? 5 : 0), max: 10, weight: 10, reason: h1Count === 0 ? "No H1 heading found." : h2Count === 0 ? "H1 present but no H2 subheadings." : "H1/H2 hierarchy present.", evidence: `H1 count: ${h1Count}. H2 count: ${h2Count}.`, recommendation: "Verify heading structure rendered." }));
+
+  const canonical = safeText($('link[rel="canonical"]').attr("href"));
+  metrics.push(buildMetric({ name: "Canonical Tag", raw: canonical ? 5 : 0, max: 5, weight: 5, reason: canonical ? "Canonical tag present." : "No canonical tag found.", evidence: canonical ? `Canonical: ${canonical}` : "Missing canonical link.", recommendation: "Verify canonical tag rendered." }));
+
+  const visibleContentRatio = htmlSize > 0 ? bodyTextLength / htmlSize : 0;
+  metrics.push(buildMetric({ name: "Visible Content Ratio", raw: visibleContentRatio >= 0.08 ? 8 : visibleContentRatio >= 0.03 ? 4 : 0, max: 8, weight: 8, reason: visibleContentRatio >= 0.08 ? "Healthy visible-text-to-markup ratio." : visibleContentRatio >= 0.03 ? "Low but plausible ratio." : "Visible text negligible relative to markup — common on challenge/loading pages.", evidence: `Visible text ratio: ${(visibleContentRatio * 100).toFixed(1)}%.`, recommendation: "Investigate whether this page requires JavaScript to render real content." }));
+
+  metrics.push(buildMetric({ name: "HTML Size", raw: htmlSize >= 3000 ? 5 : htmlSize >= 1000 ? 2 : 0, max: 5, weight: 5, reason: htmlSize >= 3000 ? "Document size consistent with a real page." : htmlSize >= 1000 ? "Document size is on the small side." : "Document size too small to be genuine.", evidence: `Total document size: ${htmlSize} byte(s).`, recommendation: "Verify the full page payload was captured." }));
+
+  const internalLinkCount = $("a[href]").length;
+  metrics.push(buildMetric({ name: "Internal Links Present", raw: internalLinkCount >= 5 ? 5 : internalLinkCount > 0 ? 2 : 0, max: 5, weight: 5, reason: internalLinkCount >= 5 ? "Healthy number of links detected." : internalLinkCount > 0 ? "Few links detected." : "No links detected anywhere on the page.", evidence: `${internalLinkCount} <a href> element(s) detected.`, recommendation: "Real pages almost always contain multiple links." }));
+
+  const imageCount = $("img").length;
+  metrics.push(buildMetric({ name: "Images Present", raw: imageCount > 0 ? 5 : 0, max: 5, weight: 5, reason: imageCount > 0 ? `${imageCount} image(s) detected.` : "No images detected.", evidence: `${imageCount} <img> element(s) detected.`, recommendation: "Absence of images is normal for text-only pages but also common on stub pages." }));
+
+  const result = aggregateMetrics(metrics);
+  return {
+    integrityScore: result.score,
+    metrics: result.metrics,
+    raw: { title, metaDesc, bodyTextLength, htmlSize, tagCount, hasNav, hasFooter, hasMain, h1Count, h2Count, canonical, visibleContentRatio, internalLinkCount, imageCount }
+  };
+}
+
+/**
+ * Validation Confidence (0-100): a narrower composite, differently
+ * weighted from Page Integrity Score, focused specifically on how
+ * trustworthy this content is for downstream scoring.
+ */
+export function calculateValidationConfidence(integrityRaw, blockSignalCount) {
+  const metrics = [
+    buildMetric({ name: "DOM Completeness", raw: integrityRaw.tagCount >= 40 ? 20 : integrityRaw.tagCount >= 15 ? 10 : 0, max: 20, weight: 20, reason: `${integrityRaw.tagCount} tag(s) detected.`, evidence: `Tag density: ${integrityRaw.tagCount}.`, recommendation: "Investigate incomplete rendering." }),
+    buildMetric({ name: "Visible Text", raw: integrityRaw.bodyTextLength >= 500 ? 20 : integrityRaw.bodyTextLength >= 150 ? 10 : 0, max: 20, weight: 20, reason: `${integrityRaw.bodyTextLength} visible character(s).`, evidence: `Body text length: ${integrityRaw.bodyTextLength}.`, recommendation: "Investigate thin visible content." }),
+    buildMetric({ name: "Main Content", raw: integrityRaw.hasMain ? 15 : 0, max: 15, weight: 15, reason: integrityRaw.hasMain ? "Main content region found." : "No main content region found.", evidence: `hasMain: ${integrityRaw.hasMain}.`, recommendation: "Verify primary content container rendered." }),
+    buildMetric({ name: "Navigation", raw: integrityRaw.hasNav ? 10 : 0, max: 10, weight: 10, reason: integrityRaw.hasNav ? "Navigation found." : "No navigation found.", evidence: `hasNav: ${integrityRaw.hasNav}.`, recommendation: "Verify navigation rendered." }),
+    buildMetric({ name: "Footer", raw: integrityRaw.hasFooter ? 10 : 0, max: 10, weight: 10, reason: integrityRaw.hasFooter ? "Footer found." : "No footer found.", evidence: `hasFooter: ${integrityRaw.hasFooter}.`, recommendation: "Verify footer rendered." }),
+    buildMetric({ name: "Metadata", raw: (integrityRaw.title ? 7.5 : 0) + (integrityRaw.metaDesc ? 7.5 : 0), max: 15, weight: 15, reason: `Title present: ${Boolean(integrityRaw.title)}. Description present: ${Boolean(integrityRaw.metaDesc)}.`, evidence: `Title: "${integrityRaw.title || 'none'}".`, recommendation: "Verify metadata rendered." }),
+    buildMetric({ name: "Challenge Indicators", raw: blockSignalCount === 0 ? 10 : 0, max: 10, weight: 10, reason: blockSignalCount === 0 ? "No challenge/block signatures detected." : `${blockSignalCount} challenge/block signature(s) detected.`, evidence: `Block signal count: ${blockSignalCount}.`, recommendation: "Resolve bot-mitigation or challenge screens." })
+  ];
+  return aggregateMetrics(metrics);
+}
+
+/**
+ * Enterprise Page Validation Engine — the sole authority for whether
+ * extracted HTML represents a real website page. HTTP status is never
+ * used in isolation to make this decision.
+ */
+export function runPageValidationEngine(html, status, redirectCount = 0) {
+  const $ = cheerio.load(safeText(html) || "<html><body></body></html>");
+  const title = safeText($("title").text());
+
+  const primaryBlockCheck = detectBlockedReason(html, status, redirectCount);
+  const additionalSignature = detectAdditionalPageSignatures(html, title);
+
+  const integrity = calculatePageIntegrityScore($, html);
+  const blockSignalCount = (primaryBlockCheck.blocked ? 1 : 0) + (additionalSignature.matched ? 1 : 0);
+  const confidence = calculateValidationConfidence(integrity.raw, blockSignalCount);
+
+  let state, protectionType, evidence, retryRecommendation;
+
+  if (primaryBlockCheck.blocked) {
+    const isAuthOrChallenge = ["Cloudflare Turnstile", "CAPTCHA Block", "DDoS Mitigation Screen", "Bot Mitigation Interstitial", "Web Application Firewall", "Authentication Wall", "Cloudflare/CDN Forbidden", "Rate Limiter Block"].includes(primaryBlockCheck.system);
+    state = isAuthOrChallenge ? "BLOCKED_PAGE" : "ERROR_PAGE";
+    protectionType = primaryBlockCheck.system;
+    evidence = primaryBlockCheck.reason;
+    retryRecommendation = state === "BLOCKED_PAGE"
+      ? "Retry with stealth Playwright rendering; if this persists, the target likely requires IP allowlisting or a residential proxy."
+      : "Retry with standard rendering after confirming the URL is correct.";
+  } else if (additionalSignature.matched) {
+    state = additionalSignature.category;
+    protectionType = additionalSignature.system;
+    evidence = additionalSignature.reason;
+    retryRecommendation = state === "EMPTY_PAGE"
+      ? "Retry with Playwright rendering; the standard GET likely returned before JavaScript populated the page."
+      : "Verify the URL points to a live, published page rather than a placeholder or removed resource.";
+  } else if (integrity.integrityScore >= 70) {
+    state = "VALID_PAGE"; protectionType = null;
+    evidence = "Document passed page-integrity checks with no block/challenge signatures detected.";
+    retryRecommendation = null;
+  } else if (integrity.integrityScore >= 40) {
+    state = "PARTIAL_PAGE"; protectionType = null;
+    evidence = `Document is missing some expected elements (integrity score ${integrity.integrityScore}/100) but shows no block signatures; treated as real, analyzable content.`;
+    retryRecommendation = "Analysis will proceed; consider re-crawling with Playwright to confirm full page completeness.";
+  } else {
+    state = "ERROR_PAGE"; protectionType = "Unclassified Low-Integrity Page";
+    evidence = `Document scored only ${integrity.integrityScore}/100 on integrity checks with no specific signature matched.`;
+    retryRecommendation = "Retry with Playwright or stealth Playwright rendering.";
+  }
+
+  const analyzable = state === "VALID_PAGE" || state === "PARTIAL_PAGE";
+
+  return {
+    state, analyzable,
+    integrityScore: integrity.integrityScore,
+    confidenceScore: confidence.score,
+    protectionType, evidence, retryRecommendation,
+    integrityMetrics: integrity.metrics,
+    confidenceMetrics: confidence.metrics,
+    blockCheck: primaryBlockCheck.blocked
+      ? primaryBlockCheck
+      : (additionalSignature.matched
+        ? { blocked: true, system: additionalSignature.system, reason: additionalSignature.reason, signals: [additionalSignature.category.toLowerCase()] }
+        : { blocked: false, system: null, reason: null, signals: [] })
+  };
+}
+/**
  * Stage 4: DOM validation. Confirms the response is a structurally real
  * HTML document (complete <html>/<body> tags, sufficient tag density) —
  * not a truncated response, a JSON error blob, or a near-empty stub.
@@ -1355,16 +1540,15 @@ async function attemptStandardGet(url) {
 
   const html = result?.html || "";
   const finalUrl = result?.finalUrl || url;
-  const blockCheck = detectBlockedReason(html, status, redirectCount);
-  const domValidation = validateDomStructure(html);
-  const contentValidation = validateContentAuthenticity(html, status, blockCheck);
+  const pageValidation = runPageValidationEngine(html, status, redirectCount);
 
   return {
     stageName: "STANDARD_GET", crawlMethod: "STANDARD_GET",
     html, status, finalUrl, retryCount, redirectCount, httpVersion, headers,
     infiniteScrollDetected: false,
-    domValidation, contentValidation, blockCheck,
-    success: domValidation.valid && contentValidation.valid && !blockCheck.blocked
+    pageValidation,
+    blockCheck: pageValidation.blockCheck,
+    success: pageValidation.analyzable
   };
 }
 
@@ -1377,58 +1561,56 @@ async function attemptPlaywrightRender(url, label, fetchFn) {
   }
 
   if (!pwResult || !pwResult.html) {
+    const pageValidation = {
+      state: "EMPTY_PAGE", analyzable: false, integrityScore: 0, confidenceScore: 0,
+      protectionType: `${label} Unavailable`,
+      evidence: `${label} attempt failed to produce content (browser unavailable or navigation failed).`,
+      retryRecommendation: "Retry crawling later or verify the target allows headless browser access.",
+      integrityMetrics: [], confidenceMetrics: [],
+      blockCheck: { blocked: true, system: `${label} Unavailable`, reason: `${label} attempt failed to produce content.`, signals: ["render_failed"] }
+    };
     return {
       stageName: label, crawlMethod: label,
       html: "", status: 0, finalUrl: url, retryCount: 0, redirectCount: 0, httpVersion: null, headers: {},
       infiniteScrollDetected: false,
-      domValidation: { valid: false, reason: `${label} did not return any content (browser unavailable or navigation failed).` },
-      contentValidation: { valid: false, visibleTextLength: 0, reason: `${label} produced no HTML to validate.` },
-      blockCheck: { blocked: true, system: `${label} Unavailable`, reason: `${label} attempt failed to produce content.`, signals: ["render_failed"] },
+      pageValidation, blockCheck: pageValidation.blockCheck,
       success: false
     };
   }
 
   const { html, status, finalUrl, infiniteScrollDetected } = pwResult;
-  const blockCheck = detectBlockedReason(html, status, 0);
-  const domValidation = validateDomStructure(html);
-  const contentValidation = validateContentAuthenticity(html, status, blockCheck);
+  const pageValidation = runPageValidationEngine(html, status, 0);
 
   return {
     stageName: label, crawlMethod: label,
     html, status, finalUrl, retryCount: 0, redirectCount: 0, httpVersion: null, headers: {},
     infiniteScrollDetected: Boolean(infiniteScrollDetected),
-    domValidation, contentValidation, blockCheck,
-    success: domValidation.valid && contentValidation.valid && !blockCheck.blocked
+    pageValidation, blockCheck: pageValidation.blockCheck,
+    success: pageValidation.analyzable
   };
 }
 
 function finalizeCrawlResult(winningStage, allStages) {
   const stagesAttempted = allStages.map(s => ({
     stage: s.stageName, status: s.status, success: s.success,
-    blocked: s.blockCheck?.blocked || false, blockSystem: s.blockCheck?.system || null,
-    domValid: s.domValidation?.valid, contentValid: s.contentValidation?.valid
+    validationState: s.pageValidation?.state,
+    integrityScore: s.pageValidation?.integrityScore,
+    confidenceScore: s.pageValidation?.confidenceScore,
+    protectionType: s.pageValidation?.protectionType
   }));
 
   if (!winningStage) {
     const lastStage = allStages[allStages.length - 1];
-    const blockCheck = lastStage.blockCheck?.blocked
-      ? lastStage.blockCheck
-      : {
-          blocked: true,
-          system: "All Crawl Strategies Exhausted",
-          reason: `Standard GET, Playwright rendering, and stealth Playwright rendering all failed to produce valid, unblocked content. Last stage (${lastStage.stageName}) reason: ${lastStage.contentValidation?.reason || lastStage.domValidation?.reason || "unknown validation failure"}.`,
-          signals: ["all_stages_exhausted"]
-        };
-
     return {
       html: lastStage.html, finalUrl: lastStage.finalUrl, status: lastStage.status,
-      crawlMethod: lastStage.crawlMethod, blockCheck,
+      crawlMethod: lastStage.crawlMethod, blockCheck: lastStage.blockCheck,
       retryCount: lastStage.retryCount, redirectCount: lastStage.redirectCount,
       httpVersion: lastStage.httpVersion, headers: lastStage.headers,
       infiniteScrollDetected: lastStage.infiniteScrollDetected,
       contentLength: lastStage.html ? lastStage.html.length : 0,
       stagesAttempted,
-      reliability: { confidenceScore: 0, qualityScore: 0, status: "Critical Improvements Needed", metrics: [], reliable: false }
+      pageValidation: lastStage.pageValidation,
+      reliability: { confidenceScore: lastStage.pageValidation?.confidenceScore || 0, qualityScore: 0, status: "Critical Improvements Needed", metrics: [], reliable: false }
     };
   }
 
@@ -1438,24 +1620,14 @@ function finalizeCrawlResult(winningStage, allStages) {
     contentLength: winningStage.html ? winningStage.html.length : 0
   });
 
-  let finalBlockCheck = winningStage.blockCheck;
-  if (!finalBlockCheck.blocked && !reliability.reliable) {
-    finalBlockCheck = {
-      blocked: true,
-      system: "Low Crawl Confidence",
-      reason: `Crawl confidence score (${reliability.confidenceScore}/100) fell below the reliability threshold after ${stagesAttempted.length} stage(s); downstream SEO analysis was skipped to avoid generating scores from unreliable data.`,
-      signals: ["low_confidence"]
-    };
-  }
-
   return {
     html: winningStage.html, finalUrl: winningStage.finalUrl, status: winningStage.status,
-    crawlMethod: winningStage.crawlMethod, blockCheck: finalBlockCheck,
+    crawlMethod: winningStage.crawlMethod, blockCheck: winningStage.blockCheck,
     retryCount: winningStage.retryCount, redirectCount: winningStage.redirectCount,
     httpVersion: winningStage.httpVersion, headers: winningStage.headers,
     infiniteScrollDetected: winningStage.infiniteScrollDetected,
     contentLength: winningStage.html ? winningStage.html.length : 0,
-    stagesAttempted, reliability
+    stagesAttempted, pageValidation: winningStage.pageValidation, reliability
   };
 }
 
@@ -3716,14 +3888,21 @@ export function compareTargetToCompetitor(targetData, competitorData) {
  * synthetic audit scores.
  */
 export function buildBlockedPayload(url, crawl) {
+  const pv = crawl?.pageValidation || {};
   return {
     success: false,
     blocked: true,
+    validationState: pv.state || "BLOCKED_PAGE",
     status: crawl?.status || 0,
-    reason: crawl?.blockCheck?.reason || "Target could not be crawled.",
+    reason: pv.evidence || crawl?.blockCheck?.reason || "Target could not be crawled.",
+    protectionType: pv.protectionType || crawl?.blockCheck?.system || "Unknown",
+    evidence: pv.evidence || crawl?.blockCheck?.reason || "No further evidence captured.",
+    validationConfidence: pv.confidenceScore ?? crawl?.reliability?.confidenceScore ?? 0,
+    integrityScore: pv.integrityScore ?? 0,
     crawlMethod: crawl?.crawlMethod || "STANDARD_GET",
+    crawlerMethodUsed: crawl?.crawlMethod || "STANDARD_GET",
+    retryRecommendation: pv.retryRecommendation || "Retry the scan; if this persists, the target may require manual verification.",
     retryCount: safeNumber(crawl?.retryCount, 0),
-    protectionType: crawl?.blockCheck?.system || "Unknown",
     resolvedUrl: crawl?.finalUrl || url,
     crawlConfidence: crawl?.reliability?.confidenceScore ?? 0,
     crawlQuality: crawl?.reliability?.qualityScore ?? 0,
@@ -3732,7 +3911,6 @@ export function buildBlockedPayload(url, crawl) {
     stagesAttempted: safeArray(crawl?.stagesAttempted)
   };
 }
-
 /**
  * Bounds the in-memory scan cache to MAX_CACHE_ENTRIES using LRU-by-insertion
  * eviction, preventing unbounded memory growth under sustained traffic.
@@ -4011,6 +4189,11 @@ export async function analyzeSingleUrl(url) {
         redirectCount: crawl.redirectCount,
         confidenceScore: crawl.reliability?.confidenceScore,
         qualityScore: crawl.reliability?.qualityScore
+      },
+      pageValidation: {
+        state: crawl.pageValidation?.state,
+        integrityScore: crawl.pageValidation?.integrityScore,
+        confidenceScore: crawl.pageValidation?.confidenceScore
       },
       robots: {
         found: robotsData.found,

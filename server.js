@@ -479,7 +479,88 @@ export const countWords = (text) => {
   if (!clean) return 0;
   return clean.split(/\s+/).filter(Boolean).length;
 };
+/**
+ * Heuristic syllable counter (vowel-group based) used for real Flesch
+ * Reading Ease calculation — no external NLP dependency required.
+ */
+export function countSyllables(word) {
+  const w = String(word).toLowerCase().replace(/[^a-z]/g, "");
+  if (!w) return 0;
+  const matches = w.match(/[aeiouy]+/g);
+  let count = matches ? matches.length : 1;
+  if (w.endsWith("e") && count > 1) count--;
+  return Math.max(1, count);
+}
 
+/**
+ * Real Flesch Reading Ease score computed from actual word/sentence/
+ * syllable counts in the supplied text — not a static estimate.
+ */
+export function calculateReadability(text) {
+  const clean = safeText(text);
+  const sentences = clean.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const words = clean.split(/\s+/).filter(Boolean);
+  const sentenceCount = sentences.length || 1;
+  const wordCount = words.length || 1;
+  const syllableCount = words.reduce((sum, w) => sum + countSyllables(w), 0);
+
+  const fleschScore = 206.835 - (1.015 * (wordCount / sentenceCount)) - (84.6 * (syllableCount / wordCount));
+  const clampedScore = clamp(Math.round(fleschScore), 0, 100);
+
+  let label;
+  if (clampedScore >= 70) label = "Easy to read";
+  else if (clampedScore >= 50) label = "Standard readability";
+  else if (clampedScore >= 30) label = "Fairly difficult";
+  else label = "Very difficult to read";
+
+  return { fleschScore: clampedScore, label, avgWordsPerSentence: parseFloat((wordCount / sentenceCount).toFixed(1)), avgSyllablesPerWord: parseFloat((syllableCount / wordCount).toFixed(2)) };
+}
+
+/**
+ * Detects internally-duplicated paragraph blocks (the same or near-identical
+ * paragraph repeated within the page). This is a single-page duplication
+ * check only — it cannot detect duplication against other pages/domains
+ * without a full-site or web-wide index, which this architecture doesn't
+ * have. That limitation is stated explicitly in the returned evidence
+ * rather than silently implying broader duplicate-content coverage.
+ */
+export function detectInternalDuplication($) {
+  const paragraphs = $("p").map((_, el) => safeText($(el).text())).get().filter(p => p.length > 40);
+  const normalized = paragraphs.map(p => p.toLowerCase().replace(/\s+/g, " ").trim());
+  const counts = {};
+  normalized.forEach(p => { counts[p] = (counts[p] || 0) + 1; });
+  const duplicates = Object.entries(counts).filter(([, count]) => count > 1);
+
+  return {
+    totalParagraphs: paragraphs.length,
+    duplicateBlockCount: duplicates.length,
+    duplicateInstances: duplicates.reduce((sum, [, count]) => sum + (count - 1), 0),
+    scopeNote: "Checked for repeated paragraph blocks within this single page only. Cross-page or cross-domain duplicate content requires a full-site or web index, which was not performed."
+  };
+}
+
+/**
+ * Computes keyword density for the page's own top extracted keywords and
+ * flags stuffing if any single keyword exceeds a natural density threshold.
+ */
+export function detectKeywordStuffing(text, topKeywords) {
+  const words = safeText(text).toLowerCase().split(/\s+/).filter(Boolean);
+  const totalWords = words.length || 1;
+
+  const densities = safeArray(topKeywords).map(kw => {
+    const occurrences = words.filter(w => w.replace(/[^\w]/g, "") === kw).length;
+    const density = (occurrences / totalWords) * 100;
+    return { keyword: kw, occurrences, density: parseFloat(density.toFixed(2)) };
+  });
+
+  const stuffed = densities.filter(d => d.density > 3.5);
+
+  return {
+    densities,
+    stuffingDetected: stuffed.length > 0,
+    stuffedKeywords: stuffed.map(d => d.keyword)
+  };
+}
 export const unique = (arr) => {
   return [...new Set(safeArray(arr))];
 };
@@ -755,8 +836,6 @@ export async function fetchAxios(url) {
       rejectUnauthorized: false,
       keepAlive: true
     }),
-    // follow-redirects (axios's underlying transport) invokes this on every
-    // hop, giving us a real, ordered redirect chain rather than an estimate.
     beforeRedirect: (options, responseDetails) => {
       redirectChain.push({
         from: responseDetails?.headers?.location ? options.href : undefined,
@@ -772,7 +851,8 @@ export async function fetchAxios(url) {
     headers: response.headers || {},
     finalUrl: response.request?.res?.responseUrl || url,
     redirectChain,
-    redirectCount: redirectChain.length
+    redirectCount: redirectChain.length,
+    httpVersion: response.request?.res?.httpVersion || null
   };
 }
 export async function fetchPlaywright(url) {
@@ -880,6 +960,174 @@ export async function sampleBrokenLinks(baseUrl, linkMap, sampleSize = 8) {
     brokenUrls: broken.map(b => ({ url: b.url, status: b.status })),
     sampleRate: paths.length > 0 ? Math.round((resolved.length / Object.keys(linkMap).length) * 100) : 0
   };
+}
+/**
+ * Samples a small set of asset URLs (CSS/JS/images) referenced in the page
+ * to detect broken assets, using the same bounded HEAD-request approach as
+ * sampleBrokenLinks — never crawls the whole site, just spot-checks.
+ */
+export async function sampleBrokenAssets($, baseUrl, sampleSize = 6) {
+  const assetUrls = new Set();
+  $('link[rel="stylesheet"][href], script[src], img[src]').each((_, el) => {
+    const src = safeText($(el).attr("href") || $(el).attr("src"));
+    if (src) assetUrls.add(src);
+  });
+
+  const sampled = Array.from(assetUrls).slice(0, sampleSize);
+  if (sampled.length === 0) return { checked: 0, broken: 0, brokenAssets: [] };
+
+  let origin;
+  try { origin = new URL(baseUrl).origin; } catch { return { checked: 0, broken: 0, brokenAssets: [] }; }
+
+  const checks = sampled.map(async (src) => {
+    let target;
+    try { target = new URL(src, origin).href; } catch { return { url: src, ok: false, status: 0 }; }
+    try {
+      const res = await axios.head(target, {
+        timeout: 5000, maxRedirects: 4, validateStatus: () => true,
+        httpsAgent: new https.Agent({ rejectUnauthorized: false })
+      });
+      return { url: target, ok: res.status < 400, status: res.status };
+    } catch {
+      return { url: target, ok: false, status: 0 };
+    }
+  });
+
+  const results = (await Promise.allSettled(checks)).map(r => r.status === "fulfilled" ? r.value : { ok: false, status: 0, url: "unknown" });
+  const broken = results.filter(r => !r.ok);
+
+  return { checked: results.length, broken: broken.length, brokenAssets: broken.map(b => ({ url: b.url, status: b.status })) };
+}
+
+/**
+ * Detects HTTP resources referenced from an HTTPS page (mixed content),
+ * which browsers actively block or flag and search engines penalize.
+ */
+export function detectMixedContent($, resolvedUrl) {
+  if (!safeText(resolvedUrl).startsWith("https://")) {
+    return { applicable: false, mixedContentCount: 0, examples: [] };
+  }
+
+  const insecureRefs = [];
+  $('img[src^="http://"], script[src^="http://"], link[href^="http://"], iframe[src^="http://"]').each((_, el) => {
+    const src = safeText($(el).attr("src") || $(el).attr("href"));
+    if (src) insecureRefs.push(src);
+  });
+
+  return {
+    applicable: true,
+    mixedContentCount: insecureRefs.length,
+    examples: insecureRefs.slice(0, 5)
+  };
+}
+
+/**
+ * Evaluates the presence of modern security response headers. Feeds the
+ * "Security Headers" metric in scanDynamicTrustSignals (Phase 2).
+ */
+export function analyzeSecurityHeaders(headers) {
+  const h = safeObject(headers);
+  const checks = {
+    "Strict-Transport-Security": Boolean(h["strict-transport-security"]),
+    "Content-Security-Policy": Boolean(h["content-security-policy"]),
+    "X-Frame-Options": Boolean(h["x-frame-options"]),
+    "X-Content-Type-Options": Boolean(h["x-content-type-options"]),
+    "Referrer-Policy": Boolean(h["referrer-policy"])
+  };
+  const present = Object.entries(checks).filter(([, v]) => v).map(([k]) => k);
+  return {
+    present,
+    missing: Object.keys(checks).filter(k => !checks[k]),
+    score: present.length * 2 // out of 10, matches the weight/max used in Trust scoring
+  };
+}
+
+/**
+ * Composite Technical SEO score: canonical, robots, sitemap, HTTPS,
+ * redirects, compression, HTTP version, mixed content, and broken assets —
+ * each backed by real evidence captured during the crawl.
+ */
+export function calculateTechnicalSeoScore({ pageData, headers, robotsData, sitemapData, redirectCount, httpVersion, mixedContent, brokenAssetData }) {
+  const metrics = [];
+
+  const canonical = safeText(pageData?.canonical);
+  metrics.push(buildMetric({
+    name: "Canonical Tag", raw: canonical ? 15 : 0, max: 15, weight: 15,
+    reason: canonical ? "Canonical URL configured." : "No canonical tag found.",
+    evidence: canonical ? `Canonical resolves to: ${canonical}` : "No <link rel=\"canonical\"> found.",
+    recommendation: "Add a self-referencing canonical tag."
+  }));
+
+  const robotsMeta = safeText(pageData?.robots).toLowerCase();
+  const blockedByMeta = robotsMeta.includes("noindex");
+  metrics.push(buildMetric({
+    name: "Robots Directive", raw: blockedByMeta ? 0 : 10, max: 10, weight: 10,
+    reason: blockedByMeta ? "Page blocks indexing via meta robots." : "No indexing block detected.",
+    evidence: robotsMeta ? `content="${robotsMeta}"` : "No robots meta tag (defaults to indexable).",
+    recommendation: "Remove noindex if this page should be indexed."
+  }));
+
+  metrics.push(buildMetric({
+    name: "Sitemap Availability", raw: sitemapData?.found ? 10 : 0, max: 10, weight: 10,
+    reason: sitemapData?.found ? `Sitemap found via ${sitemapData.source}.` : "No sitemap.xml found.",
+    evidence: sitemapData?.found ? safeArray(sitemapData.urls).join(", ") : "Checked robots.txt and /sitemap.xml.",
+    recommendation: "Publish and reference an XML sitemap."
+  }));
+
+  metrics.push(buildMetric({
+    name: "Robots.txt Availability", raw: robotsData?.found ? 8 : 0, max: 8, weight: 8,
+    reason: robotsData?.found ? "robots.txt is published." : "No robots.txt found.",
+    evidence: robotsData?.found ? `${safeArray(robotsData.disallowedPaths).length} disallow rule(s) declared.` : "GET /robots.txt did not resolve.",
+    recommendation: "Publish a robots.txt at the domain root."
+  }));
+
+  const isHttps = safeText(pageData?.resolvedUrl).startsWith("https://");
+  metrics.push(buildMetric({
+    name: "HTTPS", raw: isHttps ? 15 : 0, max: 15, weight: 15,
+    reason: isHttps ? "Secure HTTPS connection." : "Insecure HTTP connection.",
+    evidence: `Scheme: ${safeText(pageData?.resolvedUrl).split("://")[0] || "unknown"}.`,
+    recommendation: "Migrate to HTTPS with a valid TLS certificate."
+  }));
+
+  metrics.push(buildMetric({
+    name: "Redirect Chain", raw: redirectCount === 0 ? 10 : redirectCount <= 2 ? 6 : 0, max: 10, weight: 10,
+    reason: redirectCount === 0 ? "Direct 200 response, no redirects." : redirectCount <= 2 ? "Minimal redirect chain." : "Excessive redirect chain.",
+    evidence: `${redirectCount} redirect hop(s) followed.`,
+    recommendation: "Minimize redirect chains to a single hop or none."
+  }));
+
+  const contentEncoding = safeText(headers?.["content-encoding"]).toLowerCase();
+  const isCompressed = ["gzip", "br", "deflate"].includes(contentEncoding);
+  metrics.push(buildMetric({
+    name: "Compression", raw: isCompressed ? 10 : 0, max: 10, weight: 10,
+    reason: isCompressed ? `Response compressed via ${contentEncoding}.` : "No compression detected on the response.",
+    evidence: `Content-Encoding header: ${contentEncoding || "none"}.`,
+    recommendation: "Enable gzip or Brotli compression on the web server."
+  }));
+
+  const httpVersionNum = parseFloat(httpVersion) || 1.1;
+  metrics.push(buildMetric({
+    name: "Modern Protocol (HTTP/2+)", raw: httpVersionNum >= 2 ? 8 : 0, max: 8, weight: 8,
+    reason: httpVersionNum >= 2 ? `Served over HTTP/${httpVersion}.` : `Served over HTTP/${httpVersion || "1.1"}, not HTTP/2 or HTTP/3.`,
+    evidence: `Detected protocol version: HTTP/${httpVersion || "1.1"}.`,
+    recommendation: "Enable HTTP/2 or HTTP/3 on the server/CDN for reduced latency and multiplexing."
+  }));
+
+  metrics.push(buildMetric({
+    name: "Mixed Content", raw: !mixedContent?.applicable || mixedContent.mixedContentCount === 0 ? 8 : 0, max: 8, weight: 8,
+    reason: !mixedContent?.applicable ? "Page is not served over HTTPS; mixed-content check not applicable." : mixedContent.mixedContentCount === 0 ? "No insecure HTTP resources referenced from this HTTPS page." : `${mixedContent.mixedContentCount} insecure HTTP resource(s) referenced from an HTTPS page.`,
+    evidence: mixedContent?.examples?.length > 0 ? `Examples: ${mixedContent.examples.join(", ")}` : "No mixed-content resources detected.",
+    recommendation: "Update all asset references (img/script/link/iframe) to use HTTPS URLs."
+  }));
+
+  metrics.push(buildMetric({
+    name: "Broken Assets", raw: brokenAssetData?.checked === 0 ? 6 : clamp(6 - safeNumber(brokenAssetData?.broken), 0, 6), max: 6, weight: 6,
+    reason: brokenAssetData?.checked === 0 ? "No assets available to sample." : brokenAssetData.broken === 0 ? "All sampled CSS/JS/image assets resolved successfully." : `${brokenAssetData.broken} of ${brokenAssetData.checked} sampled assets returned an error.`,
+    evidence: brokenAssetData?.brokenAssets?.length > 0 ? brokenAssetData.brokenAssets.map(a => `${a.url} (${a.status || "no response"})`).join(", ") : `Sampled ${brokenAssetData?.checked || 0} asset(s).`,
+    recommendation: "Fix or remove broken CSS, JS, or image references."
+  }));
+
+  return aggregateMetrics(metrics);
 }
 /**
  * Races a promise against a hard timeout so a single hung crawl can never
@@ -1047,6 +1295,7 @@ const reliability = assessCrawlReliability({
     html,
     finalUrl,
     status,
+    headers: result?.headers || {},
     crawlMethod,
     blockCheck,
     retryCount,
@@ -1657,12 +1906,69 @@ export function validateJsonLdBlocks($) {
     issues
   };
 }
+// Minimum properties Google's Rich Results documentation requires (or
+// strongly recommends) per schema type, for eligibility checking.
+export const SCHEMA_REQUIRED_PROPERTIES = {
+  FAQPage: ["mainEntity"],
+  HowTo: ["name", "step"],
+  Article: ["headline", "author", "datePublished"],
+  BlogPosting: ["headline", "author", "datePublished"],
+  Organization: ["name", "url"],
+  LocalBusiness: ["name", "address", "telephone"],
+  Product: ["name"],
+  Review: ["itemReviewed", "reviewRating", "author"],
+  Person: ["name"],
+  Service: ["name", "provider"],
+  VideoObject: ["name", "uploadDate", "thumbnailUrl"],
+  BreadcrumbList: ["itemListElement"],
+  WebSite: ["name", "url"]
+};
 
+/**
+ * Checks each detected JSON-LD item against Google's minimum required
+ * properties for Rich Result eligibility. Returns per-type findings rather
+ * than a single pass/fail, so the dashboard can show exactly which schema
+ * blocks are missing which properties.
+ */
+export function validateSchemaRequiredProperties(detectedSchemas) {
+  const findings = [];
+
+  Object.entries(SCHEMA_REQUIRED_PROPERTIES).forEach(([type, requiredProps]) => {
+    const schemaEntry = detectedSchemas?.[type];
+    if (!schemaEntry?.present) return;
+
+    schemaEntry.data.forEach((item, idx) => {
+      const missingProps = requiredProps.filter(prop => {
+        const val = item[prop];
+        return val === undefined || val === null || (typeof val === "string" && val.trim() === "");
+      });
+
+      findings.push({
+        type,
+        instanceIndex: idx,
+        requiredProperties: requiredProps,
+        missingProperties: missingProps,
+        richResultEligible: missingProps.length === 0,
+        reason: missingProps.length === 0
+          ? `${type} schema #${idx + 1} contains all properties required for Rich Result eligibility.`
+          : `${type} schema #${idx + 1} is missing required propert${missingProps.length === 1 ? "y" : "ies"}: ${missingProps.join(", ")}.`
+      });
+    });
+  });
+
+  return {
+    checkedTypes: findings.map(f => f.type),
+    eligibleCount: findings.filter(f => f.richResultEligible).length,
+    ineligibleCount: findings.filter(f => !f.richResultEligible).length,
+    findings
+  };
+}
 export function auditPageSchemas($, html) {
   const jsonLdSchemas = detectAllSchemas($, html);
   const microdataTypes = extractMicrodata($);
   const rdfaTypes = extractRDFa($);
   const jsonLdValidation = validateJsonLdBlocks($);
+  const requiredPropertyValidation = validateSchemaRequiredProperties(jsonLdSchemas);
 
   const activeJsonLdKeys = Object.keys(jsonLdSchemas).filter(k => jsonLdSchemas[k]?.present);
   const allDetectedTypes = [...new Set([...activeJsonLdKeys, ...microdataTypes, ...rdfaTypes])];
@@ -1673,15 +1979,44 @@ export function auditPageSchemas($, html) {
     jsonLd: jsonLdSchemas,
     microdata: microdataTypes,
     rdfa: rdfaTypes,
-    validation: jsonLdValidation
+    validation: jsonLdValidation,
+    richResultEligibility: requiredPropertyValidation
   };
 }
+ site type from existing signals (schema already present, URL patterns, entity data) and prioritizes recommendations accordingly instead of listing all 14 types flatly.
+javascript/**
+ * Infers the most likely website type from existing evidence (detected
+ * schema, URL path patterns, and extracted entities) so schema
+ * recommendations can be prioritized rather than generic.
+ */
+export function inferWebsiteType(detectedTypes, pageData) {
+  const types = safeArray(detectedTypes).map(t => String(t).toLowerCase());
+  const url = safeText(pageData?.resolvedUrl).toLowerCase();
+  const hasProducts = safeArray(pageData?.entityDetails?.verified?.products).length > 0;
+  const hasLocalSignals = types.includes("localbusiness") || /\/(location|store|branch)/i.test(url);
 
-export function getRecommendedSchemas(detectedTypes) {
-  const detectedSet = new Set(safeArray(detectedTypes).map(t => String(t).toLowerCase()));
-  return ALLOWED_RECOMMENDED_TYPES.filter(type => !detectedSet.has(type.toLowerCase()));
+  if (types.includes("product") || hasProducts || /\/(shop|product|store)/i.test(url)) return "ecommerce";
+  if (hasLocalSignals) return "local_business";
+  if (types.includes("article") || types.includes("blogposting") || /\/(blog|article|news)/i.test(url)) return "content_publisher";
+  if (types.includes("service") || /\/(service|services)/i.test(url)) return "service_business";
+  return "general";
 }
 
+const WEBSITE_TYPE_SCHEMA_PRIORITY = {
+  ecommerce: ["Product", "Review", "Organization", "BreadcrumbList", "FAQPage", "WebSite"],
+  local_business: ["LocalBusiness", "Organization", "BreadcrumbList", "FAQPage", "Review", "WebSite"],
+  content_publisher: ["Article", "BlogPosting", "Person", "BreadcrumbList", "FAQPage", "WebSite"],
+  service_business: ["Service", "Organization", "FAQPage", "Review", "BreadcrumbList", "WebSite"],
+  general: ["Organization", "WebSite", "FAQPage", "BreadcrumbList", "WebPage", "HowTo"]
+};
+
+export function getRecommendedSchemas(detectedTypes, websiteType = "general") {
+  const detectedSet = new Set(safeArray(detectedTypes).map(t => String(t).toLowerCase()));
+  const priorityOrder = WEBSITE_TYPE_SCHEMA_PRIORITY[websiteType] || WEBSITE_TYPE_SCHEMA_PRIORITY.general;
+  const prioritized = priorityOrder.filter(type => !detectedSet.has(type.toLowerCase()));
+  const remaining = ALLOWED_RECOMMENDED_TYPES.filter(type => !detectedSet.has(type.toLowerCase()) && !prioritized.includes(type));
+  return [...prioritized, ...remaining];
+}
 export function generateRecommendedSchemaBlock(type, title, metaDescription, url) {
   const baseSchema = { "@context": "https://schema.org" };
   const safeTitle = title || "Brand Authority";
@@ -1813,8 +2148,8 @@ export function generateRecommendedSchemaBlock(type, title, metaDescription, url
   }
 }
 
-export function buildSchemaRecommendations(detectedTypes, title, metaDescription, url) {
-  const missingTypes = unique(getRecommendedSchemas(detectedTypes));
+export function buildSchemaRecommendations(detectedTypes, title, metaDescription, url, websiteType = "general") {
+  const missingTypes = unique(getRecommendedSchemas(detectedTypes, websiteType));
   const blocks = [];
 
   missingTypes.forEach(type => {
@@ -1825,11 +2160,12 @@ export function buildSchemaRecommendations(detectedTypes, title, metaDescription
   });
 
   return {
+    websiteType,
     missingSchemas: missingTypes,
+    highPriorityMissing: missingTypes.slice(0, 3),
     schemaGeneratorCode: blocks.join("\n\n")
   };
 }
-
 // =========================================================================
 // ========== SECTION 9: NLP ENTITY EXTRACTION ENGINE ======================
 // =========================================================================
@@ -2241,7 +2577,118 @@ export async function calculateDynamicSeoScore(pageData, loadTimeMs, context = {
     brokenLinkSample: brokenLinkData
   };
 }
+export function calculateContentQualityScore(pageData, $) {
+  const metrics = [];
+  const words = safeNumber(pageData?.wordCount);
+  const text = safeText(pageData?.visibleText);
 
+  metrics.push(buildMetric({
+    name: "Content Depth", raw: words >= 1200 ? 20 : words >= 600 ? 12 : words >= 300 ? 5 : 0, max: 20, weight: 20,
+    reason: words < 300 ? "Thin content." : words < 600 ? "Below-average depth." : words < 1200 ? "Adequate depth." : "Strong depth.",
+    evidence: `Measured word count: ${words}.`,
+    recommendation: "Expand thin sections with substantive, non-redundant content."
+  }));
+
+  const readability = calculateReadability(text);
+  metrics.push(buildMetric({
+    name: "Readability", raw: readability.fleschScore >= 50 ? 15 : readability.fleschScore >= 30 ? 8 : 0, max: 15, weight: 15,
+    reason: `Flesch Reading Ease score: ${readability.fleschScore} (${readability.label}).`,
+    evidence: `Avg ${readability.avgWordsPerSentence} words/sentence, ${readability.avgSyllablesPerWord} syllables/word.`,
+    recommendation: "Shorten sentences and use simpler vocabulary to improve readability."
+  }));
+
+  const h1Count = safeArray(pageData?.headings?.h1s).length;
+  const h2Count = safeArray(pageData?.headings?.h2s).length;
+  metrics.push(buildMetric({
+    name: "Heading Structure", raw: (h1Count === 1 ? 8 : 0) + (h2Count > 0 ? 7 : 0), max: 15, weight: 15,
+    reason: h1Count !== 1 ? `${h1Count} H1 heading(s) found (should be exactly 1).` : h2Count === 0 ? "No H2 subheadings found." : "Clean heading hierarchy.",
+    evidence: `H1 count: ${h1Count}. H2 count: ${h2Count}.`,
+    recommendation: "Use exactly one H1, supported by logically structured H2 subheadings."
+  }));
+
+  const duplication = detectInternalDuplication($);
+  metrics.push(buildMetric({
+    name: "Content Uniqueness (Page-Internal)", raw: duplication.duplicateBlockCount === 0 ? 15 : clamp(15 - duplication.duplicateBlockCount * 3, 0, 15), max: 15, weight: 15,
+    reason: duplication.duplicateBlockCount === 0 ? "No internally duplicated paragraph blocks detected." : `${duplication.duplicateBlockCount} duplicated paragraph block(s) detected within this page.`,
+    evidence: `${duplication.scopeNote}`,
+    recommendation: "Remove or rewrite repeated paragraph blocks within the page."
+  }));
+
+  const topKeywords = tokenizeKeywords(text).slice(0, 5);
+  const stuffing = detectKeywordStuffing(text, topKeywords);
+  metrics.push(buildMetric({
+    name: "Keyword Density Health", raw: stuffing.stuffingDetected ? 0 : 10, max: 10, weight: 10,
+    reason: stuffing.stuffingDetected ? `Unnaturally high density for: ${stuffing.stuffedKeywords.join(", ")}.` : "Keyword usage density is within natural range.",
+    evidence: stuffing.densities.map(d => `"${d.keyword}": ${d.density}%`).join(", ") || "No dominant keywords extracted.",
+    recommendation: "Reduce repetition of over-used keywords; vary phrasing naturally."
+  }));
+
+  const entityCount = safeNumber(pageData?.entityDetails?.totalEntityCount);
+  const entityDensity = words > 0 ? (entityCount / words) * 100 : 0;
+  metrics.push(buildMetric({
+    name: "Entity Usage", raw: entityDensity >= 1.5 ? 10 : entityDensity >= 0.5 ? 5 : 0, max: 10, weight: 10,
+    reason: entityDensity >= 1.5 ? "Strong named-entity usage." : entityDensity >= 0.5 ? "Moderate entity usage." : "Low entity usage.",
+    evidence: `${entityCount} entities across ${words} words (${entityDensity.toFixed(2)} per 100 words).`,
+    recommendation: "Reference more specific named entities relevant to the topic."
+  }));
+
+  const listCount = $("ul, ol").length;
+  const tableCount = $("table").length;
+  const mediaCount = $("img, video, iframe").length;
+  metrics.push(buildMetric({
+    name: "Rich Media & Structure Usage", raw: (listCount > 0 ? 5 : 0) + (tableCount > 0 ? 3 : 0) + (mediaCount > 0 ? 2 : 0), max: 10, weight: 10,
+    reason: `Lists: ${listCount}, tables: ${tableCount}, media elements: ${mediaCount}.`,
+    evidence: `Detected ${listCount} list(s), ${tableCount} table(s), ${mediaCount} media element(s) in the DOM.`,
+    recommendation: "Incorporate lists, tables, or media to break up long-form text and aid scannability."
+  }));
+
+  const result = aggregateMetrics(metrics);
+  return { ...result, readability, duplication, keywordStuffing: stuffing };
+}
+export function calculateSemanticSeoScore(pageData, clusters, coveragePercent) {
+  const metrics = [];
+
+  metrics.push(buildMetric({
+    name: "Topic/Intent Coverage", raw: Math.round((coveragePercent / 100) * 30), max: 30, weight: 30,
+    reason: `Covers ${safeArray(clusters).filter(c => c.status === "Active").length} of ${safeArray(clusters).length} intent clusters.`,
+    evidence: `Measured coverage: ${coveragePercent}%. Active clusters: ${safeArray(clusters).filter(c => c.status === "Active").map(c => c.name).join(", ") || "none"}.`,
+    recommendation: "Add content addressing missing intent clusters (informational, commercial, transactional, trust, authority)."
+  }));
+
+  const entityCount = safeNumber(pageData?.entityDetails?.totalEntityCount);
+  metrics.push(buildMetric({
+    name: "Entity Coverage", raw: entityCount >= 15 ? 25 : entityCount >= 8 ? 15 : entityCount > 0 ? 5 : 0, max: 25, weight: 25,
+    reason: entityCount >= 15 ? "Rich entity coverage supports semantic grounding." : entityCount >= 8 ? "Moderate entity coverage." : "Low entity coverage.",
+    evidence: `${entityCount} distinct entities detected (${safeNumber(pageData?.entityDetails?.verifiedEntityCount)} verified via structured data).`,
+    recommendation: "Reference more specific brands, products, people, and organizations relevant to the topic."
+  }));
+
+  const verifiedRatio = entityCount > 0 ? safeNumber(pageData?.entityDetails?.verifiedEntityCount) / entityCount : 0;
+  metrics.push(buildMetric({
+    name: "Knowledge Graph Groundedness", raw: Math.round(verifiedRatio * 20), max: 20, weight: 20,
+    reason: verifiedRatio >= 0.5 ? "Most detected entities are verified via structured data." : "Most detected entities are unverified pattern matches rather than structured data.",
+    evidence: `${safeNumber(pageData?.entityDetails?.verifiedEntityCount)} verified / ${entityCount} total entities.`,
+    recommendation: "Add JSON-LD declaring key entities (Organization, Person, Product) so they're machine-verifiable rather than inferred."
+  }));
+
+  const missingClusters = safeArray(clusters).filter(c => c.status === "Missing");
+  metrics.push(buildMetric({
+    name: "Topical Cluster Completeness", raw: missingClusters.length === 0 ? 15 : clamp(15 - missingClusters.length * 4, 0, 15), max: 15, weight: 15,
+    reason: missingClusters.length === 0 ? "All tracked intent clusters have coverage." : `Missing coverage for: ${missingClusters.map(c => c.name).join(", ")}.`,
+    evidence: `${missingClusters.length} of ${safeArray(clusters).length} tracked clusters show zero matched signals.`,
+    recommendation: "Add subheadings or sections explicitly addressing the missing topical clusters."
+  }));
+
+  const h2h3Count = safeArray(pageData?.headings?.h2s).length + safeArray(pageData?.headings?.h3s).length;
+  metrics.push(buildMetric({
+    name: "Subtopic Structural Signals", raw: h2h3Count >= 6 ? 10 : h2h3Count >= 3 ? 5 : 0, max: 10, weight: 10,
+    reason: h2h3Count >= 6 ? "Well-segmented subtopic structure." : h2h3Count >= 3 ? "Basic subtopic segmentation." : "Little to no subtopic segmentation.",
+    evidence: `${h2h3Count} combined H2/H3 heading(s) detected.`,
+    recommendation: "Break the topic into clearly labeled subtopics using H2/H3 headings."
+  }));
+
+  return aggregateMetrics(metrics);
+}
 // =========================================================================
 // ========== SECTION 11: DYNAMIC AEO SIMULATION ENGINE ====================
 // =========================================================================
@@ -2760,17 +3207,65 @@ export function calculateImageSeoScore(pageData) {
   return aggregateMetrics(metrics);
 }
 
-export function calculateInternalLinkScoreDetailed(linkAnalysisDetail) {
+export function calculateInternalLinkScoreDetailed(linkAnalysisDetail, brokenLinkData, $) {
   const d = safeObject(linkAnalysisDetail);
-  const metrics = [
-    buildMetric({ name: "Internal Link Volume", raw: clamp(d.internalLinks, 0, 15), max: 15, weight: 30, reason: `${d.internalLinks || 0} internal links detected.`, evidence: `${d.internalLinks || 0} internal links across ${d.uniquePages || 0} unique destinations.`, recommendation: "Increase internal linking to related content." }),
-    buildMetric({ name: "Anchor Text Diversity", raw: Math.round((safeNumber(d.anchorDiversityScore) / 100) * 25), max: 25, weight: 25, reason: `Anchor diversity score: ${d.anchorDiversityScore || 0}/100.`, evidence: `Anchor diversity measured at ${d.anchorDiversityScore || 0}/100 across sampled links.`, recommendation: "Vary anchor text instead of repeating the same phrase across links." }),
-    buildMetric({ name: "Contextual Placement", raw: Math.round((safeNumber(d.contextualLinkScore) / 100) * 25), max: 25, weight: 25, reason: `Contextual link score: ${d.contextualLinkScore || 0}/100.`, evidence: `${d.contextualLinkScore || 0}/100 of internal links sit inside body paragraphs/lists rather than navigation.`, recommendation: "Place internal links within body content, not just navigation and footers." }),
-    buildMetric({ name: "Destination Coverage", raw: d.orphanPageRiskDetected ? 0 : 20, max: 20, weight: 20, reason: d.orphanPageRiskDetected ? "Low unique destination count suggests possible orphaned pages." : "Healthy spread of unique link destinations.", evidence: `${d.uniquePages || 0} unique internal destinations detected from this single-page crawl.`, recommendation: "Run a full-site crawl to confirm and fix orphaned pages with no inbound internal links." })
-  ];
+  const metrics = [];
+
+  metrics.push(buildMetric({
+    name: "Internal Link Volume", raw: clamp(d.internalLinks, 0, 15), max: 15, weight: 20,
+    reason: `${d.internalLinks || 0} internal links detected.`,
+    evidence: `${d.internalLinks || 0} internal links across ${d.uniquePages || 0} unique destinations.`,
+    recommendation: "Increase internal linking to related content."
+  }));
+
+  metrics.push(buildMetric({
+    name: "External Link Presence", raw: safeNumber(d.externalLinks) > 0 ? 10 : 0, max: 10, weight: 10,
+    reason: safeNumber(d.externalLinks) > 0 ? `${d.externalLinks} external link(s) to outside sources.` : "No external links detected.",
+    evidence: `${safeNumber(d.externalLinks)} external link(s) detected.`,
+    recommendation: "Link to authoritative external sources where relevant."
+  }));
+
+  metrics.push(buildMetric({
+    name: "Anchor Text Diversity", raw: Math.round((safeNumber(d.anchorDiversityScore) / 100) * 20), max: 20, weight: 20,
+    reason: `Anchor diversity score: ${d.anchorDiversityScore || 0}/100.`,
+    evidence: `Measured across sampled internal links.`,
+    recommendation: "Vary anchor text instead of repeating the same phrase across links."
+  }));
+
+  metrics.push(buildMetric({
+    name: "Contextual Placement", raw: Math.round((safeNumber(d.contextualLinkScore) / 100) * 15), max: 15, weight: 15,
+    reason: `Contextual link score: ${d.contextualLinkScore || 0}/100.`,
+    evidence: `${d.contextualLinkScore || 0}/100 of internal links sit inside body paragraphs/lists rather than navigation.`,
+    recommendation: "Place internal links within body content, not just navigation and footers."
+  }));
+
+  const brokenCount = safeNumber(brokenLinkData?.broken);
+  const checkedCount = safeNumber(brokenLinkData?.checked);
+  metrics.push(buildMetric({
+    name: "Broken Internal Links", raw: checkedCount === 0 ? 15 : clamp(15 - brokenCount * 4, 0, 15), max: 15, weight: 15,
+    reason: checkedCount === 0 ? "No internal links available to sample." : brokenCount === 0 ? "All sampled internal links resolved." : `${brokenCount} of ${checkedCount} sampled links are broken.`,
+    evidence: safeArray(brokenLinkData?.brokenUrls).map(b => `${b.url} (${b.status || "no response"})`).join(", ") || "No broken links found in sample.",
+    recommendation: "Fix or remove broken internal links."
+  }));
+
+  metrics.push(buildMetric({
+    name: "Destination Coverage / Orphan Risk", raw: d.orphanPageRiskDetected ? 0 : 10, max: 10, weight: 10,
+    reason: d.orphanPageRiskDetected ? "Low unique destination count suggests possible orphaned pages." : "Healthy spread of unique link destinations.",
+    evidence: `${d.uniquePages || 0} unique internal destinations detected from this single-page crawl. Full-site crawl required to confirm orphan pages.`,
+    recommendation: "Run a full-site crawl to confirm and fix orphaned pages with no inbound internal links."
+  }));
+
+  const hasNav = $ ? $("nav, [role='navigation'], header nav, .navbar, .nav-menu").length > 0 : false;
+  const navLinkCount = $ ? $("nav a, [role='navigation'] a, header nav a").length : 0;
+  metrics.push(buildMetric({
+    name: "Navigation Quality", raw: hasNav && navLinkCount >= 3 ? 10 : hasNav ? 5 : 0, max: 10, weight: 10,
+    reason: hasNav && navLinkCount >= 3 ? "Semantic navigation element with multiple links detected." : hasNav ? "Navigation element found but with few links." : "No semantic <nav> or navigation landmark detected.",
+    evidence: `Navigation element present: ${hasNav}. Links inside navigation: ${navLinkCount}.`,
+    recommendation: "Use a semantic <nav> element with clear, crawlable links to key site sections."
+  }));
+
   return aggregateMetrics(metrics);
 }
-
 export function calculateLocalSeoScore(pageData, schemaAudit) {
   const hasLocalBusinessSchema = safeArray(schemaAudit?.detectedTypes).some(t => String(t).toLowerCase() === "localbusiness");
   const hasPhone = safeArray(pageData?.entityDetails?.phones).length > 0;
@@ -2869,20 +3364,28 @@ export function estimateAIEngineCitations(crawlData) {
   const mistral = clamp(Math.round(mistralBase), 10, 99);
 
   const averageProbability = Math.round((chatgpt + gemini + claude + perplexity + copilot + mistral) / 6);
-  const buildEvidenceBlock = (engineKey, score) => {
+ const buildEvidenceBlock = (engineKey, score) => {
     const missing = [];
-    if (!crawlData.hasFAQ) missing.push("No FAQ schema");
-    if (!crawlData.hasDirectAnswer) missing.push("No direct-answer blocks");
-    if (!crawlData.hasAuthor) missing.push("No author attribution");
-    if (safeNumber(crawlData.wordCount) < 900) missing.push("Content depth below 900 words");
-    if (safeNumber(crawlData.tableCount) === 0) missing.push("No tabular data");
+    let recoverablePoints = 0;
+
+    if (!crawlData.hasFAQ) { missing.push({ signal: "No FAQ schema", pointValue: 10 }); recoverablePoints += 10; }
+    if (!crawlData.hasDirectAnswer) { missing.push({ signal: "No direct-answer blocks", pointValue: 12 }); recoverablePoints += 12; }
+    if (!crawlData.hasAuthor) { missing.push({ signal: "No author attribution", pointValue: 6 }); recoverablePoints += 6; }
+    if (safeNumber(crawlData.wordCount) < 900) { missing.push({ signal: "Content depth below 900 words", pointValue: 8 }); recoverablePoints += 8; }
+    if (safeNumber(crawlData.tableCount) === 0) { missing.push({ signal: "No tabular data", pointValue: 6 }); recoverablePoints += 6; }
+    if (!crawlData.hasHowTo) { missing.push({ signal: "No HowTo schema", pointValue: 8 }); recoverablePoints += 8; }
+    if (safeNumber(crawlData.internalLinkScore) < 60) { missing.push({ signal: "Weak internal link structure", pointValue: 5 }); recoverablePoints += 5; }
+
+    const potentialScore = clamp(score + recoverablePoints, score, 99);
 
     return {
       currentScore: score,
+      potentialScore,
+      estimatedGain: potentialScore - score,
       evidence: `Derived from ${safeNumber(crawlData.wordCount)} words, EEAT score ${safeNumber(crawlData.eeatScore)}, topical authority ${safeNumber(crawlData.topicalAuthorityScore)}, and ${safeNumber(crawlData.internalLinkScore)}/100 internal link strength.`,
-      missingSignals: missing,
+      missingSignals: missing.map(m => m.signal),
       improvementSuggestions: missing.length > 0
-        ? missing.map(m => `Address: ${m}.`)
+        ? missing.map(m => `Address: ${m.signal} (potential +${m.pointValue} pts for this engine).`)
         : ["No major gaps detected for this engine profile."]
     };
   };
@@ -2916,38 +3419,51 @@ function jsonLdCountForEngine(crawlData) {
 // =========================================================================
 // ========== SECTION 15: DYNAMIC COMPETITOR COMPARISON ENGINE ============
 // =========================================================================
-
 export function compareTargetToCompetitor(targetData, competitorData) {
-  if (!targetData || !competitorData || targetData.status === "BLOCKED" || competitorData.status === "BLOCKED") {
+  if (!targetData || !competitorData || targetData.blocked || competitorData.blocked) {
     return {
       success: false,
       reason: "One or both targets blocked or returned invalid payload parameters."
     };
   }
 
-  const targetSEO = safeNumber(targetData.seoScore || targetData.audit?.seo?.score);
-  const compSEO = safeNumber(competitorData.seoScore || competitorData.audit?.seo?.score);
-  const seoDiff = targetSEO - compSEO;
+  const buildComparison = (label, targetVal, compVal, higherIsBetter = true) => {
+    const t = safeNumber(targetVal);
+    const c = safeNumber(compVal);
+    const diff = t - c;
+    const winner = diff === 0 ? "Tie" : (higherIsBetter ? diff > 0 : diff < 0) ? "You" : "Competitor";
+    const loser = winner === "Tie" ? "Tie" : winner === "You" ? "Competitor" : "You";
+    const impact = Math.abs(diff);
 
-  const targetAEO = safeNumber(targetData.aeoScore || targetData.audit?.aeo?.score);
-  const compAEO = safeNumber(competitorData.aeoScore || competitorData.audit?.aeo?.score);
-  const aeoDiff = targetAEO - compAEO;
+    return {
+      metric: label,
+      target: t,
+      competitor: c,
+      difference: diff,
+      winner,
+      loser,
+      impact,
+      evidence: `Your ${label} score: ${t}. Competitor's ${label} score: ${c}. Gap: ${Math.abs(diff)} point(s).`,
+      reason: winner === "Tie" ? `Both sites scored identically on ${label}.` : `${winner === "You" ? "You outperform" : "Competitor outperforms you"} on ${label} by ${impact} point(s).`,
+      recommendedAction: winner === "You"
+        ? `Maintain your ${label} advantage; monitor for competitor improvements.`
+        : winner === "Tie"
+          ? `Look for differentiation opportunities in ${label} since scores are currently even.`
+          : `Prioritize improving ${label} — closing this ${impact}-point gap is the most direct lever identified for this metric.`
+    };
+  };
 
-  const targetEEAT = safeNumber(targetData.eeatScore || targetData.audit?.eeat?.score);
-  const compEEAT = safeNumber(competitorData.eeatScore || competitorData.audit?.eeat?.score);
-  const eeatDiff = targetEEAT - compEEAT;
-
-  const targetAuthority = safeNumber(targetData.authorityScore || targetData.topicalAuthority?.authorityScore);
-  const compAuthority = safeNumber(competitorData.authorityScore || competitorData.topicalAuthority?.authorityScore);
-  const authorityDiff = targetAuthority - compAuthority;
-
-  const targetTrust = safeNumber(targetData.trustScore || targetData.trustSignals?.trustScore);
-  const compTrust = safeNumber(competitorData.trustScore || competitorData.trustSignals?.trustScore);
-  const trustDiff = targetTrust - compTrust;
+  const metricComparisons = [
+    buildComparison("SEO", targetData.seoScore, competitorData.seoScore),
+    buildComparison("AEO", targetData.aeoScore, competitorData.aeoScore),
+    buildComparison("E-E-A-T", targetData.eeatScore, competitorData.eeatScore),
+    buildComparison("Authority", targetData.authorityScore, competitorData.authorityScore),
+    buildComparison("Trust", targetData.trustScore, competitorData.trustScore),
+    buildComparison("AI Citation", targetData.citationScore, competitorData.citationScore)
+  ];
 
   const targetHeadings = [...safeArray(targetData.h2s), ...safeArray(targetData.h3s)].map(h => String(h).toLowerCase());
   const compHeadings = [...safeArray(competitorData.h2s), ...safeArray(competitorData.h3s)];
-
   const headingGaps = compHeadings.filter(compH => {
     const cleanCompH = String(compH).toLowerCase();
     return !targetHeadings.some(targetH => targetH.includes(cleanCompH.substring(0, 12)));
@@ -2955,41 +3471,44 @@ export function compareTargetToCompetitor(targetData, competitorData) {
 
   const targetKeywords = safeArray(targetData.keywords).map(k => String(k).toLowerCase());
   const compKeywords = safeArray(competitorData.keywords);
-
   const keywordGaps = compKeywords.filter(compK => !targetKeywords.includes(String(compK).toLowerCase()));
 
   const targetSchemas = safeArray(targetData.schema?.detectedTypes);
   const compSchemas = safeArray(competitorData.schema?.detectedTypes);
   const schemaGaps = compSchemas.filter(s => !targetSchemas.includes(s));
 
-  const targetEntities = safeArray(targetData.entities?.brands || targetData.entities).map(e => String(e).toLowerCase());
-  const compEntities = safeArray(competitorData.entities?.brands || competitorData.entities);
+  const targetEntities = safeArray(targetData.entities).map(e => String(e).toLowerCase());
+  const compEntities = safeArray(competitorData.entities);
   const entityGaps = compEntities.filter(compE => !targetEntities.includes(String(compE).toLowerCase()));
 
   const targetOverall = safeNumber(targetData.overallAIVisibilityScore);
   const competitorOverall = safeNumber(competitorData.overallAIVisibilityScore);
+  const overallDiff = targetOverall - competitorOverall;
+
+  const winningMetrics = metricComparisons.filter(m => m.winner === "You");
+  const losingMetrics = metricComparisons.filter(m => m.winner === "Competitor").sort((a, b) => b.impact - a.impact);
 
   let leaderBrand = "Tie";
   let winnerReason = "Both sites present matching technical visibility signals.";
-
-  if (targetOverall > competitorOverall) {
+  if (overallDiff > 0) {
     leaderBrand = targetData.title || "Your Platform";
-    winnerReason = `Commands a clear performance lead overall with stronger semantic indexing and structure.`;
-  } else if (competitorOverall > targetOverall) {
+    winnerReason = `Leads overall by ${overallDiff} point(s), driven primarily by ${winningMetrics.map(m => m.metric).join(", ") || "balanced performance across metrics"}.`;
+  } else if (overallDiff < 0) {
     leaderBrand = competitorData.title || "Competitor Platform";
-    winnerReason = `Competitor holds optimization edges. Enhance schema code and content length to close gaps.`;
+    winnerReason = `Competitor leads overall by ${Math.abs(overallDiff)} point(s), primarily via stronger ${losingMetrics.map(m => m.metric).join(", ") || "overall optimization"}.`;
   }
 
   return {
     success: true,
     winner: leaderBrand,
     winnerReason,
+    overall: { target: targetOverall, competitor: competitorOverall, difference: overallDiff },
+    metricComparisons,
+    topPriorityAction: losingMetrics.length > 0 ? losingMetrics[0].recommendedAction : "Maintain current standing across all measured metrics.",
+    // Backward-compatible shape for existing frontend contract.
     metrics: {
-      seo: { target: targetSEO, competitor: compSEO, difference: seoDiff, leader: seoDiff > 0 ? "You" : (seoDiff < 0 ? "Competitor" : "Tie") },
-      aeo: { target: targetAEO, competitor: compAEO, difference: aeoDiff, leader: aeoDiff > 0 ? "You" : (aeoDiff < 0 ? "Competitor" : "Tie") },
-      eeat: { target: targetEEAT, competitor: compEEAT, difference: eeatDiff, leader: eeatDiff > 0 ? "You" : (eeatDiff < 0 ? "Competitor" : "Tie") },
-      authority: { target: targetAuthority, competitor: compAuthority, difference: authorityDiff, leader: authorityDiff > 0 ? "You" : (authorityDiff < 0 ? "Competitor" : "Tie") },
-      trust: { target: targetTrust, competitor: compTrust, difference: trustDiff, leader: trustDiff > 0 ? "You" : (trustDiff < 0 ? "Competitor" : "Tie") }
+      seo: metricComparisons[0], aeo: metricComparisons[1], eeat: metricComparisons[2],
+      authority: metricComparisons[3], trust: metricComparisons[4]
     },
     gaps: {
       headingGaps: [...new Set(headingGaps)].slice(0, 10),
@@ -3001,7 +3520,6 @@ export function compareTargetToCompetitor(targetData, competitorData) {
     }
   };
 }
-
 // =========================================================================
 // ========== SECTION 15.5: SINGLE URL ANALYZER ORCHESTRATOR ==============
 // =========================================================================
@@ -3024,6 +3542,8 @@ export function buildBlockedPayload(url, crawl) {
     crawlQuality: crawl?.reliability?.qualityScore ?? 0,
     blockSignals: safeArray(crawl?.blockCheck?.signals),
     redirectCount: safeNumber(crawl?.redirectCount, 0)
+    contentQuality: contentQualityAudit,
+      semanticSeoDetail: semanticSeoAudit,
   };
 }
 
@@ -3118,6 +3638,22 @@ export async function analyzeSingleUrl(url) {
     const sitemapData = await detectSitemap(crawl.finalUrl, robotsData);
     void sitemapDataSeed;
   const schemasDetected = auditPageSchemas($, crawl.html);
+    const mixedContent = detectMixedContent($, crawl.finalUrl);
+    const brokenAssetData = await sampleBrokenAssets($, crawl.finalUrl, 6);
+    const securityHeaders = analyzeSecurityHeaders(crawl.headers);
+    pageData.securityHeaders = securityHeaders; // consumed by Trust scoring (Phase 2)
+
+    const technicalSeoAudit = calculateTechnicalSeoScore({
+      pageData,
+      headers: crawl.headers,
+      robotsData,
+      sitemapData,
+      redirectCount: crawl.redirectCount,
+      httpVersion: crawl.httpVersion,
+      httpVersion: result?.httpVersion || null,
+      mixedContent,
+      brokenAssetData
+    });
    const seoAudit = await calculateDynamicSeoScore(pageData, loadTimeMs, {
   robotsData,
   sitemapData,
@@ -3150,7 +3686,8 @@ export async function analyzeSingleUrl(url) {
     const trustAudit = scanDynamicTrustSignals($, crawl.html, crawl.finalUrl, enrichedPageData);
 
     
-    const schemaBlock = buildSchemaRecommendations(schemasDetected.detectedTypes, pageData.title, pageData.metaDescription, crawl.finalUrl);
+   const websiteType = inferWebsiteType(schemasDetected.detectedTypes, { ...pageData, resolvedUrl: crawl.finalUrl });
+   const schemaBlock = buildSchemaRecommendations(schemasDetected.detectedTypes, pageData.title, pageData.metaDescription, crawl.finalUrl, websiteType);
     const imageSeoAudit = calculateImageSeoScore(pageData);
     const internalLinkAudit = calculateInternalLinkScoreDetailed(pageData.linkAnalysisDetail);
     const localSeoAudit = calculateLocalSeoScore(pageData, schemasDetected);
@@ -3264,13 +3801,19 @@ export async function analyzeSingleUrl(url) {
       modifiedDate: pageData.modifiedDate,
       author: pageData.author,
       schemaCount: schemasDetected.schemaCount,
-      schema: {
+      technicalSeo: technicalSeoAudit,
+      mixedContent,
+      brokenAssets: brokenAssetData,
+      securityHeaders,
+     schema: {
         detectedTypes: schemasDetected.detectedTypes,
         jsonLd: schemasDetected.jsonLd,
         microdata: schemasDetected.microdata,
         rdfa: schemasDetected.rdfa,
-        validation: schemasDetected.validation
+        validation: schemasDetected.validation,
+        richResultEligibility: schemasDetected.richResultEligibility
       },
+      websiteType,
       crawl: {
         method: crawl.crawlMethod,
         status: crawl.status,

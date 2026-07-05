@@ -671,7 +671,60 @@ export function detectBlockedReason(html, status, redirectCount = 0) {
 
   return { blocked: false, system: null, reason: null, signals };
 }
+/**
+ * Stage 4: DOM validation. Confirms the response is a structurally real
+ * HTML document (complete <html>/<body> tags, sufficient tag density) —
+ * not a truncated response, a JSON error blob, or a near-empty stub.
+ */
+export function validateDomStructure(html) {
+  const raw = safeText(html);
+  const lower = raw.toLowerCase();
+  const hasHtmlTag = lower.includes("<html") && lower.includes("</html>");
+  const hasBody = lower.includes("<body") && lower.includes("</body>");
+  const tagMatches = raw.match(/<[a-z][a-z0-9]*(\s|>)/gi) || [];
+  const tagCount = tagMatches.length;
+  const valid = hasHtmlTag && hasBody && tagCount >= 10;
 
+  return {
+    valid,
+    hasHtmlTag,
+    hasBody,
+    tagCount,
+    reason: valid
+      ? "Document contains a well-formed HTML structure with a body and sufficient tag density."
+      : !hasHtmlTag
+        ? "Response is missing complete <html>...</html> structure."
+        : !hasBody
+          ? "Response is missing a <body>...</body> element."
+          : `Document contains only ${tagCount} HTML tag(s), too sparse to be real page markup.`
+  };
+}
+
+/**
+ * Stage 5: Content validation. Confirms the captured HTML is genuine
+ * website content and not an error/interstitial/challenge page, by
+ * checking for known block signatures AND a minimum real visible-text
+ * threshold. This is the explicit "is this a real page, not an error page"
+ * gate that must pass before any scoring is allowed to run.
+ */
+export function validateContentAuthenticity(html, status, blockCheck) {
+  const raw = safeText(html);
+  const visibleText = raw
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const visibleTextLength = visibleText.length;
+
+  if (blockCheck?.blocked) {
+    return { valid: false, visibleTextLength, reason: blockCheck.reason || "Content matched a known block/challenge signature." };
+  }
+  if (visibleTextLength < 150) {
+    return { valid: false, visibleTextLength, reason: `Visible text content is only ${visibleTextLength} characters — too thin to represent a real page.` };
+  }
+  return { valid: true, visibleTextLength, reason: "Visible content passed authenticity checks (no block signatures, sufficient text density)." };
+}
 // =========================================================================
 // ========== SECTION 3: ROBOTS.TXT & SITEMAP DETECTION ====================
 // =========================================================================
@@ -1205,105 +1258,244 @@ export function assessCrawlReliability({ html, status, blockCheck, redirectCount
     reliable: result.score >= 60
   };
 }
-export async function smartCrawl(url) {
-  let result = null;
-  let crawlMethod = "STANDARD_GET";
-  let status = 500;
-  let retryCount = 0;
-  let redirectCount = 0; 
-  let infiniteScrollDetected = false;
+/**
+ * Stage 3: Stealth Playwright retry. Same rendering approach as
+ * fetchPlaywright, but with headless-detection evasions applied (patches
+ * navigator.webdriver, plugins, languages, adds realistic headers, and
+ * simulates minimal mouse movement) — used only when a normal Playwright
+ * render is still blocked/challenged.
+ */
+export async function fetchPlaywrightStealth(url) {
+  const browser = await getBrowserInstance();
+  if (!browser) return null;
+
+  const context = await browser.newContext({
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    viewport: { width: 1366, height: 768 },
+    deviceScaleFactor: 1,
+    locale: "en-US",
+    timezoneId: "America/New_York",
+    bypassCSP: true,
+    extraHTTPHeaders: {
+      "Accept-Language": "en-US,en;q=0.9",
+      "Upgrade-Insecure-Requests": "1",
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "none",
+      "Sec-Fetch-User": "?1"
+    }
+  });
+
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+    Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3, 4, 5] });
+    Object.defineProperty(navigator, "languages", { get: () => ["en-US", "en"] });
+    window.chrome = { runtime: {} };
+  });
+
+  await context.route("**/*.{png,jpg,jpeg,gif,svg,woff,woff2,ttf,otf,ico}", route => route.abort());
+  await context.route("**/*analytics*/**", route => route.abort());
+
+  const page = await context.newPage();
+  page.setDefaultTimeout(25000);
 
   try {
-   const outcome = await withHardTimeout(withRetry(() => fetchAxios(url), 2, 1200), CRAWL_HARD_TIMEOUT_MS, "Standard fetch");
+    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
+    try { await page.waitForLoadState("networkidle", { timeout: 5000 }); } catch {}
+
+    try {
+      await page.mouse.move(200, 300);
+      await page.waitForTimeout(600);
+      await page.mouse.move(400, 500);
+      await page.waitForTimeout(1200);
+    } catch {}
+
+    let infiniteScrollDetected = false;
+    try {
+      const initialHeight = await page.evaluate(() => document.body.scrollHeight);
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(1000);
+      const newHeight = await page.evaluate(() => document.body.scrollHeight);
+      if (newHeight > initialHeight + 200) infiniteScrollDetected = true;
+    } catch {}
+
+    const content = await page.content();
+    const status = response ? response.status() : 200;
+    const finalUrl = page.url() || url;
+    return { html: content, status, finalUrl, infiniteScrollDetected };
+  } finally {
+    await page.close().catch(() => {});
+    await context.close().catch(() => {});
+    browserLastUsedAt = Date.now();
+  }
+}
+
+// --- Internal stage runners (not exported; used only by smartCrawl) ---
+
+async function attemptStandardGet(url) {
+  let result = null;
+  let status = 0;
+  let retryCount = 0;
+  let redirectCount = 0;
+  let httpVersion = null;
+  let headers = {};
+
+  try {
+    const outcome = await withHardTimeout(withRetry(() => fetchAxios(url), 2, 1200), CRAWL_HARD_TIMEOUT_MS, "Standard fetch");
     result = outcome.result;
     retryCount = outcome.attempts - 1;
-    status = result?.status || 500;
+    status = result?.status || 0;
     redirectCount = safeNumber(result?.redirectCount, 0);
+    httpVersion = result?.httpVersion || null;
+    headers = result?.headers || {};
   } catch (err) {
     retryCount = safeNumber(err?.attempts, 1) - 1;
     logger.warn("CRAWL", "standard_fetch_failed", { url, error: err.message, retryCount });
   }
 
-  let html = result?.html || "";
-  let finalUrl = result?.finalUrl || url;
+  const html = result?.html || "";
+  const finalUrl = result?.finalUrl || url;
+  const blockCheck = detectBlockedReason(html, status, redirectCount);
+  const domValidation = validateDomStructure(html);
+  const contentValidation = validateContentAuthenticity(html, status, blockCheck);
 
- let blockCheck = detectBlockedReason(html, status, redirectCount);
+  return {
+    stageName: "STANDARD_GET", crawlMethod: "STANDARD_GET",
+    html, status, finalUrl, retryCount, redirectCount, httpVersion, headers,
+    infiniteScrollDetected: false,
+    domValidation, contentValidation, blockCheck,
+    success: domValidation.valid && contentValidation.valid && !blockCheck.blocked
+  };
+}
 
-  const requiresUpgrade =
-    blockCheck.blocked ||
-    !html ||
-    html.length < 1500 ||
-    html.toLowerCase().includes("javascript is required") ||
-    html.toLowerCase().includes("enable javascript");
-
-  if (requiresUpgrade) {
-    logger.info("CRAWL", "upgrading_to_headless_browser", { url });
-    try {
-      const pwResult = await withHardTimeout(fetchPlaywright(url), CRAWL_HARD_TIMEOUT_MS, "Headless render");
-      if (pwResult && pwResult.html && pwResult.html.length >= 300) {
-      const pwBlockCheck = detectBlockedReason(pwResult.html, pwResult.status, redirectCount);
-        infiniteScrollDetected = !!pwResult.infiniteScrollDetected;
-        if (!pwBlockCheck.blocked) {
-          html = pwResult.html;
-          status = pwResult.status;
-          finalUrl = pwResult.finalUrl;
-          crawlMethod = "PLAYWRIGHT_RENDERED";
-          blockCheck = pwBlockCheck;
-        } else {
-          html = pwResult.html;
-          status = pwResult.status;
-          blockCheck = pwBlockCheck;
-        }
-      }
-    } catch (pwErr) {
-      logger.error("CRAWL", "headless_fallback_failed", { url, error: pwErr.message });
-    }
+async function attemptPlaywrightRender(url, label, fetchFn) {
+  let pwResult = null;
+  try {
+    pwResult = await withHardTimeout(fetchFn(url), CRAWL_HARD_TIMEOUT_MS, `${label} render`);
+  } catch (err) {
+    logger.error("CRAWL", `${label.toLowerCase()}_render_failed`, { url, error: err.message });
   }
 
-  const isValidHtml = html && html.toLowerCase().includes("<html") && html.toLowerCase().includes("</html>");
-  if (!isValidHtml && !blockCheck.blocked) {
-    blockCheck = {
-      blocked: true,
-      system: "Malformed DOM Validation",
-      reason: "Target document returned non-HTML or incomplete DOM nodes."
+  if (!pwResult || !pwResult.html) {
+    return {
+      stageName: label, crawlMethod: label,
+      html: "", status: 0, finalUrl: url, retryCount: 0, redirectCount: 0, httpVersion: null, headers: {},
+      infiniteScrollDetected: false,
+      domValidation: { valid: false, reason: `${label} did not return any content (browser unavailable or navigation failed).` },
+      contentValidation: { valid: false, visibleTextLength: 0, reason: `${label} produced no HTML to validate.` },
+      blockCheck: { blocked: true, system: `${label} Unavailable`, reason: `${label} attempt failed to produce content.`, signals: ["render_failed"] },
+      success: false
     };
   }
 
-const reliability = assessCrawlReliability({
-    html,
-    status,
-    blockCheck,
-    redirectCount,
-    crawlMethod,
-    contentLength: html ? html.length : 0
+  const { html, status, finalUrl, infiniteScrollDetected } = pwResult;
+  const blockCheck = detectBlockedReason(html, status, 0);
+  const domValidation = validateDomStructure(html);
+  const contentValidation = validateContentAuthenticity(html, status, blockCheck);
+
+  return {
+    stageName: label, crawlMethod: label,
+    html, status, finalUrl, retryCount: 0, redirectCount: 0, httpVersion: null, headers: {},
+    infiniteScrollDetected: Boolean(infiniteScrollDetected),
+    domValidation, contentValidation, blockCheck,
+    success: domValidation.valid && contentValidation.valid && !blockCheck.blocked
+  };
+}
+
+function finalizeCrawlResult(winningStage, allStages) {
+  const stagesAttempted = allStages.map(s => ({
+    stage: s.stageName, status: s.status, success: s.success,
+    blocked: s.blockCheck?.blocked || false, blockSystem: s.blockCheck?.system || null,
+    domValid: s.domValidation?.valid, contentValid: s.contentValidation?.valid
+  }));
+
+  if (!winningStage) {
+    const lastStage = allStages[allStages.length - 1];
+    const blockCheck = lastStage.blockCheck?.blocked
+      ? lastStage.blockCheck
+      : {
+          blocked: true,
+          system: "All Crawl Strategies Exhausted",
+          reason: `Standard GET, Playwright rendering, and stealth Playwright rendering all failed to produce valid, unblocked content. Last stage (${lastStage.stageName}) reason: ${lastStage.contentValidation?.reason || lastStage.domValidation?.reason || "unknown validation failure"}.`,
+          signals: ["all_stages_exhausted"]
+        };
+
+    return {
+      html: lastStage.html, finalUrl: lastStage.finalUrl, status: lastStage.status,
+      crawlMethod: lastStage.crawlMethod, blockCheck,
+      retryCount: lastStage.retryCount, redirectCount: lastStage.redirectCount,
+      httpVersion: lastStage.httpVersion, headers: lastStage.headers,
+      infiniteScrollDetected: lastStage.infiniteScrollDetected,
+      contentLength: lastStage.html ? lastStage.html.length : 0,
+      stagesAttempted,
+      reliability: { confidenceScore: 0, qualityScore: 0, status: "Critical Improvements Needed", metrics: [], reliable: false }
+    };
+  }
+
+  const reliability = assessCrawlReliability({
+    html: winningStage.html, status: winningStage.status, blockCheck: winningStage.blockCheck,
+    redirectCount: winningStage.redirectCount, crawlMethod: winningStage.crawlMethod,
+    contentLength: winningStage.html ? winningStage.html.length : 0
   });
 
-  // A crawl can pass every individual block-signature check yet still be
-  // unreliable enough (e.g. garbled partial content) that scoring it would
-  // produce meaningless results. Escalate low-confidence crawls into the
-  // same blocked-response path so downstream scoring is skipped honestly.
-  if (!blockCheck.blocked && !reliability.reliable) {
-    blockCheck = {
+  let finalBlockCheck = winningStage.blockCheck;
+  if (!finalBlockCheck.blocked && !reliability.reliable) {
+    finalBlockCheck = {
       blocked: true,
       system: "Low Crawl Confidence",
-      reason: `Crawl confidence score (${reliability.confidenceScore}/100) fell below the reliability threshold; downstream SEO analysis was skipped to avoid generating scores from unreliable data.`,
+      reason: `Crawl confidence score (${reliability.confidenceScore}/100) fell below the reliability threshold after ${stagesAttempted.length} stage(s); downstream SEO analysis was skipped to avoid generating scores from unreliable data.`,
       signals: ["low_confidence"]
     };
   }
 
   return {
-    html,
-    finalUrl,
-    status,
-    headers: result?.headers || {},
-    crawlMethod,
-    blockCheck,
-    retryCount,
-    redirectCount,
-    infiniteScrollDetected,
-    contentLength: html ? html.length : 0,
-    reliability
+    html: winningStage.html, finalUrl: winningStage.finalUrl, status: winningStage.status,
+    crawlMethod: winningStage.crawlMethod, blockCheck: finalBlockCheck,
+    retryCount: winningStage.retryCount, redirectCount: winningStage.redirectCount,
+    httpVersion: winningStage.httpVersion, headers: winningStage.headers,
+    infiniteScrollDetected: winningStage.infiniteScrollDetected,
+    contentLength: winningStage.html ? winningStage.html.length : 0,
+    stagesAttempted, reliability
   };
+}
+
+/**
+ * Multi-stage crawl pipeline:
+ *   1. Standard HTTP GET
+ *   2. Automatic Playwright retry
+ *   3. Stealth Playwright retry
+ *   4. DOM validation (per stage)
+ *   5. Content validation (per stage)
+ *   6. Block detection (per stage)
+ *   7. Final blocked response ONLY if every stage above fails
+ *
+ * HTTP 401/403/429 no longer cause an immediate stop — they simply mark a
+ * stage as unsuccessful, triggering escalation to the next stage. If
+ * Playwright (stealth or not) successfully renders real content after an
+ * earlier 401/403/429, that content is used and full analysis proceeds.
+ */
+export async function smartCrawl(url) {
+  const stages = [];
+
+  const stage1 = await attemptStandardGet(url);
+  stages.push(stage1);
+  logger.info("CRAWL", "stage_completed", { url, stage: stage1.stageName, success: stage1.success, status: stage1.status });
+  if (stage1.success) return finalizeCrawlResult(stage1, stages);
+
+  logger.info("CRAWL", "escalating_to_playwright", { url, priorStatus: stage1.status, priorBlockSystem: stage1.blockCheck?.system });
+  const stage2 = await attemptPlaywrightRender(url, "PLAYWRIGHT_RENDERED", fetchPlaywright);
+  stages.push(stage2);
+  logger.info("CRAWL", "stage_completed", { url, stage: stage2.stageName, success: stage2.success, status: stage2.status });
+  if (stage2.success) return finalizeCrawlResult(stage2, stages);
+
+  logger.info("CRAWL", "escalating_to_stealth_playwright", { url, priorBlockSystem: stage2.blockCheck?.system });
+  const stage3 = await attemptPlaywrightRender(url, "PLAYWRIGHT_STEALTH_RENDERED", fetchPlaywrightStealth);
+  stages.push(stage3);
+  logger.info("CRAWL", "stage_completed", { url, stage: stage3.stageName, success: stage3.success, status: stage3.status });
+  if (stage3.success) return finalizeCrawlResult(stage3, stages);
+
+  logger.warn("CRAWL", "all_stages_exhausted", { url, stagesAttempted: stages.map(s => s.stageName) });
+  return finalizeCrawlResult(null, stages);
 }
 // =========================================================================
 // ========== SECTION 5: STRUCTURAL ANALYSIS & HTML EXTRACTION ENGINE ======
@@ -3536,7 +3728,8 @@ export function buildBlockedPayload(url, crawl) {
     crawlConfidence: crawl?.reliability?.confidenceScore ?? 0,
     crawlQuality: crawl?.reliability?.qualityScore ?? 0,
     blockSignals: safeArray(crawl?.blockCheck?.signals),
-    redirectCount: safeNumber(crawl?.redirectCount, 0)
+    redirectCount: safeNumber(crawl?.redirectCount, 0),
+    stagesAttempted: safeArray(crawl?.stagesAttempted)
   };
 }
 

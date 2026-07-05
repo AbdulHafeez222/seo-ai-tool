@@ -1984,10 +1984,6 @@ export function auditPageSchemas($, html) {
   };
 }
  
- * Infers the most likely website type from existing evidence (detected
- * schema, URL path patterns, and extracted entities) so schema
- * recommendations can be prioritized rather than generic.
- */
 export function inferWebsiteType(detectedTypes, pageData) {
   const types = safeArray(detectedTypes).map(t => String(t).toLowerCase());
   const url = safeText(pageData?.resolvedUrl).toLowerCase();

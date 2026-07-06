@@ -1992,7 +1992,9 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
   // Backward-compatible flat name lists for existing frontend fields
   // (brands/organizations/services/locations/people/products as plain
   // string arrays), now sourced only from verified data where possible,
-  // falling back to a neutral placeholder rather than a fabricated name.
+  // falling back to an empty array rather than a fabricated name — showing
+  // invented entity names (e.g. "Industry Specialist") as if they were real
+  // detected data would violate the verified-entities-only requirement.
   const namesOnly = (arr, fallback) => arr.length > 0 ? arr.map(i => i.name) : fallback;
 
   return {
@@ -2003,12 +2005,15 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
     candidateEntityCount: candidateCount,
 
     // Legacy flat fields preserved for existing payload/frontend compatibility.
+    // Only "Brand Authority" remains as a fallback since other scoring logic
+    // (e.g. isGenericTitle checks) already recognizes it as a deliberate
+    // "brand undetermined" marker, not a fabricated entity name.
     brands: namesOnly(finalVerified.brands, [brandName || "Brand Authority"]),
     organizations: namesOnly(finalVerified.organizations, [brandName || "Brand Authority"]),
-    locations: namesOnly([...finalVerified.locations], namesOnly(finalCandidates.locations, ["Global Domain Context"])),
-    services: namesOnly(finalCandidates.services, ["Digital Framework Optimizations"]),
-    people: namesOnly(finalVerified.people, ["Industry Specialist"]),
-    products: namesOnly(finalVerified.products, ["Service Platform Matrix"]),
+    locations: namesOnly([...finalVerified.locations], namesOnly(finalCandidates.locations, [])),
+    services: namesOnly(finalCandidates.services, []),
+    people: namesOnly(finalVerified.people, []),
+    products: namesOnly(finalVerified.products, []),
     entities: [...new Set([
       ...namesOnly(finalVerified.brands, []),
       ...namesOnly(finalCandidates.services, []),
@@ -3908,6 +3913,7 @@ export function compareTargetToCompetitor(targetData, competitorData) {
       competitor: c,
       difference: diff,
       winner,
+      leader: winner,
       loser,
       impact,
       evidence: `Your ${label} score: ${t}. Competitor's ${label} score: ${c}. Gap: ${Math.abs(diff)} point(s).`,

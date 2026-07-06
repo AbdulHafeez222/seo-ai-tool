@@ -2007,9 +2007,9 @@ function renderCitationOpportunities(data) {
   document.getElementById("citationOppContent").innerHTML = weakEngines.map(([key, v]) => `
     <div class="ai-box">
       <strong>${escapeHtml(engineLabels[key] || key)} Engine Opportunity:</strong>
-      <p>Current citation likelihood is scored as "${escapeHtml(v.status)}" at ${v.score}%.</p>
+      <p>Current citation likelihood is scored as "${escapeHtml(v.status)}" at ${v.score}% (potential: ${v.potentialScore ?? v.score}%).</p>
       <span class="badge badge-orange" style="margin-top:5px;">Priority: ${v.score < 40 ? 'High' : 'Medium'}</span>
-      <p style="margin-top:5px; font-size:13px; color:var(--text-muted);">Improving structured data coverage and direct-answer formatting typically raises this engine's citation probability.</p>
+      ${safeArray(v.missingSignals).length > 0 ? `<ul style="margin-top:8px; font-size:13px;">${v.missingSignals.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>` : ''}
     </div>`).join('');
 }
 
@@ -2546,6 +2546,13 @@ function downloadPDF() {
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   }).save();
 }
+  document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".copy-schema-btn");
+  if (!btn) return;
+  const raw = btn.getAttribute("data-schema")
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+  copyToClipboard(raw, btn);
+});
 </script>
 </body>
 </html>

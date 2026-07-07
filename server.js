@@ -7,6 +7,8 @@ import path from "path";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 dotenv.config();
 
@@ -353,6 +355,105 @@ function safeGetProperty(obj, path) {
   }
 }
 
+// --- User accounts ---------------------------------------------------------
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  // Fatal, by design: authentication must never sign tokens with a
+  // hardcoded or generated fallback secret. Fail loudly at startup rather
+  // than silently running with an insecure key.
+  console.error("FATAL: JWT_SECRET environment variable is required and was not set. Refusing to start.");
+  logger.error("AUTH", "jwt_secret_missing_fatal", { message: "JWT_SECRET environment variable is required and was not set." });
+  process.exit(1);
+}
+
+// --- Login brute-force protection (per IP and per email) ------------------
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+const loginAttemptsByIp = new Map();
+const loginAttemptsByEmail = new Map();
+
+function getLoginAttemptRecord(map, key) {
+  let record = map.get(key);
+  if (!record) {
+    record = { count: 0, lockedUntil: 0, firstAttemptAt: Date.now() };
+    map.set(key, record);
+  }
+  return record;
+}
+
+function isLoginLocked(ip, email) {
+  const now = Date.now();
+  const ipLockedUntil = loginAttemptsByIp.get(ip)?.lockedUntil || 0;
+  const emailLockedUntil = loginAttemptsByEmail.get(email)?.lockedUntil || 0;
+  const lockedUntil = Math.max(ipLockedUntil, emailLockedUntil);
+  return lockedUntil > now ? lockedUntil : 0;
+}
+
+function recordFailedLogin(ip, email) {
+  const now = Date.now();
+  const ipRecord = getLoginAttemptRecord(loginAttemptsByIp, ip);
+  const emailRecord = getLoginAttemptRecord(loginAttemptsByEmail, email);
+  ipRecord.count += 1;
+  emailRecord.count += 1;
+  if (ipRecord.count >= LOGIN_MAX_ATTEMPTS) ipRecord.lockedUntil = now + LOGIN_LOCKOUT_MS;
+  if (emailRecord.count >= LOGIN_MAX_ATTEMPTS) emailRecord.lockedUntil = now + LOGIN_LOCKOUT_MS;
+}
+
+function resetLoginAttempts(ip, email) {
+  loginAttemptsByIp.delete(ip);
+  loginAttemptsByEmail.delete(email);
+}
+
+// Periodic cleanup of stale, non-locked entries to prevent unbounded
+// memory growth from one-off failed attempts that never escalate.
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of loginAttemptsByIp.entries()) {
+    if (record.lockedUntil < now && now - record.firstAttemptAt > LOGIN_LOCKOUT_MS) loginAttemptsByIp.delete(key);
+  }
+  for (const [key, record] of loginAttemptsByEmail.entries()) {
+    if (record.lockedUntil < now && now - record.firstAttemptAt > LOGIN_LOCKOUT_MS) loginAttemptsByEmail.delete(key);
+  }
+}, 5 * 60 * 1000).unref();
+
+const userSchema = new mongoose.Schema(
+  {
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    passwordHash: { type: String, required: true },
+    apiKey: { type: String, required: true, unique: true },
+    plan: { type: String, enum: Object.keys(PLAN_LIMITS), default: "free" },
+    scansToday: { type: Number, default: 0 },
+    lastScanReset: { type: Date, default: Date.now }
+  },
+  { timestamps: true }
+);
+
+export const User = mongoose.models.User || mongoose.model("User", userSchema);
+
+export function generateApiKey() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+export async function hashPassword(password) {
+  return bcrypt.hash(password, 12);
+}
+
+export async function verifyPasswordHash(password, hash) {
+  return bcrypt.compare(password, hash);
+}
+
+export function signAuthToken(user) {
+  return jwt.sign({ sub: user._id.toString(), email: user.email }, JWT_SECRET, { expiresIn: "30d" });
+}
+
+export function verifyAuthToken(token) {
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
+
 // =========================================================================
 // ========== SECTION 1: EXPRESS MIDDLEWARE SETUP =========================
 // =========================================================================
@@ -428,9 +529,67 @@ function pruneAnonymousUsers() {
 
 setInterval(pruneAnonymousUsers, 30 * 60 * 1000).unref();
 
-export function authenticateAndRateLimit(req, res, next) {
+export async function authenticateAndRateLimit(req, res, next) {
   const authHeader = safeText(req.headers.authorization || req.query.apiKey);
-  const key = authHeader.replace(/^Bearer\s+/i, "").slice(0, 128);
+  const rawToken = authHeader.replace(/^Bearer\s+/i, "");
+
+  // --- Registered-account (JWT) authentication, tried first -------------
+  // Only attempted when MongoDB is connected and the token looks like a
+  // JWT (three dot-separated segments). Any failure at any point here
+  // (invalid token, user not found, DB error) falls through to the
+  // original in-memory logic below rather than blocking the request.
+  if (mongoose.connection.readyState === 1 && rawToken && rawToken.split(".").length === 3) {
+    try {
+      const decoded = verifyAuthToken(rawToken);
+      if (decoded?.sub) {
+        const dbUser = await User.findById(decoded.sub);
+        if (dbUser) {
+          if (Date.now() - new Date(dbUser.lastScanReset).getTime() > 24 * 60 * 60 * 1000) {
+            dbUser.scansToday = 0;
+            dbUser.lastScanReset = new Date();
+          }
+
+          const limit = PLAN_LIMITS[dbUser.plan] || 5;
+          if (dbUser.scansToday >= limit) {
+            return res.status(429).json({
+              success: false,
+              status: "LIMIT_EXCEEDED",
+              message: `You have reached your tier daily limits (${dbUser.scansToday}/${limit} Scans). Please upgrade plans.`
+            });
+          }
+
+          // Plain-object mirror so existing route code (which mutates
+          // req.user.scansToday directly, e.g. in /scan and /compare)
+          // works completely unchanged regardless of auth method.
+          req.user = {
+            email: dbUser.email,
+            plan: dbUser.plan,
+            scansToday: dbUser.scansToday,
+            lastScanReset: dbUser.lastScanReset.getTime(),
+            apiKey: dbUser.apiKey
+          };
+
+          // Persist whatever the route mutated on req.user back to
+          // MongoDB after the response completes — no route handler
+          // needs to know or care that this user is Mongo-backed.
+          res.on("finish", () => {
+            User.updateOne(
+              { _id: dbUser._id },
+              { scansToday: req.user.scansToday, lastScanReset: new Date(req.user.lastScanReset) }
+            ).catch(err => logger.error("AUTH", "usage_persist_failed", { error: err.message, userId: dbUser._id.toString() }));
+          });
+
+          return next();
+        }
+      }
+    } catch (err) {
+      logger.warn("AUTH", "jwt_auth_fallback", { error: err.message });
+      // Intentionally fall through to the unchanged logic below.
+    }
+  }
+
+  // --- Original in-memory API-key / anonymous logic, unchanged ----------
+  const key = rawToken.slice(0, 128);
 
   let user = key ? saasUsers[key] : null;
   if (!user) {
@@ -4649,6 +4808,120 @@ app.get("/api/status", (req, res) => {
     uptimeSeconds: Math.round(process.uptime())
   });
 });
+
+// =========================================================================
+// ========== SECTION 15.7: USER ACCOUNT ROUTES ============================
+// =========================================================================
+
+app.post("/auth/register", asyncHandler(async (req, res) => {
+  const email = safeText(req.body?.email).toLowerCase();
+  const password = safeText(req.body?.password);
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ success: false, message: "A valid email address is required." });
+  }
+  if (!password || password.length < 8) {
+    return res.status(400).json({ success: false, message: "Password must be at least 8 characters long." });
+  }
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ success: false, message: "Account creation is temporarily unavailable (database not connected)." });
+  }
+
+  try {
+    const existing = await User.findOne({ email });
+    if (existing) {
+      return res.status(409).json({ success: false, message: "An account with this email already exists." });
+    }
+
+    const passwordHash = await hashPassword(password);
+    const apiKey = generateApiKey();
+    const user = await User.create({ email, passwordHash, apiKey });
+    const token = signAuthToken(user);
+
+    logger.info("AUTH", "user_registered", { email });
+    res.status(201).json({ success: true, token, apiKey: user.apiKey, plan: user.plan, email: user.email });
+  } catch (err) {
+    logger.error("AUTH", "register_failed", { error: err.message });
+    res.status(500).json({ success: false, message: "Registration failed due to an internal error." });
+  }
+}));
+
+app.post("/auth/login", asyncHandler(async (req, res) => {
+  const email = safeText(req.body?.email).toLowerCase();
+  const password = safeText(req.body?.password);
+  const ip = safeText(req.ip) || "unknown-client";
+
+  if (!email || !password) {
+    return res.status(400).json({ success: false, message: "Email and password are required." });
+  }
+
+  const lockedUntil = isLoginLocked(ip, email);
+  if (lockedUntil) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((lockedUntil - Date.now()) / 1000));
+    res.setHeader("Retry-After", String(retryAfterSeconds));
+    return res.status(429).json({
+      success: false,
+      status: "TOO_MANY_ATTEMPTS",
+      message: `Too many failed login attempts. Try again in ${Math.ceil(retryAfterSeconds / 60)} minute(s).`
+    });
+  }
+
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ success: false, message: "Login is temporarily unavailable (database not connected)." });
+  }
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      recordFailedLogin(ip, email);
+      return res.status(401).json({ success: false, message: "Invalid email or password." });
+    }
+    const valid = await verifyPasswordHash(password, user.passwordHash);
+    if (!valid) {
+      recordFailedLogin(ip, email);
+      return res.status(401).json({ success: false, message: "Invalid email or password." });
+    }
+
+    resetLoginAttempts(ip, email);
+    const token = signAuthToken(user);
+    logger.info("AUTH", "user_logged_in", { email });
+    res.json({ success: true, token, apiKey: user.apiKey, plan: user.plan, email: user.email });
+  } catch (err) {
+    logger.error("AUTH", "login_failed", { error: err.message });
+    res.status(500).json({ success: false, message: "Login failed due to an internal error." });
+  }
+}));
+
+app.get("/auth/me", asyncHandler(async (req, res) => {
+  const authHeader = safeText(req.headers.authorization);
+  const token = authHeader.replace(/^Bearer\s+/i, "");
+  const decoded = token ? verifyAuthToken(token) : null;
+
+  if (!decoded?.sub) {
+    return res.status(401).json({ success: false, message: "Invalid or missing authentication token." });
+  }
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ success: false, message: "Account lookup is temporarily unavailable (database not connected)." });
+  }
+
+  try {
+    const user = await User.findById(decoded.sub).select("-passwordHash");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Account not found." });
+    }
+    res.json({
+      success: true,
+      email: user.email,
+      plan: user.plan,
+      apiKey: user.apiKey,
+      scansToday: user.scansToday,
+      createdAt: user.createdAt
+    });
+  } catch (err) {
+    logger.error("AUTH", "me_lookup_failed", { error: err.message });
+    res.status(500).json({ success: false, message: "Account lookup failed." });
+  }
+}));
 
 app.get("/scan", authenticateAndRateLimit, asyncHandler(async (req, res) => {
   const { url } = req.query;

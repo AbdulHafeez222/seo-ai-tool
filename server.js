@@ -5,6 +5,10 @@ import axios from "axios";
 import https from "https";
 import path from "path";
 import crypto from "crypto";
+import dotenv from "dotenv";
+import mongoose from "mongoose";
+
+dotenv.config();
 
 // =========================================================================
 // ========== SECTION 0: GLOBAL CONSTANTS, CONFIGS & REGEXES ==============
@@ -172,6 +176,182 @@ export const logger = {
   info: (context, message, meta) => logMessage("INFO", context, message, meta),
   debug: (context, message, meta) => logMessage("DEBUG", context, message, meta)
 };
+
+// =========================================================================
+// ========== SECTION 0.7: MONGODB CONNECTION & PERSISTENCE ================
+// =========================================================================
+//
+// Persistence is strictly best-effort. Every function in this section is
+// designed so that a missing/unreachable database NEVER crashes the server
+// or fails a request — it only means reports aren't persisted, which is
+// logged and otherwise ignored. All existing in-memory behavior (scanCache,
+// scanHistory, trendDB, rate limiting) continues to function unchanged
+// regardless of MongoDB's connection state.
+
+let mongoConnectionPromise = null;
+
+/**
+ * Reusable, idempotent MongoDB connection function. Safe to call multiple
+ * times (e.g. on repeated cold starts or accidental re-invocation) without
+ * opening duplicate connections: if already connected, returns the existing
+ * connection; if a connection attempt is already in flight, returns that
+ * same in-flight promise instead of starting a second one.
+ */
+export async function connectToDatabase() {
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
+  }
+  if (mongoConnectionPromise) {
+    return mongoConnectionPromise;
+  }
+
+  const uri = safeText(process.env.MONGODB_URI);
+  if (!uri) {
+    logger.warn("DB", "mongodb_uri_missing", { message: "MONGODB_URI is not set; running without persistent storage. All in-memory features remain fully functional." });
+    return null;
+  }
+
+  mongoConnectionPromise = mongoose
+    .connect(uri, {
+      // Connection pooling best practices: bounded pool, fail fast rather
+      // than hanging the process if Atlas is unreachable.
+      maxPoolSize: 10,
+      minPoolSize: 1,
+      serverSelectionTimeoutMS: 8000,
+      socketTimeoutMS: 45000
+    })
+    .then((conn) => {
+      logger.info("DB", "mongodb_connected", { host: conn.connection.host, name: conn.connection.name });
+      return conn.connection;
+    })
+    .catch((err) => {
+      logger.error("DB", "mongodb_connection_failed", { error: err.message });
+      // Reset so a later retry (e.g. triggered by the 'disconnected' handler
+      // below, or a future request) can attempt a fresh connection instead
+      // of being stuck on a rejected promise forever.
+      mongoConnectionPromise = null;
+      return null;
+    });
+
+  return mongoConnectionPromise;
+}
+
+mongoose.connection.on("disconnected", () => {
+  logger.warn("DB", "mongodb_disconnected", {});
+  mongoConnectionPromise = null;
+});
+
+mongoose.connection.on("error", (err) => {
+  logger.error("DB", "mongodb_runtime_error", { error: err.message });
+});
+
+// --- Report model ---------------------------------------------------------
+// Guarded against duplicate registration: on platforms/tools that can
+// re-evaluate this module (hot-reload, repeated imports in tests, etc.),
+// calling mongoose.model() twice with the same name throws. Re-using an
+// already-registered model instead of redefining it avoids that entirely,
+// and also means if a Report model already existed in this codebase, this
+// picks it up rather than duplicating it.
+const reportSchema = new mongoose.Schema(
+  {
+    url: { type: String, required: true, index: true },
+    finalUrl: { type: String },
+    scanDate: { type: Date, default: Date.now, index: true },
+    crawlResult: {
+      method: String,
+      status: Number,
+      contentSize: Number,
+      duration: Number,
+      retryCount: Number
+    },
+    seoScore: Number,
+    geoScore: Number,
+    aeoScore: Number,
+    eeatScore: Number,
+    trustScore: Number,
+    authorityScore: Number,
+    citationScore: Number,
+    schemaSummary: {
+      detectedTypes: [String],
+      schemaCount: Number,
+      recommendedSchemas: [String]
+    },
+    entitySummary: {
+      totalEntities: Number,
+      brands: [String],
+      organizations: [String]
+    },
+    recommendations: [mongoose.Schema.Types.Mixed],
+    pdfPath: { type: String, default: null }
+  },
+  { timestamps: true }
+);
+
+export const Report = mongoose.models.Report || mongoose.model("Report", reportSchema);
+
+/**
+ * Persists a completed scan payload as a Report document. Never throws and
+ * never delays or fails the scan response on error — any failure (including
+ * "not connected") is logged and swallowed, per the requirement that a
+ * database problem must never break a working scan.
+ */
+export async function saveReportToDatabase(payload, crawl) {
+  try {
+    if (mongoose.connection.readyState !== 1) {
+      logger.warn("DB", "report_save_skipped", { reason: "MongoDB not connected", url: payload?.resolvedUrl });
+      return null;
+    }
+
+    const doc = await Report.create({
+      url: payload.resolvedUrl,
+      finalUrl: crawl?.finalUrl || payload.resolvedUrl,
+      crawlResult: {
+        method: crawl?.crawlMethod,
+        status: crawl?.status,
+        contentSize: crawl?.contentLength,
+        duration: safeGetProperty(payload, "crawl.duration"),
+        retryCount: crawl?.retryCount
+      },
+      seoScore: payload.seoScore,
+      geoScore: payload.geoScore,
+      aeoScore: payload.aeoScore,
+      eeatScore: payload.eeatScore,
+      trustScore: payload.trustScore,
+      authorityScore: payload.authorityScore,
+      citationScore: payload.citationScore,
+      schemaSummary: {
+        detectedTypes: safeArray(payload.schema?.detectedTypes),
+        schemaCount: payload.schemaCount,
+        recommendedSchemas: safeArray(payload.recommendedSchemas)
+      },
+      entitySummary: {
+        totalEntities: safeNumber(payload.entityDetails?.totalEntityCount),
+        brands: safeArray(payload.entityDetails?.brands),
+        organizations: safeArray(payload.entityDetails?.organizations)
+      },
+      recommendations: safeArray(payload.roadmap),
+      pdfPath: payload.pdfPath || null
+    });
+
+    logger.info("DB", "report_saved", { id: doc._id.toString(), url: payload.resolvedUrl });
+    return doc;
+  } catch (err) {
+    logger.error("DB", "report_save_failed", { error: err.message, url: payload?.resolvedUrl });
+    return null;
+  }
+}
+
+/**
+ * Minimal safe nested-property getter, scoped to this section so it has no
+ * dependency ordering requirement on safeGet-style helpers defined later.
+ */
+function safeGetProperty(obj, path) {
+  try {
+    return path.split(".").reduce((acc, key) => (acc !== undefined && acc !== null ? acc[key] : undefined), obj);
+  } catch {
+    return undefined;
+  }
+}
 
 // =========================================================================
 // ========== SECTION 1: EXPRESS MIDDLEWARE SETUP =========================
@@ -4404,6 +4584,11 @@ export async function analyzeSingleUrl(url) {
     });
     if (scanHistory.length > MAX_SCAN_HISTORY) scanHistory.length = MAX_SCAN_HISTORY;
 
+    // Persist the completed report to MongoDB, best-effort. This never
+    // throws (see saveReportToDatabase) and never prevents the scan result
+    // from being returned to the caller, even if MongoDB is unreachable.
+    await saveReportToDatabase(payload, crawl);
+
     return payload;
   } catch (err) {
     logger.error("ORCHESTRATOR", "compilation_parser_error", { url, error: err.message, stack: err.stack });
@@ -4782,6 +4967,12 @@ const server = app.listen(PORT, () => {
   logger.info("SYSTEM", "server_started", { port: PORT, version: "10.1-enterprise-hardened" });
 });
 
+// Connection is fire-and-forget and intentionally NOT awaited before
+// app.listen(): the HTTP server must bind and start serving requests
+// immediately regardless of MongoDB's availability or latency, per the
+// requirement that the server never crash or stall due to the database.
+connectToDatabase();
+
 // Prevents a single unexpected rejection/exception from silently crashing
 // the whole process without any diagnostic trail.
 process.on("unhandledRejection", (reason) => {
@@ -4796,6 +4987,14 @@ async function gracefulShutdown(signal) {
   logger.info("SYSTEM", "shutdown_initiated", { signal });
   server.close(async () => {
     await closeBrowserInstance();
+    try {
+      if (mongoose.connection.readyState === 1) {
+        await mongoose.connection.close();
+        logger.info("DB", "mongodb_connection_closed", {});
+      }
+    } catch (err) {
+      logger.error("DB", "mongodb_close_failed", { error: err.message });
+    }
     logger.info("SYSTEM", "shutdown_complete", { signal });
     process.exit(0);
   });

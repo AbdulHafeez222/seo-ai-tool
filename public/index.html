@@ -716,6 +716,268 @@ li { margin: 6px 0; color: var(--text-secondary); }
 /* =========================================================================
    PRINT / PDF EXPORT
    ========================================================================= */
+/* =========================================================================
+   PHASE 13 — AUTH & ACCOUNT UI
+   ========================================================================= */
+
+/* --- Navbar auth controls --- */
+.navbar-auth-area { display: flex; align-items: center; gap: var(--space-3); }
+
+.nav-link-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.nav-link-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  padding: 8px 12px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+.nav-link-btn:hover { background: var(--bg-card); color: var(--text-primary); transform: none; }
+.nav-link-btn.active { background: var(--accent-primary-soft); color: var(--accent-primary); }
+
+.auth-cta-btn { padding: 8px 16px; font-size: var(--font-size-xs); }
+.auth-cta-btn.ghost { background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); }
+
+.user-menu-wrap { position: relative; }
+.user-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+}
+.user-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-purple));
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.plan-badge-pill {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-purple-soft);
+  color: var(--accent-purple);
+}
+
+.user-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--card-radius-sm);
+  box-shadow: var(--card-shadow-lg);
+  padding: 8px;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 500;
+}
+.user-dropdown-menu.open { display: flex; }
+.user-dropdown-menu button {
+  background: transparent;
+  color: var(--text-primary);
+  justify-content: flex-start;
+  padding: 10px 12px;
+  font-weight: 500;
+  border-radius: 8px;
+}
+.user-dropdown-menu button:hover { background: var(--accent-primary-soft); transform: none; }
+.user-dropdown-menu .dropdown-email {
+  padding: 8px 12px 10px 12px;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+.user-dropdown-menu .dropdown-divider { height: 1px; background: var(--border-color); margin: 4px 0; }
+
+/* --- Modal overlay & panel (login/register/profile/settings) --- */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10100;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(5, 8, 15, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.modal-overlay.open { display: flex; }
+
+.modal-panel {
+  width: 100%;
+  max-width: 420px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--border-color);
+  border-radius: var(--card-radius-lg);
+  box-shadow: var(--card-shadow-lg);
+  padding: 32px;
+  animation: modal-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+.modal-panel.modal-panel-wide { max-width: 560px; }
+
+@keyframes modal-pop {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.modal-header h2 { margin: 0; font-size: var(--font-size-2xl); font-weight: 800; color: var(--text-heading); }
+.modal-close-btn {
+  background: transparent;
+  color: var(--text-muted);
+  padding: 6px;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+}
+.modal-close-btn:hover { background: var(--bg-card); color: var(--text-primary); transform: none; }
+
+.modal-subtext { color: var(--text-muted); font-size: var(--font-size-sm); margin-top: -12px; margin-bottom: 20px; }
+
+.auth-form-group { margin-bottom: 16px; }
+.auth-form-group label { display: block; font-weight: 600; font-size: var(--font-size-sm); margin-bottom: 6px; color: var(--text-secondary); }
+.auth-form-group input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--card-radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+}
+.auth-form-group input:focus { outline: none; border-color: var(--accent-primary); box-shadow: var(--focus-ring); }
+
+.auth-submit-btn { width: 100%; padding: 13px; font-size: var(--font-size-base); margin-top: 8px; }
+.auth-switch-text { text-align: center; margin-top: 18px; font-size: var(--font-size-sm); color: var(--text-muted); }
+.auth-switch-text button { background: transparent; color: var(--accent-primary); padding: 0; font-weight: 700; display: inline; }
+.auth-switch-text button:hover { text-decoration: underline; transform: none; background: transparent; }
+
+.auth-error-banner {
+  display: none;
+  background: var(--accent-danger-soft);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: var(--accent-danger);
+  padding: 10px 14px;
+  border-radius: var(--card-radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.auth-error-banner.visible { display: block; }
+
+/* --- Profile panel --- */
+.profile-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-color);
+  gap: 12px;
+}
+.profile-field-row:last-child { border-bottom: none; }
+.profile-field-label { font-size: var(--font-size-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; font-weight: 700; }
+.profile-field-value { font-weight: 600; color: var(--text-primary); word-break: break-all; text-align: right; }
+
+.api-key-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-body);
+  border: 1px solid var(--border-color);
+  border-radius: var(--card-radius-sm);
+  padding: 10px 12px;
+  font-family: monospace;
+  font-size: 13px;
+}
+.api-key-display code { flex: 1; overflow-x: auto; white-space: nowrap; color: var(--text-primary); }
+.api-key-display button { padding: 6px 10px; font-size: 11px; flex-shrink: 0; }
+
+.usage-meter-track { width: 100%; height: 10px; background: rgba(148,163,184,0.2); border-radius: 10px; overflow: hidden; margin-top: 8px; }
+.usage-meter-fill { height: 100%; border-radius: 10px; background: linear-gradient(90deg, var(--accent-primary), var(--accent-purple)); transition: width 0.6s ease; }
+
+/* --- Settings panel --- */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-color);
+  gap: 16px;
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row-label { font-weight: 700; color: var(--text-primary); }
+.settings-row-desc { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: 2px; }
+
+.toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-switch-track {
+  position: absolute; cursor: pointer; inset: 0;
+  background: var(--border-color-strong);
+  border-radius: 999px;
+  transition: background var(--transition-fast);
+}
+.toggle-switch-track::before {
+  content: "";
+  position: absolute;
+  height: 18px; width: 18px;
+  left: 3px; bottom: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform var(--transition-fast);
+}
+.toggle-switch input:checked + .toggle-switch-track { background: var(--accent-primary); }
+.toggle-switch input:checked + .toggle-switch-track::before { transform: translateX(20px); }
+
+.theme-choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+.theme-choice-btn {
+  background: var(--bg-body);
+  border: 2px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 14px;
+  border-radius: var(--card-radius-sm);
+  flex-direction: column;
+  gap: 6px;
+}
+.theme-choice-btn.active { border-color: var(--accent-primary); }
+
+/* --- Auth-gated placeholder note (used inline where account is required) --- */
+.auth-required-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-info-soft, var(--accent-primary-soft));
+  border: 1px solid var(--border-color);
+  padding: 10px 14px;
+  border-radius: var(--card-radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+@media (max-width: 640px) {
+  .nav-link-group { display: none; }
+  .modal-panel { padding: 22px; }
+}
+
 @media print {
   .action-bar, .btn-grid, .loading-overlay, .toast-region { display: none !important; }
   .card { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
@@ -752,6 +1014,13 @@ li { margin: 6px 0; color: var(--text-secondary); }
       <small>Enterprise SEO · AEO · GEO Intelligence Engine</small>
     </div>
   </div>
+
+  <nav class="nav-link-group" aria-label="Primary">
+    <button type="button" class="nav-link-btn" onclick="navGoToScan()">Dashboard</button>
+    <button type="button" class="nav-link-btn" onclick="navGoToScan()">New Scan</button>
+    <button type="button" class="nav-link-btn" onclick="navGoToHistory()">History</button>
+  </nav>
+
   <div class="action-bar-controls">
     <div class="status-badge-live">
       <div class="status-dot" id="scanStatusDot"></div>
@@ -760,8 +1029,112 @@ li { margin: 6px 0; color: var(--text-secondary); }
     <button type="button" onclick="toggleTheme()" class="theme-toggle-btn" aria-pressed="false" id="themeToggleBtn">
       <span aria-hidden="true">🌙</span> Theme
     </button>
+
+    <div class="navbar-auth-area" id="navbarAuthArea">
+      <!-- Logged-out state -->
+      <div id="authCtaGroup" style="display:flex; gap:8px;">
+        <button type="button" class="auth-cta-btn ghost" onclick="openAuthModal('login')">Log In</button>
+        <button type="button" class="auth-cta-btn" onclick="openAuthModal('register')">Sign Up</button>
+      </div>
+
+      <!-- Logged-in state -->
+      <div class="user-menu-wrap" id="userMenuWrap" style="display:none;">
+        <button type="button" class="user-menu-trigger" id="userMenuTrigger" onclick="toggleUserMenu()" aria-haspopup="true" aria-expanded="false">
+          <span class="user-avatar" id="userAvatarInitial" aria-hidden="true">?</span>
+          <span class="plan-badge-pill" id="userPlanBadge">FREE</span>
+        </button>
+        <div class="user-dropdown-menu" id="userDropdownMenu" role="menu">
+          <div class="dropdown-email" id="userDropdownEmail">—</div>
+          <button type="button" role="menuitem" onclick="openProfileModal()"><span aria-hidden="true">👤</span>&nbsp; Profile</button>
+          <button type="button" role="menuitem" onclick="openSettingsModal()"><span aria-hidden="true">⚙️</span>&nbsp; Settings</button>
+          <div class="dropdown-divider"></div>
+          <button type="button" role="menuitem" onclick="logoutUser()"><span aria-hidden="true">🚪</span>&nbsp; Logout</button>
+        </div>
+      </div>
+    </div>
   </div>
 </header>
+
+<!-- ===================== AUTH MODAL (Login / Register) ===================== -->
+<div class="modal-overlay" id="authModalOverlay" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h2 id="authModalTitle">Log In</h2>
+      <button type="button" class="modal-close-btn" onclick="closeAuthModal()" aria-label="Close">✕</button>
+    </div>
+    <p class="modal-subtext" id="authModalSubtext">Welcome back. Log in to access your account.</p>
+
+    <div class="auth-error-banner" id="authErrorBanner" role="alert"></div>
+
+    <form id="authForm" onsubmit="return false;" novalidate>
+      <div class="auth-form-group">
+        <label for="authEmail">Email</label>
+        <input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com" required>
+      </div>
+      <div class="auth-form-group">
+        <label for="authPassword">Password</label>
+        <input type="password" id="authPassword" autocomplete="current-password" placeholder="••••••••" required>
+      </div>
+      <button type="button" class="auth-submit-btn" id="authSubmitBtn" onclick="submitAuthForm()">
+        <span class="btn-spinner" aria-hidden="true"></span>
+        <span class="btn-label-text" id="authSubmitLabel">Log In</span>
+      </button>
+    </form>
+
+    <p class="auth-switch-text" id="authSwitchText">
+      Don't have an account? <button type="button" onclick="switchAuthMode('register')">Sign up</button>
+    </p>
+  </div>
+</div>
+
+<!-- ===================== PROFILE MODAL ===================== -->
+<div class="modal-overlay" id="profileModalOverlay" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+  <div class="modal-panel modal-panel-wide">
+    <div class="modal-header">
+      <h2 id="profileModalTitle"><span aria-hidden="true">👤</span> Profile</h2>
+      <button type="button" class="modal-close-btn" onclick="closeProfileModal()" aria-label="Close">✕</button>
+    </div>
+    <div id="profileModalContent">
+      <p class="modal-subtext">Loading account details…</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SETTINGS MODAL ===================== -->
+<div class="modal-overlay" id="settingsModalOverlay" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+  <div class="modal-panel modal-panel-wide">
+    <div class="modal-header">
+      <h2 id="settingsModalTitle"><span aria-hidden="true">⚙️</span> Settings</h2>
+      <button type="button" class="modal-close-btn" onclick="closeSettingsModal()" aria-label="Close">✕</button>
+    </div>
+
+    <div class="settings-row">
+      <div>
+        <div class="settings-row-label">Appearance</div>
+        <div class="settings-row-desc">Choose how Aegis AI Visibility looks on this device.</div>
+        <div class="theme-choice-grid">
+          <button type="button" class="theme-choice-btn" id="themeChoiceDark" onclick="setThemeChoice('dark')">
+            <span aria-hidden="true">🌙</span> Dark
+          </button>
+          <button type="button" class="theme-choice-btn" id="themeChoiceLight" onclick="setThemeChoice('light')">
+            <span aria-hidden="true">☀️</span> Light
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <div>
+        <div class="settings-row-label">Toast Notifications</div>
+        <div class="settings-row-desc">Show pop-up confirmations for scans, errors, and account actions.</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="notificationsToggle" checked onchange="onNotificationsToggleChange()">
+        <span class="toggle-switch-track"></span>
+      </label>
+    </div>
+  </div>
+</div>
 
 <main id="mainContent" class="dashboard-container">
 
@@ -1075,11 +1448,373 @@ function toggleTheme() {
   localStorage.setItem("theme", isLight ? "light" : "dark");
   const tBtn = document.getElementById("themeToggleBtn");
   if (tBtn) tBtn.setAttribute("aria-pressed", String(isLight));
+  syncThemeChoiceButtons();
 
   if (lastScanData) {
     try { renderAllResults(lastScanData); } catch (e) { console.error("Theme toggle re-render failed:", e); }
   }
 }
+
+// =========================================================================
+// PHASE 13 — AUTHENTICATION & ACCOUNT STATE
+// =========================================================================
+const AUTH_TOKEN_KEY = "aegis_auth_token";
+let currentUser = null; // { email, plan, apiKey, scansToday, createdAt } once loaded via /auth/me
+let authLogoutTimer = null;
+let authMode = "login"; // "login" | "register"
+
+function getStoredToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY) || null;
+}
+
+function setStoredToken(token) {
+  if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
+  else localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+/**
+ * Decodes a JWT's payload WITHOUT verifying its signature — this is purely
+ * for reading non-sensitive claims (exp, email) client-side to drive UI
+ * behavior like auto-logout timing. The server independently re-verifies
+ * the signature on every authenticated request, so a tampered token here
+ * would simply be rejected server-side; nothing security-sensitive relies
+ * on this client-side decode.
+ */
+function decodeJwtPayload(token) {
+  try {
+    const parts = String(token).split(".");
+    if (parts.length !== 3) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function scheduleAutoLogout(token) {
+  if (authLogoutTimer) { clearTimeout(authLogoutTimer); authLogoutTimer = null; }
+  const payload = decodeJwtPayload(token);
+  if (!payload?.exp) return;
+  const msUntilExpiry = (payload.exp * 1000) - Date.now();
+  if (msUntilExpiry <= 0) { logoutUser(true); return; }
+  // Cap the timer so it still fires even for very long-lived tokens
+  // without exceeding the browser's max setTimeout delay.
+  const delay = Math.min(msUntilExpiry, 2 ** 31 - 1);
+  authLogoutTimer = setTimeout(() => logoutUser(true), delay);
+}
+
+/**
+ * Called once on page load. If a token is stored, validates it against
+ * GET /auth/me; on success populates currentUser and the navbar. On any
+ * failure (expired, invalid, network error) it clears the stored token and
+ * leaves the UI in its normal logged-out state — never blocks page load.
+ */
+async function initAuthState() {
+  const token = getStoredToken();
+  if (!token) { updateNavbarAuthUI(); return; }
+
+  const payload = decodeJwtPayload(token);
+  if (payload?.exp && payload.exp * 1000 <= Date.now()) {
+    setStoredToken(null);
+    updateNavbarAuthUI();
+    return;
+  }
+
+  try {
+    const res = await fetch(`${window.API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (res.ok && data?.success) {
+      currentUser = data;
+      scheduleAutoLogout(token);
+      updateNavbarAuthUI();
+    } else {
+      setStoredToken(null);
+      currentUser = null;
+      updateNavbarAuthUI();
+    }
+  } catch (e) {
+    // Network failure on initial load — keep the token for a later retry
+    // rather than logging the user out over a transient connectivity blip.
+    updateNavbarAuthUI();
+  }
+}
+
+function updateNavbarAuthUI() {
+  const ctaGroup = document.getElementById("authCtaGroup");
+  const menuWrap = document.getElementById("userMenuWrap");
+  if (!ctaGroup || !menuWrap) return;
+
+  if (currentUser) {
+    ctaGroup.style.display = "none";
+    menuWrap.style.display = "block";
+    const initial = (currentUser.email || "?").trim().charAt(0).toUpperCase();
+    const avatarEl = document.getElementById("userAvatarInitial");
+    const planEl = document.getElementById("userPlanBadge");
+    const emailEl = document.getElementById("userDropdownEmail");
+    if (avatarEl) avatarEl.textContent = initial || "?";
+    if (planEl) planEl.textContent = safeText(currentUser.plan, "free").toUpperCase();
+    if (emailEl) emailEl.textContent = safeText(currentUser.email);
+  } else {
+    ctaGroup.style.display = "flex";
+    menuWrap.style.display = "none";
+    closeUserMenu();
+  }
+}
+
+function toggleUserMenu() {
+  const menu = document.getElementById("userDropdownMenu");
+  const trigger = document.getElementById("userMenuTrigger");
+  if (!menu) return;
+  const isOpen = menu.classList.toggle("open");
+  if (trigger) trigger.setAttribute("aria-expanded", String(isOpen));
+}
+
+function closeUserMenu() {
+  const menu = document.getElementById("userDropdownMenu");
+  const trigger = document.getElementById("userMenuTrigger");
+  if (menu) menu.classList.remove("open");
+  if (trigger) trigger.setAttribute("aria-expanded", "false");
+}
+
+document.addEventListener("click", (e) => {
+  const wrap = document.getElementById("userMenuWrap");
+  if (wrap && !wrap.contains(e.target)) closeUserMenu();
+});
+
+// --- Auth modal (login / register) --------------------------------------
+function openAuthModal(mode) {
+  authMode = mode === "register" ? "register" : "login";
+  const overlay = document.getElementById("authModalOverlay");
+  if (!overlay) return;
+  applyAuthModalMode();
+  overlay.classList.add("open");
+  document.getElementById("authEmail")?.focus();
+}
+
+function closeAuthModal() {
+  const overlay = document.getElementById("authModalOverlay");
+  if (overlay) overlay.classList.remove("open");
+  const errEl = document.getElementById("authErrorBanner");
+  if (errEl) { errEl.textContent = ""; errEl.classList.remove("visible"); }
+  const form = document.getElementById("authForm");
+  if (form) form.reset();
+}
+
+function switchAuthMode(mode) {
+  authMode = mode === "register" ? "register" : "login";
+  applyAuthModalMode();
+}
+
+function applyAuthModalMode() {
+  const title = document.getElementById("authModalTitle");
+  const subtext = document.getElementById("authModalSubtext");
+  const submitLabel = document.getElementById("authSubmitLabel");
+  const switchText = document.getElementById("authSwitchText");
+  const errEl = document.getElementById("authErrorBanner");
+  if (errEl) { errEl.textContent = ""; errEl.classList.remove("visible"); }
+
+  if (authMode === "register") {
+    if (title) title.textContent = "Create Account";
+    if (subtext) subtext.textContent = "Sign up to save scan history and unlock higher daily limits.";
+    if (submitLabel) submitLabel.textContent = "Sign Up";
+    if (switchText) switchText.innerHTML = `Already have an account? <button type="button" onclick="switchAuthMode('login')">Log in</button>`;
+  } else {
+    if (title) title.textContent = "Log In";
+    if (subtext) subtext.textContent = "Welcome back. Log in to access your account.";
+    if (submitLabel) submitLabel.textContent = "Log In";
+    if (switchText) switchText.innerHTML = `Don't have an account? <button type="button" onclick="switchAuthMode('register')">Sign up</button>`;
+  }
+}
+
+function showAuthError(message) {
+  const errEl = document.getElementById("authErrorBanner");
+  if (!errEl) return;
+  errEl.textContent = message;
+  errEl.classList.add("visible");
+}
+
+async function submitAuthForm() {
+  const email = (document.getElementById("authEmail")?.value || "").trim();
+  const password = document.getElementById("authPassword")?.value || "";
+  const submitBtn = document.getElementById("authSubmitBtn");
+  const errEl = document.getElementById("authErrorBanner");
+
+  if (errEl) { errEl.textContent = ""; errEl.classList.remove("visible"); }
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showAuthError("Please enter a valid email address.");
+    return;
+  }
+  if (!password || password.length < 8) {
+    showAuthError("Password must be at least 8 characters.");
+    return;
+  }
+
+  const endpoint = authMode === "register" ? "/auth/register" : "/auth/login";
+  submitBtn?.setAttribute("aria-busy", "true");
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    const res = await fetch(`${window.API_BASE}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data?.success) {
+      showAuthError(safeText(data?.message, "Something went wrong. Please try again."));
+      return;
+    }
+
+    // Auto-login after successful registration: the register endpoint
+    // already returns a valid token, so no separate login step is needed.
+    setStoredToken(data.token);
+    scheduleAutoLogout(data.token);
+
+    const meRes = await fetch(`${window.API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${data.token}` } });
+    const meData = await meRes.json();
+    currentUser = meRes.ok && meData?.success ? meData : { email: data.email, plan: data.plan, apiKey: data.apiKey, scansToday: 0 };
+
+    updateNavbarAuthUI();
+    closeAuthModal();
+    showToast(authMode === "register" ? "Account created — you're logged in." : "Logged in successfully.", "success");
+  } catch (e) {
+    showAuthError("Network error — please check your connection and try again.");
+  } finally {
+    submitBtn?.setAttribute("aria-busy", "false");
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+function logoutUser(silent) {
+  setStoredToken(null);
+  currentUser = null;
+  if (authLogoutTimer) { clearTimeout(authLogoutTimer); authLogoutTimer = null; }
+  updateNavbarAuthUI();
+  closeProfileModal();
+  closeSettingsModal();
+  if (!silent) showToast("Logged out.", "success");
+  else showToast("Your session expired. Please log in again.", "info");
+}
+
+// --- Navbar navigation helpers --------------------------------------------
+function navGoToScan() {
+  document.getElementById("scanForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("url")?.focus();
+}
+
+function navGoToHistory() {
+  loadHistory();
+  document.getElementById("historyPanel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// --- Profile modal ---------------------------------------------------------
+const PLAN_LIMITS_REFERENCE = { free: 5, starter: 25, pro: 100, agency: 500 };
+
+function openProfileModal() {
+  const overlay = document.getElementById("profileModalOverlay");
+  const content = document.getElementById("profileModalContent");
+  if (!overlay || !content) return;
+
+  if (!currentUser) {
+    content.innerHTML = emptyStateHtml("👤", "Not Logged In", "Log in to view your profile.");
+    overlay.classList.add("open");
+    return;
+  }
+
+  const plan = safeText(currentUser.plan, "free").toLowerCase();
+  const limit = PLAN_LIMITS_REFERENCE[plan] ?? null;
+  const scansToday = safeNumber(currentUser.scansToday, 0);
+  const usagePct = limit ? Math.min(100, Math.round((scansToday / limit) * 100)) : 0;
+
+  content.innerHTML = `
+    <div class="profile-field-row">
+      <span class="profile-field-label">Email</span>
+      <span class="profile-field-value">${escapeHtml(currentUser.email)}</span>
+    </div>
+    <div class="profile-field-row">
+      <span class="profile-field-label">Plan</span>
+      <span class="profile-field-value"><span class="plan-badge-pill">${escapeHtml(plan.toUpperCase())}</span></span>
+    </div>
+    ${currentUser.createdAt ? `
+    <div class="profile-field-row">
+      <span class="profile-field-label">Member Since</span>
+      <span class="profile-field-value">${new Date(currentUser.createdAt).toLocaleDateString()}</span>
+    </div>` : ''}
+    <div class="profile-field-row" style="flex-direction:column; align-items:stretch;">
+      <span class="profile-field-label" style="margin-bottom:8px;">API Key</span>
+      <div class="api-key-display">
+        <code id="profileApiKeyText">${escapeHtml(currentUser.apiKey)}</code>
+        <button type="button" onclick="copyApiKey()">📋 Copy</button>
+      </div>
+    </div>
+    <div class="profile-field-row" style="flex-direction:column; align-items:stretch;">
+      <span class="profile-field-label" style="margin-bottom:8px;">Today's Usage</span>
+      <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--text-secondary);">
+        <span>${scansToday} scan(s) used today</span>
+        <span>${limit != null ? `Limit: ${limit}/day` : 'Limit: N/A'}</span>
+      </div>
+      <div class="usage-meter-track"><div class="usage-meter-fill" style="width:${usagePct}%;"></div></div>
+    </div>
+  `;
+  overlay.classList.add("open");
+}
+
+function closeProfileModal() {
+  document.getElementById("profileModalOverlay")?.classList.remove("open");
+}
+
+function copyApiKey() {
+  const el = document.getElementById("profileApiKeyText");
+  if (!el) return;
+  copyToClipboard(el.textContent, { textContent: "📋 Copy" });
+  showToast("API key copied to clipboard.", "success", 2500);
+}
+
+// --- Settings modal ---------------------------------------------------------
+function openSettingsModal() {
+  syncThemeChoiceButtons();
+  const notifToggle = document.getElementById("notificationsToggle");
+  if (notifToggle) notifToggle.checked = localStorage.getItem("notificationsEnabled") !== "false";
+  document.getElementById("settingsModalOverlay")?.classList.add("open");
+}
+
+function closeSettingsModal() {
+  document.getElementById("settingsModalOverlay")?.classList.remove("open");
+}
+
+function setThemeChoice(choice) {
+  const isLight = choice === "light";
+  const currentlyLight = document.body.classList.contains("light");
+  if (isLight !== currentlyLight) toggleTheme();
+  else syncThemeChoiceButtons();
+}
+
+function syncThemeChoiceButtons() {
+  const isLight = document.body.classList.contains("light");
+  document.getElementById("themeChoiceDark")?.classList.toggle("active", !isLight);
+  document.getElementById("themeChoiceLight")?.classList.toggle("active", isLight);
+}
+
+function onNotificationsToggleChange() {
+  const checked = document.getElementById("notificationsToggle")?.checked;
+  localStorage.setItem("notificationsEnabled", checked ? "true" : "false");
+}
+
+// Close any open modal on Escape, and on overlay-background click.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  closeAuthModal();
+  closeProfileModal();
+  closeSettingsModal();
+});
+["authModalOverlay", "profileModalOverlay", "settingsModalOverlay"].forEach(id => {
+  document.addEventListener("click", (e) => {
+    if (e.target && e.target.id === id) e.target.classList.remove("open");
+  });
+});
 
 // =========================================================================
 // SAFE ACCESSORS
@@ -1154,6 +1889,7 @@ function announce(message) {
 }
 
 function showToast(message, type = "info", duration = 5000) {
+  if (localStorage.getItem("notificationsEnabled") === "false") return;
   const region = document.getElementById("toastRegion");
   if (!region) return;
   const toast = document.createElement("div");
@@ -1203,8 +1939,11 @@ function setAllButtonsDisabled(disabled) {
 // =========================================================================
 async function apiFetch(path) {
   let res, json;
+  const token = getStoredToken();
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
   try {
-    res = await fetch(`${window.API_BASE}${path}`);
+    res = await fetch(`${window.API_BASE}${path}`, { headers });
   } catch (networkErr) {
     throw new Error(`Network error while reaching the analysis server: ${networkErr.message}`);
   }
@@ -1216,6 +1955,12 @@ async function apiFetch(path) {
   }
 
   if (!res.ok) {
+    // A stored token the server no longer accepts (expired/invalid) should
+    // transparently fall back to logged-out/anonymous behavior rather than
+    // repeatedly failing every subsequent request.
+    if (res.status === 401 && token && currentUser) {
+      logoutUser(true);
+    }
     const msg = safeText(json?.message, `Request failed with status ${res.status}.`);
     const err = new Error(msg);
     err.status = res.status;
@@ -1935,11 +2680,18 @@ function renderSchema(data) {
   ` : '';
 
   const rawSchema = safeText(data.schemaRecommendationsBlock, "");
+  // FIX (schema-copy JSON leak): the raw schema code is now placed in a
+  // data-attribute rather than embedded via JSON.stringify() inside an
+  // onclick="..." string. The old approach broke out of the double-quoted
+  // attribute whenever rawSchema itself contained double quotes (which it
+  // always does, being JSON), leaking raw text onto the visible page. A
+  // single delegated click listener (registered once, near the bottom of
+  // this script) now reads the attribute and decodes the HTML entities.
   const schemaCodeHtml = rawSchema ? `
     <div class="ai-box" style="margin-top:15px;">
       <strong>Recommended Structured Markup Draft:</strong>
       <pre>${escapeHtml(rawSchema)}</pre>
-      <button type="button" onclick="copyToClipboard(${JSON.stringify(rawSchema)}, this)"><span aria-hidden="true">📋</span> Copy Markup</button>
+      <button type="button" class="copy-schema-btn" data-schema="${escapeHtml(rawSchema)}"><span aria-hidden="true">📋</span> Copy Markup</button>
     </div>` : '';
 
   document.getElementById("schemaResults").innerHTML = `
@@ -2004,12 +2756,17 @@ function renderCitationOpportunities(data) {
 
   const engineLabels = { chatgpt: "ChatGPT", gemini: "Gemini", claude: "Claude", perplexity: "Perplexity", copilot: "Copilot", mistral: "Mistral" };
 
+  // FIX (generic citation opportunities): now reads the real per-engine
+  // missingSignals/potentialScore evidence the backend already computes,
+  // instead of showing the same boilerplate sentence for every engine.
   document.getElementById("citationOppContent").innerHTML = weakEngines.map(([key, v]) => `
     <div class="ai-box">
       <strong>${escapeHtml(engineLabels[key] || key)} Engine Opportunity:</strong>
-      <p>Current citation likelihood is scored as "${escapeHtml(v.status)}" at ${v.score}% (potential: ${v.potentialScore ?? v.score}%).</p>
+      <p>Current citation likelihood is scored as "${escapeHtml(v.status)}" at ${v.score}%${v.potentialScore != null ? ` (potential: ${v.potentialScore}%)` : ''}.</p>
       <span class="badge badge-orange" style="margin-top:5px;">Priority: ${v.score < 40 ? 'High' : 'Medium'}</span>
-      ${safeArray(v.missingSignals).length > 0 ? `<ul style="margin-top:8px; font-size:13px;">${v.missingSignals.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>` : ''}
+      ${safeArray(v.missingSignals).length > 0
+        ? `<ul style="margin-top:8px; font-size:13px;">${v.missingSignals.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>`
+        : `<p style="margin-top:5px; font-size:13px; color:var(--text-muted);">No specific missing signals were identified for this engine.</p>`}
     </div>`).join('');
 }
 
@@ -2532,6 +3289,21 @@ function copyToClipboard(text, btn) {
   });
 }
 
+// FIX (schema-copy JSON leak): single delegated listener handles every
+// .copy-schema-btn on the page, reading the schema text from the
+// data-schema attribute (decoding the HTML entities escapeHtml() applied)
+// instead of relying on an inline onclick handler with embedded JSON.
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".copy-schema-btn");
+  if (!btn) return;
+  const raw = (btn.getAttribute("data-schema") || "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
+  copyToClipboard(raw, btn);
+});
+
 function downloadPDF() {
   if (typeof html2pdf === "undefined") {
     showToast("PDF export library did not load. Try refreshing the page.", "error");
@@ -2546,13 +3318,12 @@ function downloadPDF() {
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   }).save();
 }
-  document.addEventListener("click", (e) => {
-  const btn = e.target.closest(".copy-schema-btn");
-  if (!btn) return;
-  const raw = btn.getAttribute("data-schema")
-    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
-  copyToClipboard(raw, btn);
-});
+
+// =========================================================================
+// PHASE 13 — PAGE LOAD INITIALIZATION
+// =========================================================================
+syncThemeChoiceButtons();
+initAuthState();
 </script>
 </body>
 </html>

@@ -834,6 +834,7 @@ li { margin: 6px 0; color: var(--text-secondary); }
   overflow-y: auto;
 }
 .modal-panel.modal-panel-wide { max-width: 560px; }
+.modal-panel.modal-panel-xl { max-width: 960px; }
 
 @keyframes modal-pop {
   from { opacity: 0; transform: translateY(12px) scale(0.98); }
@@ -1016,9 +1017,10 @@ li { margin: 6px 0; color: var(--text-secondary); }
   </div>
 
   <nav class="nav-link-group" aria-label="Primary">
-    <button type="button" class="nav-link-btn" onclick="navGoToScan()">Dashboard</button>
+    <button type="button" class="nav-link-btn" onclick="openDashboardModal()">Dashboard</button>
     <button type="button" class="nav-link-btn" onclick="navGoToScan()">New Scan</button>
     <button type="button" class="nav-link-btn" onclick="navGoToHistory()">History</button>
+    <button type="button" class="nav-link-btn" onclick="openReportsModal()">Reports</button>
   </nav>
 
   <div class="action-bar-controls">
@@ -1132,6 +1134,45 @@ li { margin: 6px 0; color: var(--text-secondary); }
         <input type="checkbox" id="notificationsToggle" checked onchange="onNotificationsToggleChange()">
         <span class="toggle-switch-track"></span>
       </label>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== DASHBOARD MODAL ===================== -->
+<div class="modal-overlay" id="dashboardModalOverlay" role="dialog" aria-modal="true" aria-labelledby="dashboardModalTitle">
+  <div class="modal-panel modal-panel-xl">
+    <div class="modal-header">
+      <h2 id="dashboardModalTitle"><span aria-hidden="true">📊</span> Dashboard</h2>
+      <button type="button" class="modal-close-btn" onclick="closeDashboardModal()" aria-label="Close">✕</button>
+    </div>
+    <div id="dashboardModalContent">
+      <p class="modal-subtext">Loading your dashboard…</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== REPORTS MODAL ===================== -->
+<div class="modal-overlay" id="reportsModalOverlay" role="dialog" aria-modal="true" aria-labelledby="reportsModalTitle">
+  <div class="modal-panel modal-panel-xl">
+    <div class="modal-header">
+      <h2 id="reportsModalTitle"><span aria-hidden="true">🗂️</span> My Reports</h2>
+      <button type="button" class="modal-close-btn" onclick="closeReportsModal()" aria-label="Close">✕</button>
+    </div>
+    <div id="reportsModalContent">
+      <p class="modal-subtext">Loading your saved reports…</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== REPORT DETAIL MODAL ===================== -->
+<div class="modal-overlay" id="reportDetailModalOverlay" role="dialog" aria-modal="true" aria-labelledby="reportDetailModalTitle">
+  <div class="modal-panel modal-panel-wide">
+    <div class="modal-header">
+      <h2 id="reportDetailModalTitle"><span aria-hidden="true">📄</span> Report Detail</h2>
+      <button type="button" class="modal-close-btn" onclick="closeReportDetailModal()" aria-label="Close">✕</button>
+    </div>
+    <div id="reportDetailModalContent">
+      <p class="modal-subtext">Loading report…</p>
     </div>
   </div>
 </div>
@@ -1803,14 +1844,312 @@ function onNotificationsToggleChange() {
   localStorage.setItem("notificationsEnabled", checked ? "true" : "false");
 }
 
+// =========================================================================
+// PHASE 14 — DASHBOARD, REPORTS & PROJECTS (real, account-backed data only)
+// =========================================================================
+
+function requireLoginOrPrompt() {
+  if (currentUser) return true;
+  closeDashboardModal();
+  closeReportsModal();
+  showToast("Please log in to view this.", "info");
+  openAuthModal("login");
+  return false;
+}
+
+// --- Dashboard --------------------------------------------------------
+async function openDashboardModal() {
+  if (!requireLoginOrPrompt()) return;
+
+  const overlay = document.getElementById("dashboardModalOverlay");
+  const content = document.getElementById("dashboardModalContent");
+  if (!overlay || !content) return;
+
+  content.innerHTML = `
+    <div class="skeleton-bar" style="width:60%; height:22px; margin-bottom:18px;"></div>
+    <div class="grid-3">
+      ${Array.from({ length: 6 }).map(() => `<div class="skeleton-bar" style="height:88px; border-radius:12px;"></div>`).join('')}
+    </div>`;
+  overlay.classList.add("open");
+
+  try {
+    const data = await apiFetch("/dashboard/stats");
+    renderDashboardStats(data);
+  } catch (err) {
+    content.innerHTML = emptyStateHtml("⚠️", "Couldn't Load Dashboard", err.message || "Please try again.");
+  }
+}
+
+function closeDashboardModal() {
+  document.getElementById("dashboardModalOverlay")?.classList.remove("open");
+}
+
+function renderDashboardStats(data) {
+  const content = document.getElementById("dashboardModalContent");
+  if (!content) return;
+
+  const avg = data.averages || {};
+  const statCard = (label, value, suffix = "") => `
+    <div class="metric-box">
+      <div class="metric-value">${value != null ? value + suffix : '—'}</div>
+      <div class="metric-label">${escapeHtml(label)}</div>
+    </div>`;
+
+  const hasAnyData = safeNumber(data.totalScans, 0) > 0;
+
+  content.innerHTML = `
+    <p class="modal-subtext" style="margin-bottom:16px;">A live summary computed from your saved reports.</p>
+    <div class="grid-3">
+      ${statCard("Total Scans", data.totalScans)}
+      ${statCard("Today's Scans", data.todaysScans)}
+      ${statCard("Avg SEO Score", avg.seoScore, "%")}
+      ${statCard("Avg GEO Score", avg.geoScore, "%")}
+      ${statCard("Avg AEO Score", avg.aeoScore, "%")}
+      ${statCard("Avg E-E-A-T Score", avg.eeatScore, "%")}
+      ${statCard("Avg Authority Score", avg.authorityScore, "%")}
+      ${statCard("Avg Trust Score", avg.trustScore, "%")}
+      ${statCard("Avg AI Citation", avg.citationScore, "%")}
+    </div>
+    ${!hasAnyData ? `<div style="margin-top:16px;">${emptyStateHtml("🔍", "No Scans Yet", "Run your first scan while logged in to start populating your dashboard.")}</div>` : `
+    <div style="margin-top:20px; text-align:center;">
+      <button type="button" onclick="closeDashboardModal(); openReportsModal();">View All Reports</button>
+    </div>`}
+  `;
+}
+
+// --- Reports ------------------------------------------------------------
+let reportsState = { page: 1, limit: 10, sortBy: "scanDate", sortDir: "desc", search: "" };
+
+async function openReportsModal() {
+  if (!requireLoginOrPrompt()) return;
+  reportsState = { page: 1, limit: 10, sortBy: "scanDate", sortDir: "desc", search: "" };
+  document.getElementById("reportsModalOverlay")?.classList.add("open");
+  await loadReports();
+}
+
+function closeReportsModal() {
+  document.getElementById("reportsModalOverlay")?.classList.remove("open");
+}
+
+async function loadReports() {
+  const content = document.getElementById("reportsModalContent");
+  if (!content) return;
+  content.innerHTML = `<div class="skeleton-bar" style="height:36px; margin-bottom:14px;"></div>${Array.from({ length: 4 }).map(() => `<div class="skeleton-bar" style="height:44px;"></div>`).join('')}`;
+
+  try {
+    const params = new URLSearchParams({
+      page: String(reportsState.page),
+      limit: String(reportsState.limit),
+      sortBy: reportsState.sortBy,
+      sortDir: reportsState.sortDir
+    });
+    if (reportsState.search) params.set("search", reportsState.search);
+
+    const data = await apiFetch(`/reports?${params.toString()}`);
+    renderReportsTable(data);
+  } catch (err) {
+    content.innerHTML = emptyStateHtml("⚠️", "Couldn't Load Reports", err.message || "Please try again.");
+  }
+}
+
+function renderReportsTable(data) {
+  const content = document.getElementById("reportsModalContent");
+  if (!content) return;
+
+  const reports = safeArray(data.reports);
+
+  const sortHeader = (label, field) => {
+    const active = reportsState.sortBy === field;
+    const arrow = active ? (reportsState.sortDir === "asc" ? " ▲" : " ▼") : "";
+    return `<th scope="col"><button type="button" onclick="sortReports('${field}')" style="background:none; color:inherit; padding:0; font-weight:700;">${escapeHtml(label)}${arrow}</button></th>`;
+  };
+
+  const scoreBadge = (val) => val != null ? `<span class="badge ${val >= 80 ? 'badge-green' : val >= 50 ? 'badge-orange' : 'badge-red'}">${val}</span>` : '<span class="badge badge-neutral">—</span>';
+
+  content.innerHTML = `
+    <div class="table-toolbar">
+      <input type="text" id="reportsSearchInput" placeholder="Search by domain…" value="${escapeHtml(reportsState.search)}" oninput="onReportsSearchInput(this.value)">
+      <span style="font-size:12px; color:var(--text-muted);">${data.total} report(s) total</span>
+    </div>
+    ${reports.length === 0 ? emptyStateHtml("🗂️", "No Reports Found", reportsState.search ? "No reports match your search." : "Run a scan while logged in to save your first report.") : `
+    <div class="table-scroll-wrap">
+      <table>
+        <caption class="visually-hidden">Your saved reports</caption>
+        <thead>
+          <tr>
+            <th scope="col">Website</th>
+            ${sortHeader("Date", "scanDate")}
+            ${sortHeader("SEO", "seoScore")}
+            ${sortHeader("GEO", "geoScore")}
+            ${sortHeader("AEO", "aeoScore")}
+            ${sortHeader("Authority", "authorityScore")}
+            ${sortHeader("Trust", "trustScore")}
+            ${sortHeader("Citation", "citationScore")}
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${reports.map(r => `
+            <tr>
+              <td>${escapeHtml(safeText(r.title || r.url))}</td>
+              <td>${new Date(r.scanDate).toLocaleDateString()}</td>
+              <td>${scoreBadge(r.seoScore)}</td>
+              <td>${scoreBadge(r.geoScore)}</td>
+              <td>${scoreBadge(r.aeoScore)}</td>
+              <td>${scoreBadge(r.authorityScore)}</td>
+              <td>${scoreBadge(r.trustScore)}</td>
+              <td>${scoreBadge(r.citationScore)}</td>
+              <td style="white-space:nowrap;">
+                <button type="button" onclick="viewReportDetail('${r.id}')" style="font-size:11px; padding:6px 10px;" title="View">👁️</button>
+                <button type="button" onclick="rescanFromReport('${escapeHtml(r.url).replace(/'/g, "&#39;")}')" style="font-size:11px; padding:6px 10px;" title="Re-Scan">🔄</button>
+                <button type="button" onclick="deleteReport('${r.id}')" style="font-size:11px; padding:6px 10px; background:var(--accent-danger);" title="Delete">🗑️</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
+      <button type="button" onclick="changeReportsPage(-1)" ${data.page <= 1 ? 'disabled' : ''} style="padding:8px 14px; font-size:12px;">← Previous</button>
+      <span style="font-size:12px; color:var(--text-muted);">Page ${data.page} of ${data.totalPages}</span>
+      <button type="button" onclick="changeReportsPage(1)" ${data.page >= data.totalPages ? 'disabled' : ''} style="padding:8px 14px; font-size:12px;">Next →</button>
+    </div>`}
+  `;
+}
+
+let reportsSearchDebounceTimer = null;
+function onReportsSearchInput(value) {
+  reportsState.search = value;
+  reportsState.page = 1;
+  clearTimeout(reportsSearchDebounceTimer);
+  reportsSearchDebounceTimer = setTimeout(loadReports, 400);
+}
+
+function sortReports(field) {
+  if (reportsState.sortBy === field) {
+    reportsState.sortDir = reportsState.sortDir === "asc" ? "desc" : "asc";
+  } else {
+    reportsState.sortBy = field;
+    reportsState.sortDir = "desc";
+  }
+  loadReports();
+}
+
+function changeReportsPage(delta) {
+  reportsState.page = Math.max(1, reportsState.page + delta);
+  loadReports();
+}
+
+async function deleteReport(id) {
+  if (!confirm("Delete this report? This cannot be undone.")) return;
+
+  try {
+    const token = getStoredToken();
+    const res = await fetch(`${window.API_BASE}/reports/${id}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(safeText(data.message, "Delete failed."));
+    showToast("Report deleted.", "success");
+    await loadReports();
+  } catch (err) {
+    showToast(err.message || "Failed to delete report.", "error");
+  }
+}
+
+function rescanFromReport(url) {
+  closeReportsModal();
+  closeDashboardModal();
+  const urlEl = document.getElementById("url");
+  if (urlEl) urlEl.value = url;
+  navGoToScan();
+  scan();
+}
+
+// --- Report Detail ------------------------------------------------------
+async function viewReportDetail(id) {
+  const overlay = document.getElementById("reportDetailModalOverlay");
+  const content = document.getElementById("reportDetailModalContent");
+  if (!overlay || !content) return;
+
+  content.innerHTML = `<div class="skeleton-bar" style="height:180px;"></div>`;
+  overlay.classList.add("open");
+
+  try {
+    const data = await apiFetch(`/reports/${id}`);
+    renderReportDetail(data.report);
+  } catch (err) {
+    content.innerHTML = emptyStateHtml("⚠️", "Couldn't Load Report", err.message || "Please try again.");
+  }
+}
+
+function closeReportDetailModal() {
+  document.getElementById("reportDetailModalOverlay")?.classList.remove("open");
+}
+
+function renderReportDetail(r) {
+  const content = document.getElementById("reportDetailModalContent");
+  if (!content || !r) return;
+
+  const scoreRow = (label, val) => `
+    <div class="profile-field-row">
+      <span class="profile-field-label">${escapeHtml(label)}</span>
+      <span class="profile-field-value">${val != null ? val + '%' : 'Data unavailable'}</span>
+    </div>`;
+
+  content.innerHTML = `
+    <div class="profile-field-row">
+      <span class="profile-field-label">Website</span>
+      <span class="profile-field-value">${escapeHtml(safeText(r.title || r.url))}</span>
+    </div>
+    <div class="profile-field-row">
+      <span class="profile-field-label">URL</span>
+      <span class="profile-field-value" style="word-break:break-all;">${escapeHtml(safeText(r.finalUrl || r.url))}</span>
+    </div>
+    <div class="profile-field-row">
+      <span class="profile-field-label">Scanned</span>
+      <span class="profile-field-value">${new Date(r.scanDate).toLocaleString()}</span>
+    </div>
+    ${scoreRow("Overall AI Visibility", r.overallScore)}
+    ${scoreRow("SEO Score", r.seoScore)}
+    ${scoreRow("GEO Score", r.geoScore)}
+    ${scoreRow("AEO Score", r.aeoScore)}
+    ${scoreRow("E-E-A-T Score", r.eeatScore)}
+    ${scoreRow("Authority Score", r.authorityScore)}
+    ${scoreRow("Trust Score", r.trustScore)}
+    ${scoreRow("AI Citation Score", r.citationScore)}
+    ${safeArray(r.schemaSummary?.detectedTypes).length > 0 ? `
+    <div style="margin-top:14px;">
+      <div class="profile-field-label" style="margin-bottom:8px;">Detected Schemas</div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px;">${r.schemaSummary.detectedTypes.map(s => `<span class="badge badge-green">${escapeHtml(s)}</span>`).join('')}</div>
+    </div>` : ''}
+    ${safeArray(r.entitySummary?.brands).length > 0 ? `
+    <div style="margin-top:14px;">
+      <div class="profile-field-label" style="margin-bottom:8px;">Brands Detected</div>
+      <div>${escapeHtml(r.entitySummary.brands.join(', '))}</div>
+    </div>` : ''}
+    ${safeArray(r.recommendations).length > 0 ? `
+    <details style="margin-top:14px;">
+      <summary>Roadmap Recommendations (${r.recommendations.length})</summary>
+      <ul>${r.recommendations.map(rec => `<li>${escapeHtml(typeof rec === 'string' ? rec : JSON.stringify(rec))}</li>`).join('')}</ul>
+    </details>` : ''}
+    <div style="margin-top:18px; text-align:right;">
+      <button type="button" onclick="rescanFromReport('${escapeHtml(r.finalUrl || r.url).replace(/'/g, "&#39;")}')">🔄 Re-Scan This Site</button>
+    </div>
+  `;
+}
+
 // Close any open modal on Escape, and on overlay-background click.
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   closeAuthModal();
   closeProfileModal();
   closeSettingsModal();
+  closeDashboardModal();
+  closeReportsModal();
+  closeReportDetailModal();
 });
-["authModalOverlay", "profileModalOverlay", "settingsModalOverlay"].forEach(id => {
+["authModalOverlay", "profileModalOverlay", "settingsModalOverlay", "dashboardModalOverlay", "reportsModalOverlay", "reportDetailModalOverlay"].forEach(id => {
   document.addEventListener("click", (e) => {
     if (e.target && e.target.id === id) e.target.classList.remove("open");
   });

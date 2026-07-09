@@ -256,8 +256,12 @@ mongoose.connection.on("error", (err) => {
 // picks it up rather than duplicating it.
 const reportSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
+    projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project", default: null, index: true },
     url: { type: String, required: true, index: true },
     finalUrl: { type: String },
+    title: { type: String, default: "" },
+    overallScore: { type: Number, default: null },
     scanDate: { type: Date, default: Date.now, index: true },
     crawlResult: {
       method: String,
@@ -291,13 +295,29 @@ const reportSchema = new mongoose.Schema(
 
 export const Report = mongoose.models.Report || mongoose.model("Report", reportSchema);
 
+// --- Project model -----------------------------------------------------
+// Groups multiple tracked URLs under a named project belonging to a user.
+// Reports can optionally be tagged with a projectId (see reportSchema
+// above) so a project's report history can be queried directly.
+const projectSchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    name: { type: String, required: true, trim: true },
+    urls: { type: [String], default: [] },
+    description: { type: String, default: "" }
+  },
+  { timestamps: true }
+);
+
+export const Project = mongoose.models.Project || mongoose.model("Project", projectSchema);
+
 /**
  * Persists a completed scan payload as a Report document. Never throws and
  * never delays or fails the scan response on error — any failure (including
  * "not connected") is logged and swallowed, per the requirement that a
  * database problem must never break a working scan.
  */
-export async function saveReportToDatabase(payload, crawl) {
+export async function saveReportToDatabase(payload, crawl, ownerContext = {}) {
   try {
     if (mongoose.connection.readyState !== 1) {
       logger.warn("DB", "report_save_skipped", { reason: "MongoDB not connected", url: payload?.resolvedUrl });
@@ -305,8 +325,12 @@ export async function saveReportToDatabase(payload, crawl) {
     }
 
     const doc = await Report.create({
+      userId: ownerContext.userId || null,
+      projectId: ownerContext.projectId || null,
       url: payload.resolvedUrl,
       finalUrl: crawl?.finalUrl || payload.resolvedUrl,
+      title: safeText(payload.title, ""),
+      overallScore: payload.overallAIVisibilityScore != null ? payload.overallAIVisibilityScore : null,
       crawlResult: {
         method: crawl?.crawlMethod,
         status: crawl?.status,
@@ -561,7 +585,10 @@ export async function authenticateAndRateLimit(req, res, next) {
           // Plain-object mirror so existing route code (which mutates
           // req.user.scansToday directly, e.g. in /scan and /compare)
           // works completely unchanged regardless of auth method.
+          // _id is additive — only new report-ownership/project code reads
+          // it; nothing pre-existing depended on req.user shape being exact.
           req.user = {
+            _id: dbUser._id,
             email: dbUser.email,
             plan: dbUser.plan,
             scansToday: dbUser.scansToday,
@@ -626,6 +653,38 @@ export async function authenticateAndRateLimit(req, res, next) {
 
   req.user = user;
   next();
+}
+
+/**
+ * Strict account-authentication middleware for endpoints that represent a
+ * user's own data (dashboard stats, reports, projects) rather than a
+ * scan-triggering action. Unlike authenticateAndRateLimit, this never falls
+ * back to anonymous/API-key access and never touches scan quotas — it
+ * simply requires a valid, currently-issued JWT for a real Mongo account.
+ */
+export async function requireAuth(req, res, next) {
+  const authHeader = safeText(req.headers.authorization);
+  const token = authHeader.replace(/^Bearer\s+/i, "");
+  const decoded = token ? verifyAuthToken(token) : null;
+
+  if (!decoded?.sub) {
+    return res.status(401).json({ success: false, message: "Authentication required. Please log in." });
+  }
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ success: false, message: "This feature is temporarily unavailable (database not connected)." });
+  }
+
+  try {
+    const dbUser = await User.findById(decoded.sub).select("-passwordHash");
+    if (!dbUser) {
+      return res.status(401).json({ success: false, message: "Account not found." });
+    }
+    req.authUser = dbUser;
+    next();
+  } catch (err) {
+    logger.error("AUTH", "require_auth_failed", { error: err.message });
+    res.status(500).json({ success: false, message: "Authentication check failed." });
+  }
 }
 
 /**
@@ -4406,7 +4465,7 @@ function recordTrendPoint(cacheKey, payload) {
   }
 }
 
-export async function analyzeSingleUrl(url) {
+export async function analyzeSingleUrl(url, ownerContext = {}) {
   const cacheKey = normalizeUrl(url);
   if (scanCache.has(cacheKey)) {
     const entry = scanCache.get(cacheKey);
@@ -4746,7 +4805,7 @@ export async function analyzeSingleUrl(url) {
     // Persist the completed report to MongoDB, best-effort. This never
     // throws (see saveReportToDatabase) and never prevents the scan result
     // from being returned to the caller, even if MongoDB is unreachable.
-    await saveReportToDatabase(payload, crawl);
+    await saveReportToDatabase(payload, crawl, ownerContext);
 
     return payload;
   } catch (err) {
@@ -4947,7 +5006,7 @@ app.get("/scan", authenticateAndRateLimit, asyncHandler(async (req, res) => {
   activeScans.set(cacheKey, Date.now());
 
   try {
-    const data = await analyzeSingleUrl(normalized);
+    const data = await analyzeSingleUrl(normalized, { userId: req.user?._id || null });
 
     if (data && data.success && req.user) {
       req.user.scansToday = safeNumber(req.user.scansToday) + 1;
@@ -4969,8 +5028,8 @@ app.get("/compare", authenticateAndRateLimit, asyncHandler(async (req, res) => {
   const { normalizedUrl, normalizedComp } = validated;
 
   const results = await Promise.allSettled([
-    analyzeSingleUrl(normalizedUrl),
-    analyzeSingleUrl(normalizedComp)
+    analyzeSingleUrl(normalizedUrl, { userId: req.user?._id || null }),
+    analyzeSingleUrl(normalizedComp, { userId: req.user?._id || null })
   ]);
 
   const site1 = results[0].status === "fulfilled" ? results[0].value : null;
@@ -5018,8 +5077,8 @@ app.get("/content-gap", authenticateAndRateLimit, asyncHandler(async (req, res) 
   const { normalizedUrl, normalizedComp } = validated;
 
   const [userData, compData] = await Promise.all([
-    analyzeSingleUrl(normalizedUrl),
-    analyzeSingleUrl(normalizedComp)
+    analyzeSingleUrl(normalizedUrl, { userId: req.user?._id || null }),
+    analyzeSingleUrl(normalizedComp, { userId: req.user?._id || null })
   ]);
 
   if (!userData || !compData || userData.blocked || compData.blocked) {
@@ -5069,7 +5128,7 @@ app.get("/roadmap", authenticateAndRateLimit, asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, error: "Invalid or unsafe URL structure received" });
   }
 
-  const data = await analyzeSingleUrl(normalizedUrl);
+  const data = await analyzeSingleUrl(normalizedUrl, { userId: req.user?._id || null });
   if (!data || data.blocked) {
     return res.json(data);
   }
@@ -5094,8 +5153,8 @@ app.get("/keyword-theft", authenticateAndRateLimit, asyncHandler(async (req, res
   const { normalizedUrl, normalizedComp } = validated;
 
   const [userData, compData] = await Promise.all([
-    analyzeSingleUrl(normalizedUrl),
-    analyzeSingleUrl(normalizedComp)
+    analyzeSingleUrl(normalizedUrl, { userId: req.user?._id || null }),
+    analyzeSingleUrl(normalizedComp, { userId: req.user?._id || null })
   ]);
 
   if (!userData || !compData || userData.blocked || compData.blocked) {
@@ -5139,7 +5198,7 @@ app.get("/content-brief", authenticateAndRateLimit, asyncHandler(async (req, res
   const normalizedUrl = enforceSecureUrl(url);
   if (!normalizedUrl) return res.status(400).json({ success: false, error: "Invalid or unsafe URL structure received" });
 
-  const data = await analyzeSingleUrl(normalizedUrl);
+  const data = await analyzeSingleUrl(normalizedUrl, { userId: req.user?._id || null });
   if (!data || data.blocked) {
     return res.json(data);
   }
@@ -5162,7 +5221,7 @@ app.get("/autopilot", authenticateAndRateLimit, asyncHandler(async (req, res) =>
   const normalizedUrl = enforceSecureUrl(url);
   if (!normalizedUrl) return res.status(400).json({ success: false, error: "Invalid or unsafe URL structure received" });
 
-  const data = await analyzeSingleUrl(normalizedUrl);
+  const data = await analyzeSingleUrl(normalizedUrl, { userId: req.user?._id || null });
   if (!data || data.blocked) {
     return res.json(data);
   }
@@ -5174,14 +5233,177 @@ app.get("/autopilot", authenticateAndRateLimit, asyncHandler(async (req, res) =>
   });
 }));
 
-app.get("/history", (req, res) => {
+// =========================================================================
+// ========== SECTION 16.6: DASHBOARD, REPORTS & USER HISTORY ==============
+// =========================================================================
+
+app.get("/dashboard/stats", requireAuth, asyncHandler(async (req, res) => {
+  const userId = req.authUser._id;
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const [totalScans, todaysScans, aggregateResult] = await Promise.all([
+    Report.countDocuments({ userId }),
+    Report.countDocuments({ userId, scanDate: { $gte: startOfDay } }),
+    Report.aggregate([
+      { $match: { userId } },
+      {
+        $group: {
+          _id: null,
+          avgSeoScore: { $avg: "$seoScore" },
+          avgGeoScore: { $avg: "$geoScore" },
+          avgAeoScore: { $avg: "$aeoScore" },
+          avgEeatScore: { $avg: "$eeatScore" },
+          avgTrustScore: { $avg: "$trustScore" },
+          avgAuthorityScore: { $avg: "$authorityScore" },
+          avgCitationScore: { $avg: "$citationScore" }
+        }
+      }
+    ])
+  ]);
+
+  // With zero reports, the $group stage produces no output document at
+  // all — averages are reported as null (no data yet), never fabricated
+  // as zero, so the dashboard can render an honest empty state.
+  const agg = aggregateResult[0] || {};
+  const round = (v) => (v === undefined || v === null ? null : Math.round(v));
+
+  res.json({
+    success: true,
+    totalScans,
+    todaysScans,
+    averages: {
+      seoScore: round(agg.avgSeoScore),
+      geoScore: round(agg.avgGeoScore),
+      aeoScore: round(agg.avgAeoScore),
+      eeatScore: round(agg.avgEeatScore),
+      trustScore: round(agg.avgTrustScore),
+      authorityScore: round(agg.avgAuthorityScore),
+      citationScore: round(agg.avgCitationScore)
+    }
+  });
+}));
+
+const REPORT_SORTABLE_FIELDS = ["scanDate", "seoScore", "geoScore", "aeoScore", "eeatScore", "trustScore", "authorityScore", "citationScore", "overallScore"];
+
+app.get("/reports", requireAuth, asyncHandler(async (req, res) => {
+  const userId = req.authUser._id;
+  const page = Math.max(1, safeNumber(req.query.page, 1));
+  const limit = Math.min(100, Math.max(1, safeNumber(req.query.limit, 20)));
+  const sortField = REPORT_SORTABLE_FIELDS.includes(req.query.sortBy) ? req.query.sortBy : "scanDate";
+  const sortDir = req.query.sortDir === "asc" ? 1 : -1;
+
+  const filter = { userId };
+  if (safeText(req.query.projectId) && mongoose.Types.ObjectId.isValid(req.query.projectId)) {
+    filter.projectId = req.query.projectId;
+  }
+  if (safeText(req.query.search)) {
+    filter.url = { $regex: safeText(req.query.search).slice(0, 200), $options: "i" };
+  }
+
+  const [total, reports] = await Promise.all([
+    Report.countDocuments(filter),
+    Report.find(filter).sort({ [sortField]: sortDir }).skip((page - 1) * limit).limit(limit).lean()
+  ]);
+
+  res.json({
+    success: true,
+    page,
+    limit,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+    reports: reports.map(r => ({
+      id: r._id.toString(),
+      url: r.url,
+      finalUrl: r.finalUrl,
+      title: r.title,
+      overallScore: r.overallScore,
+      seoScore: r.seoScore,
+      geoScore: r.geoScore,
+      aeoScore: r.aeoScore,
+      eeatScore: r.eeatScore,
+      trustScore: r.trustScore,
+      authorityScore: r.authorityScore,
+      citationScore: r.citationScore,
+      projectId: r.projectId ? r.projectId.toString() : null,
+      scanDate: r.scanDate
+    }))
+  });
+}));
+
+app.get("/reports/:id", requireAuth, asyncHandler(async (req, res) => {
+  const userId = req.authUser._id;
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ success: false, message: "Invalid report ID." });
+  }
+
+  const report = await Report.findOne({ _id: id, userId }).lean();
+  if (!report) {
+    return res.status(404).json({ success: false, message: "Report not found." });
+  }
+
+  res.json({ success: true, report: { ...report, id: report._id.toString() } });
+}));
+
+app.delete("/reports/:id", requireAuth, asyncHandler(async (req, res) => {
+  const userId = req.authUser._id;
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ success: false, message: "Invalid report ID." });
+  }
+
+  const result = await Report.deleteOne({ _id: id, userId });
+  if (result.deletedCount === 0) {
+    return res.status(404).json({ success: false, message: "Report not found, or you do not have permission to delete it." });
+  }
+
+  logger.info("REPORTS", "report_deleted", { id, userId: userId.toString() });
+  res.json({ success: true, message: "Report deleted." });
+}));
+
+/**
+ * /history preserves its original anonymous, in-memory-backed behavior
+ * exactly as before for any request without a valid account token. When a
+ * valid JWT for a real Mongo account is present, it instead returns that
+ * user's own persistent scan history from MongoDB — falling back to the
+ * legacy in-memory array on any token/DB issue, so this route can never
+ * regress for existing callers.
+ */
+app.get("/history", asyncHandler(async (req, res) => {
+  const authHeader = safeText(req.headers.authorization);
+  const token = authHeader.replace(/^Bearer\s+/i, "");
+  const decoded = token ? verifyAuthToken(token) : null;
+
+  if (decoded?.sub && mongoose.connection.readyState === 1) {
+    try {
+      const reports = await Report.find({ userId: decoded.sub })
+        .sort({ scanDate: -1 })
+        .limit(MAX_SCAN_HISTORY)
+        .lean();
+
+      return res.json(reports.map(r => ({
+        id: r._id.toString(),
+        url: r.finalUrl || r.url,
+        title: r.title || r.url,
+        score: r.overallScore,
+        seoScore: r.seoScore,
+        aeoScore: r.aeoScore,
+        timestamp: r.scanDate
+      })));
+    } catch (err) {
+      logger.error("API", "mongo_history_failed", { error: err.message });
+      // Falls through to legacy in-memory behavior below.
+    }
+  }
+
   try {
     res.json(safeArray(scanHistory));
   } catch (err) {
     logger.error("API", "history_retrieval_failed", { error: err.message });
     res.status(500).json({ success: false, error: "History retrieval failed" });
   }
-});
+}));
 
 app.get("/trend", (req, res) => {
   try {
@@ -5204,6 +5426,160 @@ app.get("/trend", (req, res) => {
     res.status(500).json({ success: false, error: "Trend retrieval failed" });
   }
 });
+
+// =========================================================================
+// ========== SECTION 16.7: PROJECTS SYSTEM =================================
+// =========================================================================
+
+app.post("/projects", requireAuth, asyncHandler(async (req, res) => {
+  const name = safeText(req.body?.name);
+  const urls = safeArray(req.body?.urls).map(u => safeText(u)).filter(Boolean).slice(0, 100);
+  const description = safeText(req.body?.description).slice(0, 500);
+
+  if (!name) {
+    return res.status(400).json({ success: false, message: "A project name is required." });
+  }
+
+  const project = await Project.create({
+    userId: req.authUser._id,
+    name,
+    urls,
+    description
+  });
+
+  logger.info("PROJECTS", "project_created", { id: project._id.toString(), userId: req.authUser._id.toString() });
+  res.status(201).json({
+    success: true,
+    project: {
+      id: project._id.toString(),
+      name: project.name,
+      urls: project.urls,
+      description: project.description,
+      createdAt: project.createdAt
+    }
+  });
+}));
+
+app.get("/projects", requireAuth, asyncHandler(async (req, res) => {
+  const projects = await Project.find({ userId: req.authUser._id }).sort({ createdAt: -1 }).lean();
+
+  // Attach a lightweight report count per project without N+1 queries.
+  const projectIds = projects.map(p => p._id);
+  const counts = projectIds.length > 0
+    ? await Report.aggregate([
+        { $match: { projectId: { $in: projectIds } } },
+        { $group: { _id: "$projectId", count: { $sum: 1 } } }
+      ])
+    : [];
+  const countMap = new Map(counts.map(c => [c._id.toString(), c.count]));
+
+  res.json({
+    success: true,
+    projects: projects.map(p => ({
+      id: p._id.toString(),
+      name: p.name,
+      urls: p.urls,
+      description: p.description,
+      reportCount: countMap.get(p._id.toString()) || 0,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt
+    }))
+  });
+}));
+
+app.get("/projects/:id", requireAuth, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ success: false, message: "Invalid project ID." });
+  }
+
+  const project = await Project.findOne({ _id: id, userId: req.authUser._id }).lean();
+  if (!project) {
+    return res.status(404).json({ success: false, message: "Project not found." });
+  }
+
+  const reports = await Report.find({ projectId: id }).sort({ scanDate: -1 }).limit(100).lean();
+
+  res.json({
+    success: true,
+    project: {
+      id: project._id.toString(),
+      name: project.name,
+      urls: project.urls,
+      description: project.description,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt
+    },
+    reports: reports.map(r => ({
+      id: r._id.toString(),
+      url: r.url,
+      title: r.title,
+      overallScore: r.overallScore,
+      scanDate: r.scanDate
+    }))
+  });
+}));
+
+app.put("/projects/:id", requireAuth, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ success: false, message: "Invalid project ID." });
+  }
+
+  const updates = {};
+  if (req.body?.name !== undefined) {
+    const name = safeText(req.body.name);
+    if (!name) return res.status(400).json({ success: false, message: "Project name cannot be empty." });
+    updates.name = name;
+  }
+  if (req.body?.urls !== undefined) {
+    updates.urls = safeArray(req.body.urls).map(u => safeText(u)).filter(Boolean).slice(0, 100);
+  }
+  if (req.body?.description !== undefined) {
+    updates.description = safeText(req.body.description).slice(0, 500);
+  }
+
+  const project = await Project.findOneAndUpdate(
+    { _id: id, userId: req.authUser._id },
+    updates,
+    { new: true }
+  ).lean();
+
+  if (!project) {
+    return res.status(404).json({ success: false, message: "Project not found, or you do not have permission to edit it." });
+  }
+
+  res.json({
+    success: true,
+    project: {
+      id: project._id.toString(),
+      name: project.name,
+      urls: project.urls,
+      description: project.description,
+      updatedAt: project.updatedAt
+    }
+  });
+}));
+
+app.delete("/projects/:id", requireAuth, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ success: false, message: "Invalid project ID." });
+  }
+
+  const result = await Project.deleteOne({ _id: id, userId: req.authUser._id });
+  if (result.deletedCount === 0) {
+    return res.status(404).json({ success: false, message: "Project not found, or you do not have permission to delete it." });
+  }
+
+  // Detach (not delete) any reports that were tagged with this project —
+  // their scan data remains valid and owned by the user independent of
+  // the project grouping being removed.
+  await Report.updateMany({ projectId: id }, { projectId: null });
+
+  logger.info("PROJECTS", "project_deleted", { id, userId: req.authUser._id.toString() });
+  res.json({ success: true, message: "Project deleted." });
+}));
 
 // =========================================================================
 // ========== SECTION 16.5: ERROR HANDLING & FALLBACK ROUTES ===============

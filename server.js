@@ -311,6 +311,64 @@ const projectSchema = new mongoose.Schema(
 
 export const Project = mongoose.models.Project || mongoose.model("Project", projectSchema);
 
+// --- Site-wide crawl job model ------------------------------------------
+// Tracks a background multi-page crawl job. Each page discovered is
+// analyzed via the existing analyzeSingleUrl pipeline (no duplicate
+// scoring logic) — this model only stores job progress and the site-wide
+// aggregate findings that emerge from combining multiple pages' results.
+const siteCrawlJobSchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    rootUrl: { type: String, required: true },
+    maxPages: { type: Number, default: 10 },
+    status: { type: String, enum: ["pending", "running", "completed", "failed", "interrupted"], default: "pending", index: true },
+    discoveryMethod: { type: String, default: null },
+    discoveredUrls: { type: [String], default: [] },
+    pages: [
+      {
+        url: String,
+        status: { type: String, enum: ["pending", "success", "blocked", "error"], default: "pending" },
+        title: String,
+        overallScore: Number,
+        seoScore: Number,
+        geoScore: Number,
+        aeoScore: Number,
+        eeatScore: Number,
+        trustScore: Number,
+        authorityScore: Number,
+        citationScore: Number,
+        wordCount: Number,
+        reportId: { type: mongoose.Schema.Types.ObjectId, ref: "Report", default: null },
+        error: { type: String, default: null }
+      }
+    ],
+    siteWideFindings: {
+      pagesCrawled: { type: Number, default: 0 },
+      pagesFailed: { type: Number, default: 0 },
+      averages: {
+        seoScore: Number, geoScore: Number, aeoScore: Number,
+        eeatScore: Number, trustScore: Number, authorityScore: Number, citationScore: Number
+      },
+      duplicateTitleGroups: [{ title: String, urls: [String] }],
+      duplicateMetaGroups: [{ metaDescription: String, urls: [String] }],
+      orphanPages: [String],
+      thinContentPages: [{ url: String, wordCount: Number }]
+    },
+    errorMessage: { type: String, default: null },
+    startedAt: { type: Date, default: null },
+    completedAt: { type: Date, default: null }
+  },
+  { timestamps: true }
+);
+
+export const SiteCrawlJob = mongoose.models.SiteCrawlJob || mongoose.model("SiteCrawlJob", siteCrawlJobSchema);
+
+// In-memory tracker of jobs currently executing in THIS process, so a
+// graceful shutdown can mark them "interrupted" in MongoDB rather than
+// leaving them stuck at "running" forever if the process exits mid-job
+// (e.g. during a Render rolling deploy).
+export const activeSiteCrawlJobIds = new Set();
+
 /**
  * Persists a completed scan payload as a Report document. Never throws and
  * never delays or fails the scan response on error — any failure (including
@@ -1426,6 +1484,106 @@ export async function detectSitemap(baseUrl, robotsData) {
     logger.debug("SITEMAP", "sitemap_fetch_failed", { baseUrl, error: err.message });
     return { found: false, source: null, urls: [] };
   }
+}
+
+/**
+ * Fetches one sitemap XML document and extracts every <loc> URL. Follows a
+ * single level of sitemap-index nesting (a <sitemapindex> pointing to child
+ * sitemaps) — deliberately bounded to one level to keep discovery fast and
+ * predictable rather than recursively crawling an unbounded sitemap tree.
+ */
+export async function fetchSitemapUrls(sitemapUrl, maxUrls = 50) {
+  try {
+    const response = await axios.get(sitemapUrl, {
+      timeout: 8000,
+      validateStatus: () => true,
+      headers: { "User-Agent": USER_AGENTS[0] },
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      maxContentLength: 5 * 1024 * 1024
+    });
+    if (response.status >= 400 || typeof response.data !== "string") return [];
+
+    const xml = response.data;
+    const locMatches = xml.match(/<loc>([^<]+)<\/loc>/gi) || [];
+    const locs = locMatches.map(m => m.replace(/<\/?loc>/gi, "").trim()).filter(Boolean);
+
+    const isSitemapIndex = /<sitemapindex/i.test(xml);
+    if (isSitemapIndex && locs.length > 0) {
+      // One level of child-sitemap expansion only.
+      const childSitemapUrl = locs[0];
+      const childResponse = await axios.get(childSitemapUrl, {
+        timeout: 8000,
+        validateStatus: () => true,
+        headers: { "User-Agent": USER_AGENTS[0] },
+        httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+        maxContentLength: 5 * 1024 * 1024
+      });
+      if (childResponse.status < 400 && typeof childResponse.data === "string") {
+        const childLocs = (childResponse.data.match(/<loc>([^<]+)<\/loc>/gi) || [])
+          .map(m => m.replace(/<\/?loc>/gi, "").trim())
+          .filter(Boolean);
+        return childLocs.slice(0, maxUrls);
+      }
+      return [];
+    }
+
+    return locs.slice(0, maxUrls);
+  } catch (err) {
+    logger.debug("SITEMAP", "sitemap_urls_fetch_failed", { sitemapUrl, error: err.message });
+    return [];
+  }
+}
+
+/**
+ * Discovers up to maxPages URLs to crawl for a site-wide audit. Prefers the
+ * sitemap (authoritative, explicitly published by the site owner); falls
+ * back to internal links extracted from the homepage's own link analysis
+ * when no usable sitemap is found. Always includes the root URL itself as
+ * the first page.
+ */
+export async function discoverSitePages(rootUrl, maxPages, homepageLinkMap) {
+  const seen = new Set([normalizeUrl(rootUrl)]);
+  const discovered = [rootUrl];
+  let method = "root-only";
+
+  try {
+    const robotsData = await fetchRobotsTxt(rootUrl);
+    const sitemapData = await detectSitemap(rootUrl, robotsData);
+    if (sitemapData.found && sitemapData.urls.length > 0) {
+      const sitemapUrls = await fetchSitemapUrls(sitemapData.urls[0], maxPages * 2);
+      for (const u of sitemapUrls) {
+        if (discovered.length >= maxPages) break;
+        const norm = normalizeUrl(u);
+        if (!seen.has(norm)) {
+          seen.add(norm);
+          discovered.push(u);
+        }
+      }
+      if (discovered.length > 1) method = "sitemap";
+    }
+  } catch (err) {
+    logger.warn("SITE_CRAWL", "sitemap_discovery_failed", { rootUrl, error: err.message });
+  }
+
+  // Supplement with internal links from the homepage's own crawl if the
+  // sitemap didn't yield enough pages (or wasn't found at all).
+  if (discovered.length < maxPages && homepageLinkMap) {
+    let origin = "https://";
+    try { origin = new URL(rootUrl).protocol + "//"; } catch {}
+
+    for (const normalizedPath of Object.keys(homepageLinkMap)) {
+      if (discovered.length >= maxPages) break;
+      const fullUrl = origin + normalizedPath;
+      const norm = normalizeUrl(fullUrl);
+      if (!seen.has(norm)) {
+        seen.add(norm);
+        discovered.push(fullUrl);
+      }
+    }
+    if (discovered.length > 1 && method === "root-only") method = "internal-links";
+  }
+
+  return { urls: discovered.slice(0, maxPages), method };
 }
 
 // =========================================================================
@@ -4805,7 +4963,8 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
     // Persist the completed report to MongoDB, best-effort. This never
     // throws (see saveReportToDatabase) and never prevents the scan result
     // from being returned to the caller, even if MongoDB is unreachable.
-    await saveReportToDatabase(payload, crawl, ownerContext);
+    const savedReportDoc = await saveReportToDatabase(payload, crawl, ownerContext);
+    payload.reportId = savedReportDoc?._id || null;
 
     return payload;
   } catch (err) {
@@ -4820,6 +4979,229 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
       protectionType: "Parser Exception",
       resolvedUrl: crawl?.finalUrl || url
     };
+  }
+}
+
+// =========================================================================
+// ========== SECTION 15.9: SITE-WIDE MULTI-PAGE CRAWL ORCHESTRATION =======
+// =========================================================================
+
+/**
+ * Real cross-page duplicate-title/meta-description detection. Single-page
+ * scans could only ever check duplication WITHIN one page's own paragraphs
+ * (see detectInternalDuplication) and explicitly said cross-page duplicate
+ * content required a full-site crawl. This is that full-site crawl —
+ * grouping pages that share an identical title or meta description.
+ */
+function findCrossPageDuplicates(pageResults) {
+  const titleGroups = new Map();
+  const metaGroups = new Map();
+
+  pageResults.forEach(p => {
+    if (p.status !== "success") return;
+    const titleKey = safeText(p.title).toLowerCase().trim();
+    const metaKey = safeText(p.metaDescription).toLowerCase().trim();
+    if (titleKey) {
+      if (!titleGroups.has(titleKey)) titleGroups.set(titleKey, []);
+      titleGroups.get(titleKey).push(p.url);
+    }
+    if (metaKey) {
+      if (!metaGroups.has(metaKey)) metaGroups.set(metaKey, []);
+      metaGroups.get(metaKey).push(p.url);
+    }
+  });
+
+  const duplicateTitleGroups = [...titleGroups.entries()]
+    .filter(([, urls]) => urls.length > 1)
+    .map(([title, urls]) => ({ title, urls }));
+
+  const duplicateMetaGroups = [...metaGroups.entries()]
+    .filter(([, urls]) => urls.length > 1)
+    .map(([metaDescription, urls]) => ({ metaDescription, urls }));
+
+  return { duplicateTitleGroups, duplicateMetaGroups };
+}
+
+/**
+ * Real cross-page orphan-page detection. Single-page scans could only
+ * flag a heuristic "risk" based on unique-destination count within one
+ * page. With multiple pages actually crawled, this builds a genuine
+ * inbound-link graph across every crawled page and identifies pages that
+ * received zero internal links from any OTHER crawled page.
+ */
+function findOrphanPages(pageResults, rootUrl) {
+  const inboundCounts = new Map();
+  pageResults.forEach(p => inboundCounts.set(normalizeUrl(p.url), 0));
+
+  pageResults.forEach(p => {
+    if (p.status !== "success" || !p.internalLinkTargets) return;
+    p.internalLinkTargets.forEach(targetPath => {
+      let origin = "https://";
+      try { origin = new URL(rootUrl).protocol + "//"; } catch {}
+      const norm = normalizeUrl(origin + targetPath);
+      if (inboundCounts.has(norm) && normalizeUrl(p.url) !== norm) {
+        inboundCounts.set(norm, (inboundCounts.get(norm) || 0) + 1);
+      }
+    });
+  });
+
+  const rootNorm = normalizeUrl(rootUrl);
+  return pageResults
+    .filter(p => p.status === "success" && normalizeUrl(p.url) !== rootNorm && (inboundCounts.get(normalizeUrl(p.url)) || 0) === 0)
+    .map(p => p.url);
+}
+
+/**
+ * Runs a complete site-wide crawl job to completion, updating the
+ * SiteCrawlJob document as it progresses. Designed to be invoked
+ * fire-and-forget from the POST /site-crawl route (never awaited by the
+ * HTTP response) — all errors are caught and recorded on the job document
+ * rather than ever throwing out of this function.
+ */
+export async function runSiteCrawlJob(jobId) {
+  activeSiteCrawlJobIds.add(jobId);
+  const CONCURRENCY = 3;
+
+  try {
+    const job = await SiteCrawlJob.findById(jobId);
+    if (!job) return;
+
+    job.status = "running";
+    job.startedAt = new Date();
+    await job.save();
+
+    const ownerContext = { userId: job.userId };
+
+    // Page 1: the root URL. Its own link analysis feeds page discovery.
+    const rootResult = await analyzeSingleUrl(job.rootUrl, ownerContext);
+    const homepageLinkMap = rootResult?.links?.linkMap || null;
+
+    const discovery = await discoverSitePages(job.rootUrl, job.maxPages, homepageLinkMap);
+    job.discoveredUrls = discovery.urls;
+    job.discoveryMethod = discovery.method;
+    await job.save();
+
+    const remainingUrls = discovery.urls.slice(1); // root already analyzed above
+    const pageResults = [];
+
+    const recordPageResult = (url, data) => {
+      if (!data || data.blocked) {
+        pageResults.push({
+          url,
+          status: data?.blocked ? "blocked" : "error",
+          error: data?.reason || "Unknown failure",
+          internalLinkTargets: []
+        });
+        return;
+      }
+      pageResults.push({
+        url,
+        status: "success",
+        title: data.title,
+        metaDescription: data.metaDescription,
+        overallScore: data.overallAIVisibilityScore,
+        seoScore: data.seoScore,
+        geoScore: data.geoScore,
+        aeoScore: data.aeoScore,
+        eeatScore: data.eeatScore,
+        trustScore: data.trustScore,
+        authorityScore: data.authorityScore,
+        citationScore: data.citationScore,
+        wordCount: data.wordCount,
+        reportId: data.reportId || null,
+        internalLinkTargets: Object.keys(data.links?.linkMap || {})
+      });
+    };
+
+    recordPageResult(job.rootUrl, rootResult);
+
+    // Bounded-concurrency crawl of the remaining discovered pages, so a
+    // 10-25 page audit doesn't either serialize into minutes-long latency
+    // or spin up unbounded simultaneous Playwright instances.
+    let cursor = 0;
+    async function worker() {
+      while (cursor < remainingUrls.length) {
+        const myIndex = cursor++;
+        const url = remainingUrls[myIndex];
+        try {
+          const result = await analyzeSingleUrl(url, ownerContext);
+          recordPageResult(url, result);
+        } catch (err) {
+          pageResults.push({ url, status: "error", error: err.message, internalLinkTargets: [] });
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, remainingUrls.length) }, worker));
+
+    const successfulPages = pageResults.filter(p => p.status === "success");
+    const avg = (field) => {
+      const vals = successfulPages.map(p => p[field]).filter(v => typeof v === "number");
+      return vals.length > 0 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+    };
+
+    const { duplicateTitleGroups, duplicateMetaGroups } = findCrossPageDuplicates(pageResults);
+    const orphanPages = findOrphanPages(pageResults, job.rootUrl);
+    const thinContentPages = successfulPages
+      .filter(p => typeof p.wordCount === "number" && p.wordCount < 300)
+      .map(p => ({ url: p.url, wordCount: p.wordCount }));
+
+    job.pages = pageResults.map(p => ({
+      url: p.url,
+      status: p.status,
+      title: p.title || null,
+      overallScore: p.overallScore ?? null,
+      seoScore: p.seoScore ?? null,
+      geoScore: p.geoScore ?? null,
+      aeoScore: p.aeoScore ?? null,
+      eeatScore: p.eeatScore ?? null,
+      trustScore: p.trustScore ?? null,
+      authorityScore: p.authorityScore ?? null,
+      citationScore: p.citationScore ?? null,
+      wordCount: p.wordCount ?? null,
+      reportId: p.reportId || null,
+      error: p.error || null
+    }));
+
+    job.siteWideFindings = {
+      pagesCrawled: successfulPages.length,
+      pagesFailed: pageResults.length - successfulPages.length,
+      averages: {
+        seoScore: avg("seoScore"),
+        geoScore: avg("geoScore"),
+        aeoScore: avg("aeoScore"),
+        eeatScore: avg("eeatScore"),
+        trustScore: avg("trustScore"),
+        authorityScore: avg("authorityScore"),
+        citationScore: avg("citationScore")
+      },
+      duplicateTitleGroups,
+      duplicateMetaGroups,
+      orphanPages,
+      thinContentPages
+    };
+
+    job.status = "completed";
+    job.completedAt = new Date();
+    await job.save();
+
+    // Reflect the pages actually crawled against the owning user's daily
+    // scan quota, consistent with how a single /scan counts against it.
+    try {
+      await User.findByIdAndUpdate(job.userId, { $inc: { scansToday: pageResults.length } });
+    } catch (err) {
+      logger.error("SITE_CRAWL", "quota_update_failed", { jobId, error: err.message });
+    }
+
+    logger.info("SITE_CRAWL", "job_completed", { jobId, pagesCrawled: successfulPages.length, pagesFailed: pageResults.length - successfulPages.length });
+  } catch (err) {
+    logger.error("SITE_CRAWL", "job_failed", { jobId, error: err.message, stack: err.stack });
+    try {
+      await SiteCrawlJob.findByIdAndUpdate(jobId, { status: "failed", errorMessage: err.message, completedAt: new Date() });
+    } catch (updateErr) {
+      logger.error("SITE_CRAWL", "job_failure_persist_failed", { jobId, error: updateErr.message });
+    }
+  } finally {
+    activeSiteCrawlJobIds.delete(jobId);
   }
 }
 
@@ -5582,6 +5964,158 @@ app.delete("/projects/:id", requireAuth, asyncHandler(async (req, res) => {
 }));
 
 // =========================================================================
+// ========== SECTION 16.8: SITE-WIDE MULTI-PAGE CRAWLER ROUTES ============
+// =========================================================================
+
+const SITE_CRAWL_MAX_PAGES_CAP = 25;
+const SITE_CRAWL_STALE_MS = 15 * 60 * 1000;
+
+app.post("/site-crawl", requireAuth, asyncHandler(async (req, res) => {
+  const rootUrl = enforceSecureUrl(safeText(req.body?.url));
+  if (!rootUrl) {
+    return res.status(400).json({ success: false, message: "A valid, safe URL is required." });
+  }
+
+  const requestedMaxPages = clamp(safeNumber(req.body?.maxPages, 10), 1, SITE_CRAWL_MAX_PAGES_CAP);
+
+  // Respect the same daily quota a single /scan draws from — a site-wide
+  // crawl of N pages is fairly counted as N scans, not one free pass.
+  const limit = PLAN_LIMITS[req.authUser.plan] || 5;
+  if (Date.now() - new Date(req.authUser.lastScanReset).getTime() > 24 * 60 * 60 * 1000) {
+    req.authUser.scansToday = 0;
+    req.authUser.lastScanReset = new Date();
+    await req.authUser.save();
+  }
+  const remainingQuota = limit - safeNumber(req.authUser.scansToday, 0);
+  if (remainingQuota <= 0) {
+    return res.status(429).json({
+      success: false,
+      status: "LIMIT_EXCEEDED",
+      message: `You have reached your tier daily limits (${req.authUser.scansToday}/${limit} scans). Please upgrade plans.`
+    });
+  }
+
+  const allowedMaxPages = Math.min(requestedMaxPages, remainingQuota);
+
+  const job = await SiteCrawlJob.create({
+    userId: req.authUser._id,
+    rootUrl,
+    maxPages: allowedMaxPages,
+    status: "pending"
+  });
+
+  // Fire-and-forget: the HTTP response returns immediately with a jobId to
+  // poll. runSiteCrawlJob catches all its own errors and always records
+  // final status on the job document, so this is safe to not await.
+  runSiteCrawlJob(job._id.toString()).catch(err => {
+    logger.error("SITE_CRAWL", "unhandled_job_error", { jobId: job._id.toString(), error: err.message });
+  });
+
+  logger.info("SITE_CRAWL", "job_queued", { jobId: job._id.toString(), rootUrl, maxPages: allowedMaxPages, userId: req.authUser._id.toString() });
+
+  res.status(202).json({
+    success: true,
+    jobId: job._id.toString(),
+    status: "pending",
+    maxPages: allowedMaxPages,
+    message: allowedMaxPages < requestedMaxPages
+      ? `Crawl limited to ${allowedMaxPages} page(s) based on your remaining daily quota.`
+      : "Site-wide crawl started. Poll GET /site-crawl/:jobId for progress."
+  });
+}));
+
+app.get("/site-crawl", requireAuth, asyncHandler(async (req, res) => {
+  const page = Math.max(1, safeNumber(req.query.page, 1));
+  const limit = Math.min(50, Math.max(1, safeNumber(req.query.limit, 10)));
+
+  const [total, jobs] = await Promise.all([
+    SiteCrawlJob.countDocuments({ userId: req.authUser._id }),
+    SiteCrawlJob.find({ userId: req.authUser._id })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .select("-pages")
+      .lean()
+  ]);
+
+  res.json({
+    success: true,
+    page,
+    limit,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+    jobs: jobs.map(j => ({
+      id: j._id.toString(),
+      rootUrl: j.rootUrl,
+      maxPages: j.maxPages,
+      status: j.status,
+      discoveryMethod: j.discoveryMethod,
+      pagesCrawled: j.siteWideFindings?.pagesCrawled ?? 0,
+      pagesFailed: j.siteWideFindings?.pagesFailed ?? 0,
+      createdAt: j.createdAt,
+      completedAt: j.completedAt
+    }))
+  });
+}));
+
+app.get("/site-crawl/:jobId", requireAuth, asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    return res.status(400).json({ success: false, message: "Invalid job ID." });
+  }
+
+  const job = await SiteCrawlJob.findOne({ _id: jobId, userId: req.authUser._id });
+  if (!job) {
+    return res.status(404).json({ success: false, message: "Site-crawl job not found." });
+  }
+
+  // Self-heal against jobs orphaned by a process restart/redeploy mid-run:
+  // if a job has been "running" far longer than any real crawl should
+  // take, and this process has no record of it being active, mark it
+  // failed instead of leaving a client polling forever.
+  if (job.status === "running" && !activeSiteCrawlJobIds.has(jobId) && job.startedAt && (Date.now() - job.startedAt.getTime() > SITE_CRAWL_STALE_MS)) {
+    job.status = "failed";
+    job.errorMessage = "Job did not complete in time, likely due to a server restart mid-crawl.";
+    job.completedAt = new Date();
+    await job.save();
+  }
+
+  res.json({
+    success: true,
+    job: {
+      id: job._id.toString(),
+      rootUrl: job.rootUrl,
+      maxPages: job.maxPages,
+      status: job.status,
+      discoveryMethod: job.discoveryMethod,
+      discoveredUrls: job.discoveredUrls,
+      pages: job.pages,
+      siteWideFindings: job.siteWideFindings,
+      errorMessage: job.errorMessage,
+      startedAt: job.startedAt,
+      completedAt: job.completedAt,
+      createdAt: job.createdAt
+    }
+  });
+}));
+
+app.delete("/site-crawl/:jobId", requireAuth, asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(jobId)) {
+    return res.status(400).json({ success: false, message: "Invalid job ID." });
+  }
+
+  const result = await SiteCrawlJob.deleteOne({ _id: jobId, userId: req.authUser._id });
+  if (result.deletedCount === 0) {
+    return res.status(404).json({ success: false, message: "Site-crawl job not found, or you do not have permission to delete it." });
+  }
+
+  activeSiteCrawlJobIds.delete(jobId);
+  logger.info("SITE_CRAWL", "job_deleted", { jobId, userId: req.authUser._id.toString() });
+  res.json({ success: true, message: "Site-crawl job deleted." });
+}));
+
+// =========================================================================
 // ========== SECTION 16.5: ERROR HANDLING & FALLBACK ROUTES ===============
 // =========================================================================
 
@@ -5636,6 +6170,20 @@ async function gracefulShutdown(signal) {
   logger.info("SYSTEM", "shutdown_initiated", { signal });
   server.close(async () => {
     await closeBrowserInstance();
+
+    if (activeSiteCrawlJobIds.size > 0 && mongoose.connection.readyState === 1) {
+      try {
+        const ids = [...activeSiteCrawlJobIds];
+        await SiteCrawlJob.updateMany(
+          { _id: { $in: ids }, status: "running" },
+          { status: "interrupted", errorMessage: `Server shutdown (${signal}) interrupted this job mid-crawl.`, completedAt: new Date() }
+        );
+        logger.info("SITE_CRAWL", "jobs_marked_interrupted", { count: ids.length });
+      } catch (err) {
+        logger.error("SITE_CRAWL", "interrupt_marking_failed", { error: err.message });
+      }
+    }
+
     try {
       if (mongoose.connection.readyState === 1) {
         await mongoose.connection.close();

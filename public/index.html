@@ -1021,6 +1021,7 @@ li { margin: 6px 0; color: var(--text-secondary); }
     <button type="button" class="nav-link-btn" onclick="navGoToScan()">New Scan</button>
     <button type="button" class="nav-link-btn" onclick="navGoToHistory()">History</button>
     <button type="button" class="nav-link-btn" onclick="openReportsModal()">Reports</button>
+    <button type="button" class="nav-link-btn" onclick="openSiteCrawlModal()">Site Crawl</button>
   </nav>
 
   <div class="action-bar-controls">
@@ -1173,6 +1174,19 @@ li { margin: 6px 0; color: var(--text-secondary); }
     </div>
     <div id="reportDetailModalContent">
       <p class="modal-subtext">Loading report…</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SITE-WIDE CRAWL MODAL ===================== -->
+<div class="modal-overlay" id="siteCrawlModalOverlay" role="dialog" aria-modal="true" aria-labelledby="siteCrawlModalTitle">
+  <div class="modal-panel modal-panel-xl">
+    <div class="modal-header">
+      <h2 id="siteCrawlModalTitle"><span aria-hidden="true">🕸️</span> Site-Wide Crawl</h2>
+      <button type="button" class="modal-close-btn" onclick="closeSiteCrawlModal()" aria-label="Close">✕</button>
+    </div>
+    <div id="siteCrawlModalContent">
+      <p class="modal-subtext">Loading…</p>
     </div>
   </div>
 </div>
@@ -2139,6 +2153,275 @@ function renderReportDetail(r) {
   `;
 }
 
+// =========================================================================
+// PHASE 15 — SITE-WIDE MULTI-PAGE CRAWLER (real, backend-backed)
+// =========================================================================
+let siteCrawlPollTimer = null;
+let siteCrawlCurrentJobId = null;
+
+async function openSiteCrawlModal() {
+  if (!requireLoginOrPrompt()) return;
+  document.getElementById("siteCrawlModalOverlay")?.classList.add("open");
+  await renderSiteCrawlLanding();
+}
+
+function closeSiteCrawlModal() {
+  document.getElementById("siteCrawlModalOverlay")?.classList.remove("open");
+  stopSiteCrawlPolling();
+}
+
+function stopSiteCrawlPolling() {
+  if (siteCrawlPollTimer) { clearInterval(siteCrawlPollTimer); siteCrawlPollTimer = null; }
+  siteCrawlCurrentJobId = null;
+}
+
+async function renderSiteCrawlLanding() {
+  const content = document.getElementById("siteCrawlModalContent");
+  if (!content) return;
+  stopSiteCrawlPolling();
+
+  content.innerHTML = `
+    <div class="auth-form-group">
+      <label for="siteCrawlUrl">Root Domain URL</label>
+      <input type="text" id="siteCrawlUrl" placeholder="e.g. hafeezdigitalstudio.com">
+    </div>
+    <div class="auth-form-group">
+      <label for="siteCrawlMaxPages">Max Pages to Crawl (1–25)</label>
+      <input type="number" id="siteCrawlMaxPages" value="10" min="1" max="25">
+    </div>
+    <button type="button" class="auth-submit-btn" id="siteCrawlStartBtn" onclick="startSiteCrawl()">
+      <span class="btn-spinner" aria-hidden="true"></span>
+      <span class="btn-label-text">Start Site-Wide Crawl</span>
+    </button>
+    <div id="siteCrawlPastJobs" style="margin-top:24px;">
+      <div class="skeleton-bar" style="height:18px; width:40%;"></div>
+    </div>
+  `;
+
+  loadPastSiteCrawlJobs();
+}
+
+async function loadPastSiteCrawlJobs() {
+  const container = document.getElementById("siteCrawlPastJobs");
+  if (!container) return;
+  try {
+    const data = await apiFetch("/site-crawl?limit=10");
+    const jobs = safeArray(data.jobs);
+    if (jobs.length === 0) {
+      container.innerHTML = `<h4>Past Crawls</h4>${emptyStateHtml("🕸️", "No Site Crawls Yet", "Start your first site-wide crawl above.")}`;
+      return;
+    }
+
+    const statusBadge = (status) => {
+      const map = { completed: "badge-green", running: "badge-info", pending: "badge-neutral", failed: "badge-red", interrupted: "badge-orange" };
+      return `<span class="badge ${map[status] || 'badge-neutral'}">${escapeHtml(status.toUpperCase())}</span>`;
+    };
+
+    container.innerHTML = `
+      <h4>Past Crawls</h4>
+      <div class="table-scroll-wrap">
+        <table>
+          <caption class="visually-hidden">Past site-wide crawl jobs</caption>
+          <thead><tr><th scope="col">Domain</th><th scope="col">Status</th><th scope="col">Pages</th><th scope="col">Started</th><th scope="col">Actions</th></tr></thead>
+          <tbody>
+            ${jobs.map(j => `
+              <tr>
+                <td>${escapeHtml(cleanDomainBrand(j.rootUrl))}</td>
+                <td>${statusBadge(j.status)}</td>
+                <td>${j.pagesCrawled}${j.pagesFailed > 0 ? ` <small>(${j.pagesFailed} failed)</small>` : ''}</td>
+                <td>${new Date(j.createdAt).toLocaleDateString()}</td>
+                <td style="white-space:nowrap;">
+                  <button type="button" onclick="viewSiteCrawlJob('${j.id}')" style="font-size:11px; padding:6px 10px;">View</button>
+                  <button type="button" onclick="deleteSiteCrawlJob('${j.id}')" style="font-size:11px; padding:6px 10px; background:var(--accent-danger);">🗑️</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = emptyStateHtml("⚠️", "Couldn't Load Past Crawls", err.message || "Please try again.");
+  }
+}
+
+async function startSiteCrawl() {
+  const urlEl = document.getElementById("siteCrawlUrl");
+  const maxPagesEl = document.getElementById("siteCrawlMaxPages");
+  const btn = document.getElementById("siteCrawlStartBtn");
+  const url = (urlEl?.value || "").trim();
+  const maxPages = Math.min(25, Math.max(1, safeNumber(maxPagesEl?.value, 10)));
+
+  if (!url) {
+    showToast("Please enter a domain to crawl.", "error");
+    urlEl?.focus();
+    return;
+  }
+
+  btn?.setAttribute("aria-busy", "true");
+  if (btn) btn.disabled = true;
+
+  try {
+    const token = getStoredToken();
+    const res = await fetch(`${window.API_BASE}/site-crawl`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ url, maxPages })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(safeText(data.message, "Failed to start crawl."));
+
+    showToast(data.message || "Site-wide crawl started.", "success");
+    watchSiteCrawlJob(data.jobId);
+  } catch (err) {
+    showToast(err.message || "Failed to start site-wide crawl.", "error");
+  } finally {
+    btn?.setAttribute("aria-busy", "false");
+    if (btn) btn.disabled = false;
+  }
+}
+
+function viewSiteCrawlJob(jobId) {
+  watchSiteCrawlJob(jobId);
+}
+
+async function watchSiteCrawlJob(jobId) {
+  stopSiteCrawlPolling();
+  siteCrawlCurrentJobId = jobId;
+  await fetchAndRenderSiteCrawlJob(jobId);
+
+  siteCrawlPollTimer = setInterval(async () => {
+    if (siteCrawlCurrentJobId !== jobId) { stopSiteCrawlPolling(); return; }
+    const stillRunning = await fetchAndRenderSiteCrawlJob(jobId);
+    if (!stillRunning) stopSiteCrawlPolling();
+  }, 4000);
+}
+
+/** Fetches and renders a job's current state. Returns true if still in progress (caller should keep polling). */
+async function fetchAndRenderSiteCrawlJob(jobId) {
+  const content = document.getElementById("siteCrawlModalContent");
+  if (!content) return false;
+
+  try {
+    const data = await apiFetch(`/site-crawl/${jobId}`);
+    renderSiteCrawlJobDetail(data.job);
+    return data.job.status === "pending" || data.job.status === "running";
+  } catch (err) {
+    content.innerHTML = emptyStateHtml("⚠️", "Couldn't Load Crawl Job", err.message || "Please try again.");
+    return false;
+  }
+}
+
+function renderSiteCrawlJobDetail(job) {
+  const content = document.getElementById("siteCrawlModalContent");
+  if (!content) return;
+
+  const backBtn = `<button type="button" onclick="renderSiteCrawlLanding()" style="background:transparent; border:1px solid var(--border-color); color:var(--text-primary); padding:8px 14px; font-size:12px; margin-bottom:16px;">← Back to Site Crawls</button>`;
+
+  if (job.status === "pending" || job.status === "running") {
+    const discovered = safeArray(job.discoveredUrls).length;
+    const crawled = safeArray(job.pages).length;
+    content.innerHTML = `
+      ${backBtn}
+      <div class="loading-spinner" style="margin: 10px auto 20px auto;" aria-hidden="true"></div>
+      <p style="text-align:center; font-weight:700;">${job.status === "pending" ? "Preparing crawl…" : "Crawling in progress…"}</p>
+      <p style="text-align:center; color:var(--text-muted); font-size:13px;">${escapeHtml(cleanDomainBrand(job.rootUrl))} — ${discovered > 0 ? `${crawled}/${discovered} page(s) processed` : 'Discovering pages…'}</p>
+      <div class="loading-progress-track" style="max-width:400px; margin:0 auto;"><div class="loading-progress-fill" style="width:${discovered > 0 ? Math.round((crawled / discovered) * 100) : 8}%;"></div></div>
+    `;
+    return;
+  }
+
+  if (job.status === "failed" || job.status === "interrupted") {
+    content.innerHTML = `${backBtn}${emptyStateHtml("⚠️", job.status === "interrupted" ? "Crawl Interrupted" : "Crawl Failed", job.errorMessage || "This crawl did not complete successfully.")}`;
+    return;
+  }
+
+  // completed
+  const findings = job.siteWideFindings || {};
+  const avg = findings.averages || {};
+  const statCard = (label, value) => `
+    <div class="metric-box">
+      <div class="metric-value">${value != null ? value + '%' : '—'}</div>
+      <div class="metric-label">${escapeHtml(label)}</div>
+    </div>`;
+
+  const scoreBadge = (val) => val != null ? `<span class="badge ${val >= 80 ? 'badge-green' : val >= 50 ? 'badge-orange' : 'badge-red'}">${val}</span>` : '<span class="badge badge-neutral">—</span>';
+
+  content.innerHTML = `
+    ${backBtn}
+    <h4 style="margin-top:0;">${escapeHtml(cleanDomainBrand(job.rootUrl))} — Site-Wide Results</h4>
+    <p class="modal-subtext">Discovery method: ${escapeHtml(safeText(job.discoveryMethod))} · ${findings.pagesCrawled || 0} page(s) crawled${findings.pagesFailed > 0 ? `, ${findings.pagesFailed} failed` : ''}</p>
+
+    <div class="grid-3" style="margin-bottom:20px;">
+      ${statCard("Avg SEO", avg.seoScore)}
+      ${statCard("Avg GEO", avg.geoScore)}
+      ${statCard("Avg AEO", avg.aeoScore)}
+      ${statCard("Avg E-E-A-T", avg.eeatScore)}
+      ${statCard("Avg Authority", avg.authorityScore)}
+      ${statCard("Avg Trust", avg.trustScore)}
+    </div>
+
+    ${safeArray(findings.duplicateTitleGroups).length > 0 ? `
+    <details style="margin-bottom:12px;" open>
+      <summary><span aria-hidden="true">⚠️</span> Duplicate Titles Across Pages (${findings.duplicateTitleGroups.length} group(s))</summary>
+      ${findings.duplicateTitleGroups.map(g => `<div class="ai-box"><strong>"${escapeHtml(g.title)}"</strong> used on: ${g.urls.map(u => escapeHtml(u)).join(', ')}</div>`).join('')}
+    </details>` : ''}
+
+    ${safeArray(findings.duplicateMetaGroups).length > 0 ? `
+    <details style="margin-bottom:12px;">
+      <summary><span aria-hidden="true">⚠️</span> Duplicate Meta Descriptions (${findings.duplicateMetaGroups.length} group(s))</summary>
+      ${findings.duplicateMetaGroups.map(g => `<div class="ai-box"><strong>"${escapeHtml(g.metaDescription.slice(0, 100))}${g.metaDescription.length > 100 ? '…' : ''}"</strong> used on: ${g.urls.map(u => escapeHtml(u)).join(', ')}</div>`).join('')}
+    </details>` : ''}
+
+    ${safeArray(findings.orphanPages).length > 0 ? `
+    <details style="margin-bottom:12px;">
+      <summary><span aria-hidden="true">🔗</span> Orphan Pages (${findings.orphanPages.length}) — no internal links found pointing to these</summary>
+      <ul>${findings.orphanPages.map(u => `<li>${escapeHtml(u)}</li>`).join('')}</ul>
+    </details>` : ''}
+
+    ${safeArray(findings.thinContentPages).length > 0 ? `
+    <details style="margin-bottom:16px;">
+      <summary><span aria-hidden="true">📄</span> Thin Content Pages (${findings.thinContentPages.length}) — under 300 words</summary>
+      <ul>${findings.thinContentPages.map(p => `<li>${escapeHtml(p.url)} — ${p.wordCount} words</li>`).join('')}</ul>
+    </details>` : ''}
+
+    <div class="table-scroll-wrap">
+      <table>
+        <caption class="visually-hidden">Per-page crawl results</caption>
+        <thead><tr><th scope="col">Page</th><th scope="col">Status</th><th scope="col">SEO</th><th scope="col">GEO</th><th scope="col">AEO</th><th scope="col">Trust</th><th scope="col">Actions</th></tr></thead>
+        <tbody>
+          ${safeArray(job.pages).map(p => `
+            <tr>
+              <td style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(p.title || p.url)}</td>
+              <td>${p.status === 'success' ? '<span class="badge badge-green">OK</span>' : p.status === 'blocked' ? '<span class="badge badge-orange">BLOCKED</span>' : '<span class="badge badge-red">ERROR</span>'}</td>
+              <td>${scoreBadge(p.seoScore)}</td>
+              <td>${scoreBadge(p.geoScore)}</td>
+              <td>${scoreBadge(p.aeoScore)}</td>
+              <td>${scoreBadge(p.trustScore)}</td>
+              <td>${p.reportId ? `<button type="button" onclick="closeSiteCrawlModal(); viewReportDetail('${p.reportId}')" style="font-size:11px; padding:6px 10px;">View</button>` : (p.error ? `<span style="font-size:11px; color:var(--text-muted);" title="${escapeHtml(p.error)}">${escapeHtml(p.error.slice(0, 30))}${p.error.length > 30 ? '…' : ''}</span>` : '—')}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function deleteSiteCrawlJob(jobId) {
+  if (!confirm("Delete this site-crawl job and its results? This cannot be undone.")) return;
+  try {
+    const token = getStoredToken();
+    const res = await fetch(`${window.API_BASE}/site-crawl/${jobId}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(safeText(data.message, "Delete failed."));
+    showToast("Site-crawl job deleted.", "success");
+    loadPastSiteCrawlJobs();
+  } catch (err) {
+    showToast(err.message || "Failed to delete site-crawl job.", "error");
+  }
+}
+
 // Close any open modal on Escape, and on overlay-background click.
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
@@ -2148,8 +2431,9 @@ document.addEventListener("keydown", (e) => {
   closeDashboardModal();
   closeReportsModal();
   closeReportDetailModal();
+  closeSiteCrawlModal();
 });
-["authModalOverlay", "profileModalOverlay", "settingsModalOverlay", "dashboardModalOverlay", "reportsModalOverlay", "reportDetailModalOverlay"].forEach(id => {
+["authModalOverlay", "profileModalOverlay", "settingsModalOverlay", "dashboardModalOverlay", "reportsModalOverlay", "reportDetailModalOverlay", "siteCrawlModalOverlay"].forEach(id => {
   document.addEventListener("click", (e) => {
     if (e.target && e.target.id === id) e.target.classList.remove("open");
   });

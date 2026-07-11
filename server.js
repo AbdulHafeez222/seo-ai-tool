@@ -1964,10 +1964,169 @@ export function calculateTechnicalSeoScore({ pageData, headers, robotsData, site
 
   return aggregateMetrics(metrics);
 }
+
+// =========================================================================
+// ========== SECTION 6.5: CORE WEB VITALS (GOOGLE PAGESPEED INSIGHTS) =====
+// =========================================================================
+
+const PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
+const PSI_TIMEOUT_MS = 15000;
+
+// Official Google thresholds (web.dev / Search Central), stable since INP
+// replaced FID as a Core Web Vital in March 2024. Verified current as of
+// this build — see calculateCoreWebVitalsScore's evidence text for the
+// distinction between field (ranking-relevant) and lab (diagnostic-only)
+// data, which is the single most common misunderstanding about this metric.
+const CWV_THRESHOLDS = {
+  lcp: { good: 2500, poor: 4000, unit: "ms", label: "Largest Contentful Paint" },
+  inp: { good: 200, poor: 500, unit: "ms", label: "Interaction to Next Paint" },
+  cls: { good: 0.1, poor: 0.25, unit: "", label: "Cumulative Layout Shift" },
+  fcp: { good: 1800, poor: 3000, unit: "ms", label: "First Contentful Paint" },
+  ttfb: { good: 800, poor: 1800, unit: "ms", label: "Time to First Byte" }
+};
+
+function cwvRating(metricKey, value) {
+  if (value === null || value === undefined) return null;
+  const t = CWV_THRESHOLDS[metricKey];
+  if (!t) return null;
+  if (value <= t.good) return "GOOD";
+  if (value <= t.poor) return "NEEDS_IMPROVEMENT";
+  return "POOR";
+}
+
 /**
- * Races a promise against a hard timeout so a single hung crawl can never
- * stall a request indefinitely.
+ * Fetches real Core Web Vitals from Google's PageSpeed Insights API, which
+ * combines field data (real Chrome users, via CrUX — this is what actually
+ * affects search rankings) with lab data (a single simulated Lighthouse
+ * run — diagnostic only, does not directly affect rankings). Works without
+ * an API key (low, shared quota); set PAGESPEED_API_KEY to raise the quota.
+ * Bounded by PSI_TIMEOUT_MS and never throws — returns null on any failure
+ * so callers can degrade gracefully instead of blocking on a slow/failed
+ * PSI request.
  */
+export async function fetchCoreWebVitals(url, strategy = "mobile") {
+  try {
+    const apiKey = safeText(process.env.PAGESPEED_API_KEY);
+    const params = new URLSearchParams({ url, strategy, category: "performance" });
+    if (apiKey) params.set("key", apiKey);
+
+    const response = await axios.get(`${PSI_ENDPOINT}?${params.toString()}`, {
+      timeout: PSI_TIMEOUT_MS,
+      validateStatus: () => true
+    });
+
+    if (response.status !== 200 || !response.data) {
+      logger.warn("CWV", "psi_request_failed", { url, status: response.status });
+      return null;
+    }
+
+    const data = response.data;
+    const lighthouse = data.lighthouseResult;
+    const fieldData = data.loadingExperience?.metrics || null;
+    const originFieldData = data.originLoadingExperience?.metrics || null;
+    const hasPageFieldData = data.loadingExperience?.overall_category !== undefined && fieldData;
+    const hasOriginFieldData = data.originLoadingExperience?.overall_category !== undefined && originFieldData;
+
+    const readField = (metrics, key) => metrics?.[key]?.percentile ?? null;
+    const readLab = (auditKey) => lighthouse?.audits?.[auditKey]?.numericValue ?? null;
+
+    return {
+      strategy,
+      fetchedAt: new Date().toISOString(),
+      hasFieldData: Boolean(hasPageFieldData || hasOriginFieldData),
+      fieldDataScope: hasPageFieldData ? "url" : hasOriginFieldData ? "origin" : null,
+      field: {
+        lcp: readField(fieldData, "LARGEST_CONTENTFUL_PAINT_MS") ?? readField(originFieldData, "LARGEST_CONTENTFUL_PAINT_MS"),
+        inp: readField(fieldData, "INTERACTION_TO_NEXT_PAINT") ?? readField(originFieldData, "INTERACTION_TO_NEXT_PAINT"),
+        cls: (() => {
+          const raw = readField(fieldData, "CUMULATIVE_LAYOUT_SHIFT_SCORE") ?? readField(originFieldData, "CUMULATIVE_LAYOUT_SHIFT_SCORE");
+          return raw !== null ? raw / 100 : null; // CrUX reports CLS * 100 as an integer percentile
+        })(),
+        fcp: readField(fieldData, "FIRST_CONTENTFUL_PAINT_MS") ?? readField(originFieldData, "FIRST_CONTENTFUL_PAINT_MS")
+      },
+      lab: {
+        lcp: readLab("largest-contentful-paint"),
+        inp: readLab("interaction-to-next-paint") ?? readLab("experimental-interaction-to-next-paint"),
+        cls: readLab("cumulative-layout-shift"),
+        fcp: readLab("first-contentful-paint"),
+        ttfb: readLab("server-response-time") ?? readLab("time-to-first-byte"),
+        performanceScore: lighthouse?.categories?.performance?.score != null ? Math.round(lighthouse.categories.performance.score * 100) : null
+      }
+    };
+  } catch (err) {
+    logger.warn("CWV", "psi_fetch_error", { url, error: err.message });
+    return null;
+  }
+}
+
+/**
+ * Scores Core Web Vitals using real evidence only. Prioritizes field data
+ * (real users, ranking-relevant) whenever available; explicitly labels lab
+ * data as diagnostic-only when field data is absent, rather than silently
+ * presenting a lab estimate as if it were the ranking-relevant number —
+ * that distinction is the single most common misunderstanding of this
+ * metric and this scorer refuses to blur it.
+ */
+export function calculateCoreWebVitalsScore(psiData) {
+  if (!psiData) {
+    return {
+      available: false,
+      reason: "PageSpeed Insights data could not be retrieved for this page (request failed, timed out, or the page could not be reached by Google's crawler).",
+      score: null,
+      metrics: []
+    };
+  }
+
+  const source = psiData.hasFieldData ? psiData.field : psiData.lab;
+  const sourceLabel = psiData.hasFieldData
+    ? `real Chrome user data (field data, ${psiData.fieldDataScope === "url" ? "this exact URL" : "site-wide origin average"}) — this is what Google actually uses for ranking`
+    : "Lighthouse lab simulation (single synthetic run) — diagnostic only; no CrUX field data exists yet for this URL, likely due to low traffic volume";
+
+  const metrics = [];
+  const buildCwvMetric = (key, weight) => {
+    const t = CWV_THRESHOLDS[key];
+    const value = source[key];
+    const rating = cwvRating(key, value);
+    const raw = rating === "GOOD" ? weight : rating === "NEEDS_IMPROVEMENT" ? weight * 0.5 : 0;
+
+    metrics.push(buildMetric({
+      name: t.label,
+      raw: value == null ? 0 : raw,
+      max: weight,
+      weight,
+      reason: value == null
+        ? `${t.label} data unavailable from PageSpeed Insights.`
+        : `${t.label}: ${value}${t.unit} — rated ${rating.replace("_", " ")} (source: ${psiData.hasFieldData ? "field" : "lab"} data).`,
+      evidence: value == null ? "No data returned for this metric." : `Measured ${value}${t.unit}, based on ${sourceLabel}. Google's thresholds: good ≤${t.good}${t.unit}, poor >${t.poor}${t.unit}.`,
+      recommendation: rating === "GOOD" || value == null ? null : `Improve ${t.label} to under ${t.good}${t.unit} to reach Google's "good" threshold.`
+    }));
+  };
+
+  buildCwvMetric("lcp", 35);
+  buildCwvMetric("inp", 35);
+  buildCwvMetric("cls", 30);
+
+  const result = aggregateMetrics(metrics);
+
+  return {
+    available: true,
+    dataSource: psiData.hasFieldData ? "field" : "lab",
+    fieldDataScope: psiData.fieldDataScope,
+    sourceExplanation: sourceLabel,
+    score: result.score,
+    status: result.status,
+    metrics: result.metrics,
+    passesAllThresholds: metrics.every(m => m.passed),
+    raw: {
+      field: psiData.field,
+      lab: psiData.lab
+    },
+    strategy: psiData.strategy,
+    fetchedAt: psiData.fetchedAt
+  };
+}
+
+
 function withHardTimeout(promise, ms, label) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -4669,6 +4828,18 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
   try {
     const $ = cheerio.load(crawl.html || "");
     const pageData = extractPageData($, crawl.html, crawl.finalUrl);
+
+    // Kicked off now, awaited much later — Core Web Vitals via PageSpeed
+    // Insights can be genuinely slow (real-world observed range: a few
+    // seconds up to 30+ seconds for a full Lighthouse run). Racing it
+    // against a bounded timeout here means it runs fully in parallel with
+    // everything else below and can NEVER add latency beyond this cap to
+    // the scan response — if it hasn't resolved in time, the scan simply
+    // proceeds without it rather than making the user wait.
+    const coreWebVitalsPromise = Promise.race([
+      fetchCoreWebVitals(crawl.finalUrl),
+      new Promise(resolve => setTimeout(() => resolve(null), 12000))
+    ]);
 
     // Robots and sitemap detection are independent network calls; run them
     // concurrently rather than sequentially to cut orchestrator latency.

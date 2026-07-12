@@ -1356,6 +1356,19 @@ li { margin: 6px 0; color: var(--text-secondary); }
     <div id="seoAuditResults"></div>
   </section>
 
+  <section id="coreWebVitalsCard" class="card" style="display:none;" aria-labelledby="coreWebVitalsHeading">
+    <h3 id="coreWebVitalsHeading">
+      <span class="card-title-group"><span aria-hidden="true">⚡</span> Core Web Vitals</span>
+      <span class="card-title-actions">
+        <button type="button" id="cwvRefreshBtn" onclick="refreshCoreWebVitals()" style="font-size:11px; padding:6px 12px; background:transparent; border:1px solid var(--border-color); color:var(--text-primary);">
+          <span class="btn-spinner" aria-hidden="true"></span>
+          <span class="btn-label-text">🔄 Refresh</span>
+        </button>
+      </span>
+    </h3>
+    <div id="coreWebVitalsResults"></div>
+  </section>
+
   <div class="grid-2-saas">
     <section id="titleAnalyzerCard" class="card" style="display:none; margin-top:0;" aria-labelledby="titleAnalyzerHeading">
       <h3 id="titleAnalyzerHeading"><span class="card-title-group"><span aria-hidden="true">📝</span> Title Analyzer</span></h3>
@@ -2690,6 +2703,7 @@ function resetReportState() {
   const cards = [
     "executiveSummaryPanel", "gaugeChartsContainer", "chartsTrendContainer",
     "aiReasoningCard", "realCitationCard", "aiSimulationCard", "seoAuditCard",
+    "coreWebVitalsCard",
     "titleAnalyzerCard", "metaAnalyzerCard", "headingCard", "internalLinkCard",
     "imageSeoCard", "entityCard", "eeatCard", "schemaCard", "competitorCard",
     "gapCard", "roadmapCard", "keywordTheftCard", "briefCard", "autopilotCard",
@@ -2817,6 +2831,7 @@ function renderAllResults(data) {
     renderCitationProbability(data);
     renderModelSimulations(data);
     renderSeoAudit(data);
+    renderCoreWebVitals(data);
     renderTitleMeta(data);
     renderHeadings(data);
     renderInternalLinks(data);
@@ -3145,6 +3160,97 @@ function renderSeoAudit(data) {
       ${imp.length > 0 ? `<h4 style="color:var(--accent-warning)"><span aria-hidden="true">⚠️</span> Important Warnings</h4><ul>${imp.map(i => `<li><strong>${escapeHtml(i.factor)}</strong> (-${i.penalty} pts): ${escapeHtml(i.reason)}</li>`).join('')}</ul>` : ''}
       ${minor.length > 0 ? `<h4 style="color:var(--accent-primary)"><span aria-hidden="true">ℹ️</span> Minor Alerts</h4><ul>${minor.map(m => `<li><strong>${escapeHtml(m.factor)}</strong> (-${m.penalty} pts): ${escapeHtml(m.reason)}</li>`).join('')}</ul>` : ''}
     `;
+  }
+}
+
+// =========================================================================
+// PHASE 16 — CORE WEB VITALS (Google PageSpeed Insights, real data only)
+// =========================================================================
+function renderCoreWebVitals(data) {
+  const card = document.getElementById("coreWebVitalsCard");
+  if (!card) return;
+
+  const cwv = data.coreWebVitals;
+  if (!cwv) { card.style.display = "none"; return; }
+  card.style.display = "block";
+
+  // Store the resolved URL so the Refresh button can re-request fresh data
+  // for this exact page without needing a re-scan.
+  card.dataset.cwvUrl = safeText(data.resolvedUrl);
+
+  renderCoreWebVitalsContent(cwv);
+}
+
+function renderCoreWebVitalsContent(cwv) {
+  const content = document.getElementById("coreWebVitalsResults");
+  if (!content) return;
+
+  if (!cwv.available) {
+    content.innerHTML = emptyStateHtml(
+      "⏱️",
+      "Core Web Vitals Not Retrieved",
+      safeText(cwv.reason, "PageSpeed Insights did not respond in time during this scan. Click Refresh above to try again — it can take up to 15-20 seconds.")
+    );
+    return;
+  }
+
+  const sourceBadge = cwv.dataSource === "field"
+    ? `<span class="badge badge-green">Real User Data (Field)</span>`
+    : `<span class="badge badge-orange">Lab Simulation Only</span>`;
+
+  const sourceNote = cwv.dataSource === "field"
+    ? `Based on real Chrome users${cwv.fieldDataScope === "origin" ? " (site-wide average — not enough traffic on this exact URL yet)" : " visiting this exact URL"}. This is the data Google actually uses for search ranking.`
+    : `No real-user (CrUX) data exists yet for this page — likely due to low traffic. Showing a single Lighthouse lab simulation instead, which is diagnostic only and does not directly affect rankings.`;
+
+  const metricCard = (m) => {
+    const passed = m.passed;
+    const color = passed ? "var(--accent-success)" : m.rawValue > 0 ? "var(--accent-warning)" : "var(--accent-danger)";
+    return `
+      <div class="metric-box" style="background:${color};">
+        <div class="metric-value" style="font-size:20px;">${escapeHtml(m.metric)}</div>
+        <div class="metric-label">${escapeHtml(m.reason)}</div>
+      </div>`;
+  };
+
+  content.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+      <div>${sourceBadge} <span style="font-size:12px; color:var(--text-muted);">Strategy: ${escapeHtml(safeText(cwv.strategy, 'mobile'))}</span></div>
+      ${cwv.score != null ? `<span class="badge ${cwv.score >= 80 ? 'badge-green' : cwv.score >= 50 ? 'badge-orange' : 'badge-red'}">Vitals Score: ${cwv.score}/100</span>` : ''}
+    </div>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">${escapeHtml(sourceNote)}</p>
+    <div class="grid-3">
+      ${safeArray(cwv.metrics).map(metricCard).join('')}
+    </div>
+    ${cwv.metrics.some(m => !m.passed && m.recommendation) ? `
+    <details style="margin-top:14px;">
+      <summary>Recommendations</summary>
+      <ul>${cwv.metrics.filter(m => m.recommendation).map(m => `<li>${escapeHtml(m.recommendation)}</li>`).join('')}</ul>
+    </details>` : ''}
+    <p style="font-size:11px; color:var(--text-muted); margin-top:14px;">Last checked: ${cwv.fetchedAt ? new Date(cwv.fetchedAt).toLocaleString() : 'Data unavailable'}</p>
+  `;
+}
+
+async function refreshCoreWebVitals() {
+  const card = document.getElementById("coreWebVitalsCard");
+  const btn = document.getElementById("cwvRefreshBtn");
+  const url = card?.dataset.cwvUrl;
+  if (!url) { showToast("Run a scan first before refreshing Core Web Vitals.", "error"); return; }
+
+  btn?.setAttribute("aria-busy", "true");
+  if (btn) btn.disabled = true;
+
+  const content = document.getElementById("coreWebVitalsResults");
+  if (content) content.innerHTML = `<div class="skeleton-bar" style="height:100px;"></div>`;
+
+  try {
+    const data = await apiFetch(`/core-web-vitals?url=${encodeURIComponent(url)}`);
+    renderCoreWebVitalsContent(data.coreWebVitals);
+    showToast("Core Web Vitals refreshed.", "success", 2500);
+  } catch (err) {
+    if (content) content.innerHTML = emptyStateHtml("⚠️", "Refresh Failed", err.message || "Please try again.");
+  } finally {
+    btn?.setAttribute("aria-busy", "false");
+    if (btn) btn.disabled = false;
   }
 }
 

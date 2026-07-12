@@ -2098,31 +2098,63 @@ export function calculateCoreWebVitalsScore(psiData) {
     ? `real Chrome user data (field data, ${psiData.fieldDataScope === "url" ? "this exact URL" : "site-wide origin average"}) — this is what Google actually uses for ranking`
     : "Lighthouse lab simulation (single synthetic run) — diagnostic only; no CrUX field data exists yet for this URL, likely due to low traffic volume";
 
-  const metrics = [];
+  // Metrics actually scored (have real data) vs. informational-only entries
+  // (no data available). Unavailable metrics must NEVER be scored as if
+  // they failed — that would conflate "we have no evidence" with "this
+  // measured poorly," and must never receive a fabricated "improve this"
+  // recommendation when there's nothing to base one on.
+  const scorableMetrics = [];
+  const displayMetrics = [];
+
   const buildCwvMetric = (key, weight) => {
     const t = CWV_THRESHOLDS[key];
     const value = source[key];
+
+    if (value == null) {
+      // Informational-only entry: excluded from scoring/weighting entirely,
+      // shown to the user honestly as "no data," never scored or advised on.
+      displayMetrics.push({
+        metric: t.label,
+        rawValue: null,
+        maxValue: weight,
+        weight: 0,
+        contribution: 0,
+        passed: null,
+        reason: `${t.label} data unavailable from PageSpeed Insights.`,
+        evidence: key === "inp"
+          ? "Interaction to Next Paint can only be measured from real user interactions over time (field/CrUX data) — it is never available from a single synthetic lab run, regardless of the page."
+          : "No data returned for this metric.",
+        recommendation: null,
+        expectedImprovement: 0
+      });
+      return;
+    }
+
     const rating = cwvRating(key, value);
     const raw = rating === "GOOD" ? weight : rating === "NEEDS_IMPROVEMENT" ? weight * 0.5 : 0;
 
-    metrics.push(buildMetric({
+    const built = buildMetric({
       name: t.label,
-      raw: value == null ? 0 : raw,
+      raw,
       max: weight,
       weight,
-      reason: value == null
-        ? `${t.label} data unavailable from PageSpeed Insights.`
-        : `${t.label}: ${value}${t.unit} — rated ${rating.replace("_", " ")} (source: ${psiData.hasFieldData ? "field" : "lab"} data).`,
-      evidence: value == null ? "No data returned for this metric." : `Measured ${value}${t.unit}, based on ${sourceLabel}. Google's thresholds: good ≤${t.good}${t.unit}, poor >${t.poor}${t.unit}.`,
-      recommendation: rating === "GOOD" || value == null ? null : `Improve ${t.label} to under ${t.good}${t.unit} to reach Google's "good" threshold.`
-    }));
+      reason: `${t.label}: ${value}${t.unit} — rated ${rating.replace("_", " ")} (source: ${psiData.hasFieldData ? "field" : "lab"} data).`,
+      evidence: `Measured ${value}${t.unit}, based on ${sourceLabel}. Google's thresholds: good ≤${t.good}${t.unit}, poor >${t.poor}${t.unit}.`,
+      recommendation: rating === "GOOD" ? null : `Improve ${t.label} to under ${t.good}${t.unit} to reach Google's "good" threshold.`
+    });
+    scorableMetrics.push(built);
+    displayMetrics.push(built);
   };
 
   buildCwvMetric("lcp", 35);
   buildCwvMetric("inp", 35);
   buildCwvMetric("cls", 30);
 
-  const result = aggregateMetrics(metrics);
+  // Score is computed only from metrics with real data, re-weighted among
+  // themselves — a missing metric no longer silently drags the score down.
+  const result = scorableMetrics.length > 0
+    ? aggregateMetrics(scorableMetrics)
+    : { score: null, status: "No Data Available", totalExpectedImprovement: 0 };
 
   return {
     available: true,
@@ -2131,8 +2163,9 @@ export function calculateCoreWebVitalsScore(psiData) {
     sourceExplanation: sourceLabel,
     score: result.score,
     status: result.status,
-    metrics: result.metrics,
-    passesAllThresholds: metrics.every(m => m.passed),
+    metrics: displayMetrics,
+    passesAllThresholds: scorableMetrics.length > 0 && scorableMetrics.every(m => m.passed),
+    unavailableMetricCount: displayMetrics.length - scorableMetrics.length,
     raw: {
       field: psiData.field,
       lab: psiData.lab

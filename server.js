@@ -277,6 +277,14 @@ const reportSchema = new mongoose.Schema(
     trustScore: Number,
     authorityScore: Number,
     citationScore: Number,
+    coreWebVitals: {
+      available: { type: Boolean, default: false },
+      score: { type: Number, default: null },
+      dataSource: { type: String, default: null },
+      lcpMs: { type: Number, default: null },
+      inpMs: { type: Number, default: null },
+      cls: { type: Number, default: null }
+    },
     schemaSummary: {
       detectedTypes: [String],
       schemaCount: Number,
@@ -403,6 +411,14 @@ export async function saveReportToDatabase(payload, crawl, ownerContext = {}) {
       trustScore: payload.trustScore,
       authorityScore: payload.authorityScore,
       citationScore: payload.citationScore,
+      coreWebVitals: {
+        available: Boolean(payload.coreWebVitals?.available),
+        score: payload.coreWebVitals?.score ?? null,
+        dataSource: payload.coreWebVitals?.dataSource ?? null,
+        lcpMs: payload.coreWebVitals?.raw?.field?.lcp ?? payload.coreWebVitals?.raw?.lab?.lcp ?? null,
+        inpMs: payload.coreWebVitals?.raw?.field?.inp ?? payload.coreWebVitals?.raw?.lab?.inp ?? null,
+        cls: payload.coreWebVitals?.raw?.field?.cls ?? payload.coreWebVitals?.raw?.lab?.cls ?? null
+      },
       schemaSummary: {
         detectedTypes: safeArray(payload.schema?.detectedTypes),
         schemaCount: payload.schemaCount,
@@ -4998,6 +5014,24 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
       });
     }
 
+    // Collected last so it had the maximum possible time (up to the 12s
+    // cap set when it was kicked off, near the top of this function) to
+    // resolve in parallel with all the scoring work above.
+    const psiData = await coreWebVitalsPromise;
+    const coreWebVitalsAudit = calculateCoreWebVitalsScore(psiData);
+    if (!coreWebVitalsAudit.available) {
+      roadmap.push("Core Web Vitals data was unavailable for this scan — retry via the dedicated Core Web Vitals check.");
+    } else if (!coreWebVitalsAudit.passesAllThresholds) {
+      roadmap.push(`Improve Core Web Vitals: ${coreWebVitalsAudit.metrics.filter(m => !m.passed).map(m => m.metric).join(", ")}.`);
+      autopilotTasks.push({
+        id: `task_${taskIdCounter++}`,
+        priority: "HIGH",
+        impact: Math.round(coreWebVitalsAudit.metrics.reduce((s, m) => s + m.expectedImprovement, 0)),
+        title: "Fix Core Web Vitals",
+        description: `${coreWebVitalsAudit.dataSource === "field" ? "Real user data" : "Lab simulation"} shows ${coreWebVitalsAudit.metrics.filter(m => !m.passed).map(m => m.metric).join(", ")} not meeting Google's "good" threshold.`
+      });
+    }
+
     const payload = {
       success: true,
       status: "SUCCESS",
@@ -5101,6 +5135,7 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
         issues: trustAudit.issues
       },
       imageSeo: imageSeoAudit,
+      coreWebVitals: coreWebVitalsAudit,
       internalLinkDetail: internalLinkAudit,
       contentQuality: contentQualityAudit,
       semanticSeoDetail: semanticSeoAudit,
@@ -5956,6 +5991,36 @@ app.get("/history", asyncHandler(async (req, res) => {
     logger.error("API", "history_retrieval_failed", { error: err.message });
     res.status(500).json({ success: false, error: "History retrieval failed" });
   }
+}));
+
+/**
+ * Standalone on-demand Core Web Vitals check. Exists for two cases: (1) a
+ * /scan's built-in 12-second window wasn't enough for PSI to respond, so
+ * the client wants to retry just this piece without re-running the whole
+ * scan, and (2) a user wants a fresh CWV check on a page they already
+ * scanned a while ago without paying for a full re-crawl. Uses a longer
+ * timeout budget than the inline /scan check since it isn't racing
+ * against the rest of the scoring pipeline.
+ */
+app.get("/core-web-vitals", authenticateAndRateLimit, asyncHandler(async (req, res) => {
+  const { url, strategy } = req.query;
+  if (!safeText(url)) {
+    return res.status(400).json({ success: false, message: "URL parameter is required." });
+  }
+  const normalized = enforceSecureUrl(url);
+  if (!normalized) {
+    return res.status(400).json({ success: false, message: "Invalid or unsafe URL structure received." });
+  }
+  const strategyValue = strategy === "desktop" ? "desktop" : "mobile";
+
+  const psiData = await fetchCoreWebVitals(normalized, strategyValue);
+  const audit = calculateCoreWebVitalsScore(psiData);
+
+  if (req.user) {
+    req.user.scansToday = safeNumber(req.user.scansToday) + 1;
+  }
+
+  res.json({ success: true, url: normalized, coreWebVitals: audit });
 }));
 
 app.get("/trend", (req, res) => {

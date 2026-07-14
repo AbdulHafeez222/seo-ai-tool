@@ -1221,6 +1221,7 @@ li { margin: 6px 0; color: var(--text-secondary); }
           </label>
           <input id="competitorUrl" type="text" placeholder="e.g. competitorsite.com" aria-describedby="competitorFieldError" autocomplete="url">
           <div class="field-error-text" id="competitorFieldError" role="alert"></div>
+          <button type="button" id="toggleMoreCompetitorsBtn" onclick="toggleMoreCompetitors()" style="background:transparent; border:none; color:var(--accent-primary); padding:6px 0; font-size:11px; font-weight:700;">+ Add up to 3 more for a 5-way Enterprise Comparison</button>
         </div>
 
         <div class="input-group">
@@ -1228,6 +1229,21 @@ li { margin: 6px 0; color: var(--text-secondary); }
             Content Brief Keyword Context <span class="optional-tag">Optional</span>
           </label>
           <input id="keyword" type="text" placeholder="e.g. wedding photography tips" autocomplete="off">
+        </div>
+      </div>
+
+      <div id="extraCompetitorsGrid" class="input-grid-saas" style="display:none;">
+        <div class="input-group">
+          <label class="input-label" for="competitorUrl2">Competitor 2 <span class="optional-tag">Optional</span></label>
+          <input id="competitorUrl2" type="text" placeholder="e.g. competitorsite2.com" autocomplete="url">
+        </div>
+        <div class="input-group">
+          <label class="input-label" for="competitorUrl3">Competitor 3 <span class="optional-tag">Optional</span></label>
+          <input id="competitorUrl3" type="text" placeholder="e.g. competitorsite3.com" autocomplete="url">
+        </div>
+        <div class="input-group">
+          <label class="input-label" for="competitorUrl4">Competitor 4 <span class="optional-tag">Optional</span></label>
+          <input id="competitorUrl4" type="text" placeholder="e.g. competitorsite4.com" autocomplete="url">
         </div>
       </div>
 

@@ -4757,6 +4757,190 @@ export function compareTargetToCompetitor(targetData, competitorData) {
     }
   };
 }
+
+// =========================================================================
+// ========== SECTION 15.85: ENTERPRISE MULTI-SITE COMPETITOR INTELLIGENCE =
+// =========================================================================
+// PHASE 16A. Entirely additive — reuses only fields already present on an
+// analyzeSingleUrl payload. Never fabricates a value: any dimension a site
+// lacks data for is reported as "Not Available", not estimated or guessed.
+
+const NOT_AVAILABLE = "Not Available";
+
+/** Safely reads a dotted path, returning null (not fabricated 0) if absent. */
+function readMetricPath(site, path) {
+  const val = path.split(".").reduce((acc, key) => (acc !== undefined && acc !== null ? acc[key] : undefined), site);
+  return (typeof val === "number" && Number.isFinite(val)) ? val : null;
+}
+
+/** Ranks sites for one dimension (higher = better), tolerating nulls. */
+function rankDimension(values) {
+  const withIndex = values.map((v, i) => ({ v, i }));
+  const scored = withIndex.filter(x => x.v !== null).sort((a, b) => b.v - a.v);
+  const unscored = withIndex.filter(x => x.v === null);
+  const ranks = new Array(values.length).fill(null);
+  scored.forEach((x, rankIdx) => { ranks[x.i] = rankIdx + 1; });
+  return { ranks, rankedCount: scored.length, unavailableIndices: unscored.map(x => x.i) };
+}
+
+const COMPARISON_DIMENSIONS = [
+  { key: "seo", label: "SEO Score", path: "seoScore" },
+  { key: "geo", label: "GEO Score", path: "geoScore" },
+  { key: "aeo", label: "AEO Score", path: "aeoScore" },
+  { key: "eeat", label: "E-E-A-T Score", path: "eeatScore" },
+  { key: "trust", label: "Trust Score", path: "trustScore" },
+  { key: "authority", label: "Authority Score", path: "authorityScore" },
+  { key: "citation", label: "AI Citation Score", path: "citationScore" },
+  { key: "coreWebVitals", label: "Core Web Vitals", path: "coreWebVitals.score" },
+  { key: "schema", label: "Schema Coverage", path: "schemaCount" },
+  { key: "entity", label: "Entity Coverage", path: "entityDetails.totalEntityCount" },
+  { key: "heading", label: "Heading Structure", path: "__headingCount" }, // computed, see below
+  { key: "internalLink", label: "Internal Linking", path: "internalLinkDetail.score" },
+  { key: "imageSeo", label: "Image SEO", path: "imageSeo.score" },
+  { key: "performance", label: "Performance", path: "technicalSeo.score" }
+];
+
+function classifyGapPriority(gapSize, maxPossibleGap = 100) {
+  const pct = maxPossibleGap > 0 ? (gapSize / maxPossibleGap) * 100 : 0;
+  if (pct >= 40) return "Critical";
+  if (pct >= 20) return "High";
+  if (pct >= 8) return "Medium";
+  return "Low";
+}
+
+/**
+ * Enterprise multi-site competitor comparison. Accepts 2-5 already-analyzed
+ * site payloads (from analyzeSingleUrl) plus their original input URLs, and
+ * reuses every score/field they already contain — no new crawling, no new
+ * scoring logic, no paid APIs. sites[0] is always treated as "your" site
+ * for the purposes of the executive summary's action-list target.
+ */
+export function compareMultipleSites(sites, urls) {
+  const validSites = sites.map((s, i) => ({ site: s, url: urls[i], index: i })).filter(x => x.site && !x.site.blocked);
+  if (validSites.length < 2) {
+    return { success: false, reason: "At least 2 successfully analyzed sites are required for comparison." };
+  }
+
+  const labels = validSites.map(x => safeText(x.site.title, cleanDomainBrand ? cleanDomainBrand(x.url) : x.url) || x.url);
+
+  // Precompute heading counts once (not a raw payload field, but a direct,
+  // honest derivation of two fields that are already on the payload).
+  validSites.forEach(x => {
+    x.site.__headingCount = safeArray(x.site.h2s).length + safeArray(x.site.h3s).length;
+  });
+
+  const dimensionResults = COMPARISON_DIMENSIONS.map(dim => {
+    const values = validSites.map(x => readMetricPath(x.site, dim.path));
+    const { ranks, rankedCount, unavailableIndices } = rankDimension(values);
+
+    return {
+      key: dim.key,
+      label: dim.label,
+      values: validSites.map((x, i) => ({
+        url: x.url,
+        label: labels[i],
+        value: values[i],
+        display: values[i] === null ? NOT_AVAILABLE : values[i],
+        rank: ranks[i]
+      })),
+      leaderIndex: rankedCount > 0 ? ranks.findIndex(r => r === 1) : null,
+      availableForCount: rankedCount,
+      unavailableCount: unavailableIndices.length
+    };
+  });
+
+  // Overall ranking: by overallAIVisibilityScore, the same composite score
+  // already computed by analyzeSingleUrl for every scan.
+  const overallValues = validSites.map(x => readMetricPath(x.site, "overallAIVisibilityScore"));
+  const { ranks: overallRanks } = rankDimension(overallValues);
+
+  const ranking = validSites.map((x, i) => ({
+    url: x.url,
+    label: labels[i],
+    overallScore: overallValues[i] === null ? NOT_AVAILABLE : overallValues[i],
+    rank: overallRanks[i]
+  })).sort((a, b) => (a.rank || 999) - (b.rank || 999));
+
+  const winner = ranking.find(r => r.rank === 1) || null;
+
+  // Strengths/weaknesses per site: which dimensions each site ranks #1 on
+  // (strength) vs. ranks last on among sites that had data for that
+  // dimension (weakness) — grounded entirely in the rank data above, never
+  // an invented narrative.
+  const perSiteAnalysis = validSites.map((x, i) => {
+    const strengths = [];
+    const weaknesses = [];
+    dimensionResults.forEach(dim => {
+      const entry = dim.values[i];
+      if (entry.rank === 1) {
+        strengths.push(`${dim.label} (${entry.display}${typeof entry.value === 'number' ? '' : ''}) — ranked #1 of ${dim.availableForCount}`);
+      } else if (entry.rank !== null && entry.rank === dim.availableForCount && dim.availableForCount > 1) {
+        weaknesses.push(`${dim.label} (${entry.display}) — ranked last (#${entry.rank} of ${dim.availableForCount})`);
+      }
+    });
+    return {
+      url: x.url,
+      label: labels[i],
+      strengths: strengths.length > 0 ? strengths : ["No dimension where this site ranks #1."],
+      weaknesses: weaknesses.length > 0 ? weaknesses : ["No dimension where this site ranks last."]
+    };
+  });
+
+  // Top actions to beat the strongest competitor, computed as sites[0]'s
+  // ("your" site's) real gap vs. the current overall leader, across every
+  // dimension where both have real data. Every action cites the actual
+  // measured gap — nothing here is invented.
+  const yourIndex = 0;
+  const leaderEntry = ranking[0];
+  const leaderIndex = validSites.findIndex(x => x.url === leaderEntry?.url);
+
+  const actions = [];
+  if (leaderIndex !== -1 && leaderIndex !== yourIndex) {
+    dimensionResults.forEach(dim => {
+      const yourEntry = dim.values[yourIndex];
+      const leaderEntryDim = dim.values[leaderIndex];
+      if (yourEntry.value === null || leaderEntryDim.value === null) return;
+      const gap = leaderEntryDim.value - yourEntry.value;
+      if (gap <= 0) return; // you're already ahead or tied on this dimension
+
+      const maxPossible = dim.key === "coreWebVitals" || ["seo","geo","aeo","eeat","trust","authority","citation","internalLink","imageSeo","performance"].includes(dim.key) ? 100 : Math.max(leaderEntryDim.value, 1);
+      actions.push({
+        dimension: dim.label,
+        yourValue: yourEntry.value,
+        leaderValue: leaderEntryDim.value,
+        gap: Math.round(gap * 100) / 100,
+        priority: classifyGapPriority(gap, maxPossible),
+        action: `Close the ${Math.round(gap * 100) / 100}-point gap in ${dim.label} versus ${leaderEntry.label} (currently ${yourEntry.value} vs their ${leaderEntryDim.value}).`
+      });
+    });
+  }
+  actions.sort((a, b) => {
+    const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+    return order[a.priority] - order[b.priority] || b.gap - a.gap;
+  });
+  const topActions = actions.slice(0, 10);
+
+  const executiveSummary = {
+    sitesCompared: validSites.length,
+    winner: winner ? { url: winner.url, label: winner.label, overallScore: winner.overallScore } : null,
+    winnerReason: winner
+      ? `${winner.label} leads overall with a score of ${winner.overallScore}, ranking #1 across ${dimensionResults.filter(d => d.leaderIndex === validSites.findIndex(x => x.url === winner.url)).length} of ${dimensionResults.length} measured dimensions.`
+      : "No clear overall leader could be determined from available data.",
+    ranking,
+    perSiteAnalysis,
+    topActionsToBeatLeader: topActions
+  };
+
+  return {
+    success: true,
+    sitesCompared: validSites.length,
+    labels,
+    urls: validSites.map(x => x.url),
+    dimensions: dimensionResults,
+    executiveSummary
+  };
+}
+
 // =========================================================================
 // ========== SECTION 15.5: SINGLE URL ANALYZER ORCHESTRATOR ==============
 // =========================================================================
@@ -5689,6 +5873,63 @@ app.get("/compare", authenticateAndRateLimit, asyncHandler(async (req, res) => {
     entities: site1.entities || [],
     schema: site1.schema || "",
     roadmap: site1.roadmap || []
+  });
+}));
+
+/**
+ * PHASE 16A — Enterprise multi-site comparison, entirely additive. Accepts
+ * 2-5 URLs (comma-separated) and reuses the exact same analyzeSingleUrl
+ * pipeline as every other endpoint — no new crawling logic, no paid APIs.
+ * The existing /compare route above is completely untouched and continues
+ * to serve the original 2-URL contract exactly as before.
+ */
+app.get("/compare-multi", authenticateAndRateLimit, asyncHandler(async (req, res) => {
+  const rawUrls = safeText(req.query.urls).split(",").map(u => u.trim()).filter(Boolean);
+
+  if (rawUrls.length < 2) {
+    return res.status(400).json({ success: false, status: "ERROR", message: "At least 2 URLs are required (comma-separated in the 'urls' parameter)." });
+  }
+  if (rawUrls.length > 5) {
+    return res.status(400).json({ success: false, status: "ERROR", message: "A maximum of 5 URLs can be compared at once." });
+  }
+
+  const normalizedUrls = rawUrls.map(u => enforceSecureUrl(u));
+  const invalidIndex = normalizedUrls.findIndex(u => !u);
+  if (invalidIndex !== -1) {
+    return res.status(400).json({ success: false, status: "ERROR", message: `URL #${invalidIndex + 1} ("${rawUrls[invalidIndex]}") is invalid or unsafe.` });
+  }
+
+  const results = await Promise.allSettled(
+    normalizedUrls.map(u => analyzeSingleUrl(u, { userId: req.user?._id || null }))
+  );
+
+  results.forEach((r, i) => {
+    if (r.status === "rejected") {
+      logger.error("API", "compare_multi_site_failed", { url: normalizedUrls[i], error: r.reason?.message });
+    }
+  });
+
+  const sites = results.map(r => (r.status === "fulfilled" ? r.value : null));
+  const successfulCount = sites.filter(s => s && !s.blocked).length;
+
+  if (successfulCount < 2) {
+    return res.status(200).json({
+      success: false,
+      reason: `Only ${successfulCount} of ${normalizedUrls.length} site(s) could be successfully analyzed. At least 2 are required for comparison.`,
+      siteStatuses: sites.map((s, i) => ({ url: normalizedUrls[i], blocked: !s || s.blocked, reason: s?.reason || "Analysis failed." }))
+    });
+  }
+
+  if (req.user) {
+    req.user.scansToday = Math.min(PLAN_LIMITS[req.user.plan], safeNumber(req.user.scansToday) + normalizedUrls.length);
+  }
+
+  const comparison = compareMultipleSites(sites, normalizedUrls);
+
+  res.json({
+    status: "SUCCESS",
+    success: comparison.success,
+    ...comparison
   });
 }));
 

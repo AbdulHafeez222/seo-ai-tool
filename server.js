@@ -4653,6 +4653,158 @@ function jsonLdCountForEngine(crawlData) {
 }
 
 // =========================================================================
+// ========== SECTION 14.5: AI CONTENT OPTIMIZER PRO ========================
+// =========================================================================
+// PHASE 16B. Entirely a synthesis layer over already-computed audits — no
+// new crawling, no new scoring math beyond simple relabeling/combination of
+// real values that already exist by the time this runs inside
+// analyzeSingleUrl. Never invents specific keyword/entity/content
+// suggestions that aren't grounded in something actually measured.
+
+const CTA_PHRASES = [
+  "buy now", "get started", "sign up", "contact us", "book now", "request a quote",
+  "get a quote", "free quote", "call now", "learn more", "get in touch", "start now",
+  "schedule a call", "book a call", "download now", "subscribe", "order now", "shop now"
+];
+
+/**
+ * Honest, verifiable keyword-match CTA detection against real visible page
+ * text. Not a fabrication — a real, inspectable check against actual
+ * content, in the same spirit as the existing SERVICE_PATTERNS matching.
+ */
+function detectCtaPresence(visibleText) {
+  const text = safeText(visibleText).toLowerCase();
+  const matched = CTA_PHRASES.filter(p => text.includes(p));
+  return { present: matched.length > 0, matchedPhrases: matched };
+}
+
+function priorityFromGapSeverity(isCritical, isModerate) {
+  if (isCritical) return "Critical";
+  if (isModerate) return "High";
+  return "Medium";
+}
+
+/**
+ * Builds the full Content Optimizer report by reusing every relevant
+ * already-computed audit object from analyzeSingleUrl's own pipeline.
+ */
+export function calculateContentOptimizer(ctx) {
+  const {
+    pageData, seoAudit, aeoAudit, eeatAudit, schemasDetected, contentQualityAudit,
+    semanticSeoAudit, authorityAudit, trustAudit, imageSeoAudit, internalLinkAudit,
+    aiEngineCitations, clusters, coveragePercent, recommendedSchemas
+  } = ctx;
+
+  const h2s = safeArray(pageData?.headings?.h2s);
+  const h3s = safeArray(pageData?.headings?.h3s);
+  const missingClusters = safeArray(clusters).filter(c => c.status === "Missing");
+  const cta = detectCtaPresence(pageData?.visibleText);
+
+  // --- Scores: relabeled/combined directly from real existing sub-scores ---
+  const entityCoverageMetric = semanticSeoAudit?.metrics?.find(m => m.metric === "Entity Coverage") || null;
+  const headingMetric = contentQualityAudit?.metrics?.find(m => m.metric === "Heading Structure") || null;
+  const readabilityMetric = contentQualityAudit?.readability || null;
+
+  const entityCoverageScore = entityCoverageMetric
+    ? clamp(Math.round((entityCoverageMetric.rawValue / entityCoverageMetric.maxValue) * 100))
+    : null;
+  const headingStructureScore = headingMetric
+    ? clamp(Math.round((headingMetric.rawValue / headingMetric.maxValue) * 100))
+    : null;
+  const readabilityScore = readabilityMetric ? readabilityMetric.fleschScore : null;
+  const contentQualityScore = contentQualityAudit?.score ?? null;
+  const topicalAuthorityScore = authorityAudit?.authorityScore ?? null;
+  const aiReadinessScore = aeoAudit?.aeoScore ?? null;
+  const semanticCoverageScore = semanticSeoAudit?.score ?? null;
+
+  const scoreInputs = [contentQualityScore, topicalAuthorityScore, readabilityScore, aiReadinessScore, entityCoverageScore, headingStructureScore, semanticCoverageScore].filter(v => v !== null);
+  const overallContentScore = scoreInputs.length > 0 ? clamp(Math.round(scoreInputs.reduce((a, b) => a + b, 0) / scoreInputs.length)) : null;
+
+  // --- Gaps: booleans + real evidence, no invented values ---
+  const gaps = {
+    missingHeadings: { detected: h2s.length === 0, evidence: `${h2s.length} H2 heading(s) detected.` },
+    missingEntities: { detected: safeNumber(pageData?.entityDetails?.totalEntityCount) < 5, evidence: `${safeNumber(pageData?.entityDetails?.totalEntityCount)} distinct entities detected.` },
+    missingNlpTerms: { detected: missingClusters.length > 0, evidence: missingClusters.length > 0 ? `Uncovered intent clusters: ${missingClusters.map(c => c.name).join(", ")}.` : "All tracked intent clusters have coverage." },
+    missingFaqs: { detected: !aeoAudit?.structuralAeoMetrics?.hasFAQ, evidence: aeoAudit?.structuralAeoMetrics?.hasFAQ ? "FAQPage schema detected." : "No FAQPage schema or FAQ content pattern detected." },
+    missingTables: { detected: safeNumber(aeoAudit?.structuralAeoMetrics?.tableRowsCount) === 0, evidence: `${safeNumber(aeoAudit?.structuralAeoMetrics?.tableRowsCount)} table row(s) detected.` },
+    missingLists: { detected: safeNumber(aeoAudit?.structuralAeoMetrics?.listItemsCount) === 0, evidence: `${safeNumber(aeoAudit?.structuralAeoMetrics?.listItemsCount)} list item(s) detected.` },
+    missingInternalLinks: { detected: safeNumber(pageData?.links?.internal) === 0, evidence: `${safeNumber(pageData?.links?.internal)} internal link(s) detected.` },
+    missingImages: { detected: imageSeoAudit?.status === "No Images Present", evidence: imageSeoAudit?.status === "No Images Present" ? "No <img> elements were found." : "Images are present on this page." },
+    missingAltText: { detected: imageSeoAudit?.metrics?.find(m => m.metric === "Alt Text Coverage")?.passed === false, evidence: imageSeoAudit?.metrics?.find(m => m.metric === "Alt Text Coverage")?.evidence || "No image alt-text data available." },
+    missingTrustSignals: { detected: safeNumber(trustAudit?.trustScore) < 50, evidence: safeArray(trustAudit?.issues).slice(0, 3).join(" ") || "Trust score is healthy." },
+    missingSchema: { detected: safeArray(recommendedSchemas).length > 0, evidence: safeArray(recommendedSchemas).length > 0 ? `Missing recommended schema types: ${recommendedSchemas.join(", ")}.` : "No further recommended schema types." },
+    missingAuthorSignals: { detected: !eeatAudit?.auditMetrics?.hasAuthor, evidence: eeatAudit?.auditMetrics?.hasAuthor ? "Author attribution detected." : "No author attribution detected." },
+    missingCta: { detected: !cta.present, evidence: cta.present ? `Call-to-action phrase(s) detected: ${cta.matchedPhrases.join(", ")}.` : "No common call-to-action phrasing detected in visible text." },
+    missingExternalReferences: { detected: safeNumber(eeatAudit?.auditMetrics?.externalRefLinksCount) === 0, evidence: `${safeNumber(eeatAudit?.auditMetrics?.externalRefLinksCount)} outbound external reference link(s) detected.` }
+  };
+
+  // --- Suggestions: grounded strictly in the gap evidence above, or in
+  // existing citation-engine evidence already computed elsewhere. Never
+  // invents specific keyword phrases, fake entity names, or fabricated
+  // content that isn't traceable to a real measured signal. ---
+  const suggestions = {
+    newH2: missingClusters.map(c => `Add an H2 addressing the "${c.name}" intent cluster, which currently has no coverage on this page.`),
+    newH3: h2s.length > 0 ? h2s.slice(0, 3).map(h => `Consider breaking "${h}" into supporting H3 subsections for deeper coverage.`) : ["Add H2 sections first — H3 suggestions require existing H2 structure to subdivide."],
+    newFaqs: gaps.missingFaqs.detected ? ["Add an FAQ section with FAQPage schema addressing common questions about this page's topic."] : [],
+    newInternalLinks: gaps.missingInternalLinks.detected ? ["Add contextual internal links to related pages on this site — none were detected on this page."] : [],
+    newAnchorText: safeArray(seoAudit?.metrics)?.find(m => m.metric === "Keyword Coverage" && !m.passed) ? ["Diversify anchor text to better reflect the page's own dominant extracted keywords (see Keyword Coverage finding)."] : [],
+    newEntityAdditions: gaps.missingEntities.detected ? [`Reference more specific named entities (brands, products, people, locations) relevant to the topic — only ${safeNumber(pageData?.entityDetails?.totalEntityCount)} currently detected.`] : [],
+    paragraphImprovements: contentQualityAudit?.duplication?.duplicateBlockCount > 0 ? [`${contentQualityAudit.duplication.duplicateBlockCount} duplicated paragraph block(s) detected within this page — rewrite or remove repeated content.`] : [],
+    sentenceImprovements: readabilityMetric ? [`Average sentence length is ${readabilityMetric.avgWordsPerSentence} words (target 12-22 for optimal readability and AI extractability).`] : [],
+    featuredSnippetOpportunities: !aeoAudit?.structuralAeoMetrics?.hasDirectAnswer ? ["Add a concise 1-3 sentence direct-answer paragraph immediately after a question-style heading to target featured snippets."] : [],
+    googleAiOverviewOpportunities: safeArray(aiEngineCitations?.engines?.gemini?.missingSignals).map(s => `For Google AI Overviews (via Gemini-family signals): address "${s}".`),
+    chatgptCitationOpportunities: safeArray(aiEngineCitations?.engines?.chatgpt?.missingSignals).map(s => `For ChatGPT citation: address "${s}".`),
+    perplexityCitationOpportunities: safeArray(aiEngineCitations?.engines?.perplexity?.missingSignals).map(s => `For Perplexity citation: address "${s}".`),
+    geminiCitationOpportunities: safeArray(aiEngineCitations?.engines?.gemini?.missingSignals).map(s => `For Gemini citation: address "${s}".`)
+  };
+
+  // --- Priority roadmap: every detected gap becomes one roadmap item,
+  // prioritized by how foundational/high-impact that gap category is. ---
+  const priorityMap = {
+    missingSchema: "Critical", missingFaqs: "Critical",
+    missingHeadings: "High", missingEntities: "High", missingAuthorSignals: "High", missingTrustSignals: "High",
+    missingNlpTerms: "Medium", missingTables: "Medium", missingLists: "Medium", missingInternalLinks: "Medium", missingAltText: "Medium",
+    missingImages: "Low", missingCta: "Low", missingExternalReferences: "Low"
+  };
+  const gapLabels = {
+    missingHeadings: "Add missing heading structure", missingEntities: "Increase named-entity coverage",
+    missingNlpTerms: "Cover missing topical/intent clusters", missingFaqs: "Add FAQ section with schema",
+    missingTables: "Add tabular data where relevant", missingLists: "Add list-formatted content",
+    missingInternalLinks: "Add internal links", missingImages: "Add relevant images",
+    missingAltText: "Add descriptive alt text to images", missingTrustSignals: "Strengthen trust signals",
+    missingSchema: "Deploy missing recommended schema types", missingAuthorSignals: "Add author attribution",
+    missingCta: "Add a clear call-to-action", missingExternalReferences: "Add outbound authoritative references"
+  };
+  const priorityRoadmap = Object.entries(gaps)
+    .filter(([, g]) => g.detected)
+    .map(([key, g]) => ({
+      item: gapLabels[key] || key,
+      priority: priorityMap[key] || "Medium",
+      evidence: g.evidence
+    }))
+    .sort((a, b) => {
+      const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+      return order[a.priority] - order[b.priority];
+    });
+
+  return {
+    scores: {
+      overallContentScore,
+      contentQualityScore,
+      topicalAuthorityScore,
+      readabilityScore,
+      aiReadinessScore,
+      entityCoverageScore,
+      headingStructureScore,
+      semanticCoverageScore
+    },
+    gaps,
+    suggestions,
+    priorityRoadmap
+  };
+}
+
+// =========================================================================
 // ========== SECTION 15: DYNAMIC COMPETITOR COMPARISON ENGINE ============
 // =========================================================================
 export function compareTargetToCompetitor(targetData, competitorData) {
@@ -5156,6 +5308,14 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
       uniqueSchemas: schemasDetected.detectedTypes
     });
 
+    // PHASE 16B — pure synthesis over already-computed audits, no new
+    // crawling or scoring math.
+    const contentOptimizer = calculateContentOptimizer({
+      pageData, seoAudit, aeoAudit, eeatAudit, schemasDetected, contentQualityAudit,
+      semanticSeoAudit, authorityAudit, trustAudit, imageSeoAudit, internalLinkAudit,
+      aiEngineCitations, clusters, coveragePercent, recommendedSchemas: schemaBlock.missingSchemas
+    });
+
     const finalAIVisibilityScore = clamp(
       Math.round(
         (seoAudit.score * 0.20) +
@@ -5353,6 +5513,7 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
       },
       imageSeo: imageSeoAudit,
       coreWebVitals: coreWebVitalsAudit,
+      contentOptimizer,
       internalLinkDetail: internalLinkAudit,
       contentQuality: contentQualityAudit,
       semanticSeoDetail: semanticSeoAudit,
@@ -6295,6 +6456,30 @@ app.get("/core-web-vitals", authenticateAndRateLimit, asyncHandler(async (req, r
   }
 
   res.json({ success: true, url: normalized, coreWebVitals: audit });
+}));
+
+/**
+ * PHASE 16B — standalone Content Optimizer lookup. Reuses the exact same
+ * analyzeSingleUrl pipeline as every other endpoint (which already computes
+ * contentOptimizer as part of its normal payload) rather than duplicating
+ * any scoring or gap-detection logic here.
+ */
+app.get("/content-optimizer", authenticateAndRateLimit, asyncHandler(async (req, res) => {
+  const { url } = req.query;
+  if (!safeText(url)) {
+    return res.status(400).json({ success: false, message: "URL parameter is required." });
+  }
+  const normalized = enforceSecureUrl(url);
+  if (!normalized) {
+    return res.status(400).json({ success: false, message: "Invalid or unsafe URL structure received." });
+  }
+
+  const data = await analyzeSingleUrl(normalized, { userId: req.user?._id || null });
+  if (data.blocked) {
+    return res.json(data);
+  }
+
+  res.json({ success: true, url: normalized, title: data.title, contentOptimizer: data.contentOptimizer });
 }));
 
 app.get("/trend", (req, res) => {

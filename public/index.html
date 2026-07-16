@@ -1471,7 +1471,15 @@ li { margin: 6px 0; color: var(--text-secondary); }
   <section id="competitorCard" class="card" style="display:none;" aria-labelledby="competitorHeading">
     <h3 id="competitorHeading"><span class="card-title-group"><span aria-hidden="true">⚔️</span> Competitor Comparison Matrix</span></h3>
     <canvas id="comparisonChart" style="max-height: 300px; margin-bottom: 20px;" role="img" aria-label="Bar chart comparing AI visibility scores"></canvas>
+    <div id="multiCompareRadarWrap" style="display:none; max-height:340px; margin-bottom:20px;">
+      <canvas id="multiCompareRadarChart" role="img" aria-label="Radar chart comparing all sites across every dimension"></canvas>
+    </div>
     <div id="comparisonDetails"></div>
+  </section>
+
+  <section id="contentOptimizerCard" class="card" style="display:none;" aria-labelledby="contentOptimizerHeading">
+    <h3 id="contentOptimizerHeading"><span class="card-title-group"><span aria-hidden="true">🧠</span> AI Content Optimizer Pro</span></h3>
+    <div id="contentOptimizerResults"></div>
   </section>
 
   <section id="gapCard" class="card" style="display:none;" aria-labelledby="gapHeading">

@@ -2327,10 +2327,10 @@ async function attemptStandardGet(url) {
   let status = 0;
   let retryCount = 0;
   let redirectCount = 0;
+  let redirectChain = [];
   let httpVersion = null;
   let headers = {};
 
-  let redirectChain = [];
   try {
     const outcome = await withHardTimeout(withRetry(() => fetchAxios(url), 2, 1200), CRAWL_HARD_TIMEOUT_MS, "Standard fetch");
     result = outcome.result;
@@ -2351,7 +2351,7 @@ async function attemptStandardGet(url) {
 
   return {
     stageName: "STANDARD_GET", crawlMethod: "STANDARD_GET",
-    html, status, finalUrl, retryCount, redirectCount, redirectChain, httpVersion, headers,
+    html, status, finalUrl, retryCount, redirectCount, httpVersion, headers,
     infiniteScrollDetected: false,
     pageValidation,
     blockCheck: pageValidation.blockCheck,

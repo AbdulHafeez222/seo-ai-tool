@@ -2327,6 +2327,7 @@ async function attemptStandardGet(url) {
   let status = 0;
   let retryCount = 0;
   let redirectCount = 0;
+  let redirectChain = [];
   let httpVersion = null;
   let headers = {};
 
@@ -2336,6 +2337,7 @@ async function attemptStandardGet(url) {
     retryCount = outcome.attempts - 1;
     status = result?.status || 0;
     redirectCount = safeNumber(result?.redirectCount, 0);
+    redirectChain = safeArray(result?.redirectChain);
     httpVersion = result?.httpVersion || null;
     headers = result?.headers || {};
   } catch (err) {

@@ -2351,7 +2351,7 @@ async function attemptStandardGet(url) {
 
   return {
     stageName: "STANDARD_GET", crawlMethod: "STANDARD_GET",
-    html, status, finalUrl, retryCount, redirectCount, httpVersion, headers,
+    html, status, finalUrl, retryCount, redirectCount, redirectChain, httpVersion, headers,
     infiniteScrollDetected: false,
     pageValidation,
     blockCheck: pageValidation.blockCheck,
@@ -2412,6 +2412,7 @@ function finalizeCrawlResult(winningStage, allStages) {
       html: lastStage.html, finalUrl: lastStage.finalUrl, status: lastStage.status,
       crawlMethod: lastStage.crawlMethod, blockCheck: lastStage.blockCheck,
       retryCount: lastStage.retryCount, redirectCount: lastStage.redirectCount,
+      redirectChain: safeArray(lastStage.redirectChain),
       httpVersion: lastStage.httpVersion, headers: lastStage.headers,
       infiniteScrollDetected: lastStage.infiniteScrollDetected,
       contentLength: lastStage.html ? lastStage.html.length : 0,
@@ -2431,6 +2432,7 @@ function finalizeCrawlResult(winningStage, allStages) {
     html: winningStage.html, finalUrl: winningStage.finalUrl, status: winningStage.status,
     crawlMethod: winningStage.crawlMethod, blockCheck: winningStage.blockCheck,
     retryCount: winningStage.retryCount, redirectCount: winningStage.redirectCount,
+    redirectChain: safeArray(winningStage.redirectChain),
     httpVersion: winningStage.httpVersion, headers: winningStage.headers,
     infiniteScrollDetected: winningStage.infiniteScrollDetected,
     contentLength: winningStage.html ? winningStage.html.length : 0,

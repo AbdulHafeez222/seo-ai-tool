@@ -1812,6 +1812,58 @@ export async function sampleBrokenLinks(baseUrl, linkMap, sampleSize = 8) {
     sampleRate: paths.length > 0 ? Math.round((resolved.length / Object.keys(linkMap).length) * 100) : 0
   };
 }
+
+/**
+ * Companion to sampleBrokenLinks, for EXTERNAL links — a genuine gap in the
+ * prior implementation, which only ever sampled internal links. Extracts
+ * external <a href> targets directly from the page and HEAD-checks a
+ * bounded sample, using the identical timeout/validation approach.
+ */
+export async function sampleBrokenExternalLinks($, baseUrl, sampleSize = 8) {
+  let baseHostname = "";
+  try { baseHostname = new URL(baseUrl).hostname.replace("www.", ""); } catch { return { checked: 0, broken: 0, brokenUrls: [], sampleRate: 0 }; }
+
+  const externalUrls = new Set();
+  $("a[href^='http']").each((_, el) => {
+    const href = safeText($(el).attr("href"));
+    if (!href) return;
+    try {
+      const hostname = new URL(href).hostname.replace("www.", "");
+      if (hostname && hostname !== baseHostname) externalUrls.add(href);
+    } catch {}
+  });
+
+  const targets = [...externalUrls].slice(0, sampleSize);
+  if (targets.length === 0) {
+    return { checked: 0, broken: 0, brokenUrls: [], sampleRate: 0, totalExternalLinks: 0 };
+  }
+
+  const checks = targets.map(async (target) => {
+    try {
+      const res = await axios.head(target, {
+        timeout: 5000,
+        maxRedirects: 4,
+        validateStatus: () => true,
+        httpsAgent: new https.Agent({ rejectUnauthorized: false })
+      });
+      return { url: target, ok: res.status < 400, status: res.status };
+    } catch (err) {
+      return { url: target, ok: false, status: 0 };
+    }
+  });
+
+  const results = await Promise.allSettled(checks);
+  const resolved = results.map(r => r.status === "fulfilled" ? r.value : { ok: false, status: 0, url: "unknown" });
+  const broken = resolved.filter(r => !r.ok);
+
+  return {
+    checked: resolved.length,
+    broken: broken.length,
+    brokenUrls: broken.map(b => ({ url: b.url, status: b.status })),
+    sampleRate: externalUrls.size > 0 ? Math.round((resolved.length / externalUrls.size) * 100) : 0,
+    totalExternalLinks: externalUrls.size
+  };
+}
 /**
  * Samples a small set of asset URLs (CSS/JS/images) referenced in the page
  * to detect broken assets, using the same bounded HEAD-request approach as

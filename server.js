@@ -2966,6 +2966,8 @@ export function extractPageData($, html, url) {
   }
 
   const canonical = cleanText(safeText($('link[rel="canonical"]').attr("href")));
+  const canonicalTagCount = $('link[rel="canonical"]').length;
+  const allCanonicalValues = [...new Set($('link[rel="canonical"]').map((_, el) => cleanText(safeText($(el).attr("href")))).get().filter(Boolean))];
   const robots = cleanText(safeText($('meta[name="robots"]').attr("content")));
   const language = cleanText(safeText($('html').attr("lang") || $('html').attr("xml:lang")));
   const charset = cleanText(safeText($('meta[charset]').attr("charset")));

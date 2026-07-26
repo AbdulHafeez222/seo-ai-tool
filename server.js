@@ -3017,6 +3017,8 @@ entities.totalEntityCount = entities.verifiedEntityCount + entities.candidateEnt
     title,
     metaDescription,
     canonical,
+    canonicalTagCount,
+    allCanonicalValues,
     robots,
     language,
     charset,

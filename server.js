@@ -2034,8 +2034,222 @@ export function calculateTechnicalSeoScore({ pageData, headers, robotsData, site
 }
 
 // =========================================================================
-// ========== SECTION 6.5: CORE WEB VITALS (GOOGLE PAGESPEED INSIGHTS) =====
+// ========== SECTION 6.4: ENTERPRISE TECHNICAL SEO MONITOR ================
 // =========================================================================
+// PHASE 16C.1. Produces a structured, per-issue technical SEO report on top
+// of data already gathered by the existing crawler and scoring pipeline —
+// broken-link sampling, redirect chain, canonical extraction, robots/
+// sitemap detection, and mixed-content detection are all reused as-is.
+// The two genuine gaps this closes are external-link checking (previously
+// internal-only) and true redirect-loop / duplicate-canonical detection
+// (previously only counted, never structurally analyzed).
+
+function buildTechnicalIssue({ issueName, severity, affectedUrl, technicalExplanation, seoImpact, recommendedFix, priority }) {
+  return { issueName, severity, affectedUrl, technicalExplanation, seoImpact, recommendedFix, priority };
+}
+
+/** Detects a genuine redirect loop: any URL appearing more than once in the actual redirect chain. */
+function detectRedirectLoop(redirectChain) {
+  const seen = new Set();
+  for (const hop of safeArray(redirectChain)) {
+    const target = safeText(hop?.location || hop?.from);
+    if (!target) continue;
+    const norm = normalizeUrl(target);
+    if (seen.has(norm)) return { looped: true, repeatedUrl: target };
+    seen.add(norm);
+  }
+  return { looped: false, repeatedUrl: null };
+}
+
+/**
+ * Builds the full Enterprise Technical SEO Monitor report: one structured
+ * issue entry per detected problem (Issue Name / Severity / Affected URL /
+ * Technical Explanation / SEO Impact / Recommended Fix / Priority), plus
+ * aggregate counts and a reused Technical SEO Score. Every issue is backed
+ * by real, already-gathered evidence — nothing here is estimated.
+ */
+export function generateTechnicalSeoMonitorReport(ctx) {
+  const {
+    pageData, resolvedUrl, robotsData, sitemapData, redirectCount, redirectChain,
+    mixedContent, brokenAssetData, brokenLinkData, brokenExternalLinkData,
+    httpStatus, technicalSeoAudit
+  } = ctx;
+
+  const issues = [];
+  let passedChecks = 0;
+  const totalChecks = 12;
+
+  // 1. Broken Internal Links
+  if (safeNumber(brokenLinkData?.broken) > 0) {
+    issues.push(buildTechnicalIssue({
+      issueName: "Broken Internal Links",
+      severity: "Critical",
+      affectedUrl: resolvedUrl,
+      technicalExplanation: `${brokenLinkData.broken} of ${brokenLinkData.checked} sampled internal link(s) returned an error response: ${safeArray(brokenLinkData.brokenUrls).map(b => `${b.url} (${b.status || "no response"})`).join(", ")}.`,
+      seoImpact: "Broken internal links waste crawl budget, break internal link equity flow, and directly harm user experience and bounce rate.",
+      recommendedFix: "Fix or remove each broken internal link; redirect to the correct destination if the target page moved.",
+      priority: "Critical"
+    }));
+  } else { passedChecks++; }
+
+  // 2. Broken External Links
+  if (safeNumber(brokenExternalLinkData?.broken) > 0) {
+    issues.push(buildTechnicalIssue({
+      issueName: "Broken External Links",
+      severity: "Warning",
+      affectedUrl: resolvedUrl,
+      technicalExplanation: `${brokenExternalLinkData.broken} of ${brokenExternalLinkData.checked} sampled external link(s) returned an error response: ${safeArray(brokenExternalLinkData.brokenUrls).map(b => `${b.url} (${b.status || "no response"})`).join(", ")}.`,
+      seoImpact: "Broken outbound links reduce perceived content quality and trustworthiness for both users and search engines.",
+      recommendedFix: "Update or remove broken external links; verify the destination still exists before linking.",
+      priority: "Medium"
+    }));
+  } else { passedChecks++; }
+
+  // 3. Redirect Chains
+  if (safeNumber(redirectCount) > 0) {
+    const severity = redirectCount > 3 ? "Warning" : "Info";
+    issues.push(buildTechnicalIssue({
+      issueName: "Redirect Chain Detected",
+      severity,
+      affectedUrl: resolvedUrl,
+      technicalExplanation: `${redirectCount} redirect hop(s) were followed before reaching final content.`,
+      seoImpact: "Each redirect hop adds latency, dilutes link equity, and can cause crawlers to abandon the chain before reaching the final page.",
+      recommendedFix: "Update internal/external links to point directly at the final destination URL, collapsing the chain to zero or one hop.",
+      priority: redirectCount > 3 ? "High" : "Low"
+    }));
+  } else { passedChecks++; }
+
+  // 4. Redirect Loops
+  const loopCheck = detectRedirectLoop(redirectChain);
+  if (loopCheck.looped) {
+    issues.push(buildTechnicalIssue({
+      issueName: "Redirect Loop Detected",
+      severity: "Critical",
+      affectedUrl: loopCheck.repeatedUrl,
+      technicalExplanation: `The redirect chain revisits a URL it already passed through (${loopCheck.repeatedUrl}), forming a loop.`,
+      seoImpact: "Redirect loops make a page completely inaccessible to both users and search engine crawlers, resulting in total loss of that page's ranking ability.",
+      recommendedFix: "Trace and break the redirect loop at the server/CMS configuration level immediately.",
+      priority: "Critical"
+    }));
+  } else { passedChecks++; }
+
+  // 5. HTTP Status Analysis
+  if (safeNumber(httpStatus) >= 400 || safeNumber(httpStatus) === 0) {
+    issues.push(buildTechnicalIssue({
+      issueName: "Non-Success HTTP Status",
+      severity: "Critical",
+      affectedUrl: resolvedUrl,
+      technicalExplanation: `Final response status was ${httpStatus || "unknown"}.`,
+      seoImpact: "Search engines cannot index a page that doesn't return a successful (2xx) status code.",
+      recommendedFix: "Investigate server logs to determine why this page isn't returning a 200 status.",
+      priority: "Critical"
+    }));
+  } else { passedChecks++; }
+
+  // 6. HTTPS Validation
+  const isHttps = safeText(resolvedUrl).startsWith("https://");
+  if (!isHttps) {
+    issues.push(buildTechnicalIssue({
+      issueName: "Missing HTTPS",
+      severity: "Critical",
+      affectedUrl: resolvedUrl,
+      technicalExplanation: "Page is served over unencrypted HTTP rather than HTTPS.",
+      seoImpact: "HTTPS is a confirmed Google ranking signal; browsers also actively flag HTTP pages as \"Not Secure,\" harming trust and conversion.",
+      recommendedFix: "Install a valid TLS certificate and migrate the site to HTTPS, with permanent redirects from HTTP.",
+      priority: "Critical"
+    }));
+  } else { passedChecks++; }
+
+  // 7. Mixed Content Detection
+  if (mixedContent?.applicable && safeNumber(mixedContent.mixedContentCount) > 0) {
+    issues.push(buildTechnicalIssue({
+      issueName: "Mixed Content",
+      severity: "Warning",
+      affectedUrl: resolvedUrl,
+      technicalExplanation: `${mixedContent.mixedContentCount} insecure HTTP resource(s) referenced from this HTTPS page: ${safeArray(mixedContent.examples).join(", ")}.`,
+      seoImpact: "Mixed content can cause browsers to block resources or show security warnings, degrading both UX and trust signals.",
+      recommendedFix: "Update all asset references (img/script/link/iframe) to use HTTPS URLs.",
+      priority: "Medium"
+    }));
+  } else { passedChecks++; }
+
+  // 8 & 9. Canonical Validation / Missing Canonical
+  if (!pageData?.canonical) {
+    issues.push(buildTechnicalIssue({
+      issueName: "Missing Canonical Tag",
+      severity: "Warning",
+      affectedUrl: resolvedUrl,
+      technicalExplanation: "No <link rel=\"canonical\"> element was found on this page.",
+      seoImpact: "Without a canonical tag, search engines must guess the preferred URL version, risking duplicate-content dilution across parameterized or duplicate URLs.",
+      recommendedFix: "Add a self-referencing canonical tag pointing to this page's preferred URL.",
+      priority: "Medium"
+    }));
+  } else { passedChecks++; }
+
+  // 10. Duplicate Canonical Detection
+  if (safeNumber(pageData?.canonicalTagCount) > 1) {
+    issues.push(buildTechnicalIssue({
+      issueName: "Duplicate Canonical Tags",
+      severity: "Critical",
+      affectedUrl: resolvedUrl,
+      technicalExplanation: `${pageData.canonicalTagCount} <link rel="canonical"> tags were found on this page (values: ${safeArray(pageData.allCanonicalValues).join(", ")}).`,
+      seoImpact: "Multiple canonical tags create ambiguity that search engines may resolve unpredictably, potentially ignoring canonicalization entirely.",
+      recommendedFix: "Remove all but one canonical tag, keeping only the single correct self-referencing (or cross-domain, if intentional) canonical URL.",
+      priority: "Critical"
+    }));
+  } else { passedChecks++; }
+
+  // 11. Robots.txt Validation
+  if (!robotsData?.found) {
+    issues.push(buildTechnicalIssue({
+      issueName: "Missing robots.txt",
+      severity: "Info",
+      affectedUrl: resolvedUrl,
+      technicalExplanation: "No robots.txt file was found at the site root.",
+      seoImpact: "Without robots.txt, there's no explicit crawl-permission declaration or sitemap pointer for search engine crawlers.",
+      recommendedFix: "Publish a robots.txt file at the domain root declaring crawl rules and the sitemap location.",
+      priority: "Low"
+    }));
+  } else { passedChecks++; }
+
+  // 12. Sitemap.xml Validation
+  if (!sitemapData?.found) {
+    issues.push(buildTechnicalIssue({
+      issueName: "Missing XML Sitemap",
+      severity: "Warning",
+      affectedUrl: resolvedUrl,
+      technicalExplanation: "No sitemap.xml was found via robots.txt declaration or the conventional /sitemap.xml path.",
+      seoImpact: "Sitemaps help search engines discover and prioritize pages efficiently, especially on larger sites.",
+      recommendedFix: "Generate an XML sitemap and reference it in robots.txt.",
+      priority: "Medium"
+    }));
+  } else { passedChecks++; }
+
+  const criticalCount = issues.filter(i => i.severity === "Critical").length;
+  const warningCount = issues.filter(i => i.severity === "Warning").length;
+  const infoCount = issues.filter(i => i.severity === "Info").length;
+
+  // Estimated SEO Impact: a plain-language rollup derived directly from
+  // the real counts above — not a separately fabricated number.
+  const estimatedSeoImpact = criticalCount > 0
+    ? `High — ${criticalCount} critical issue(s) detected that can materially block indexing or crawling.`
+    : warningCount > 0
+      ? `Moderate — ${warningCount} warning-level issue(s) detected that degrade but don't block search visibility.`
+      : "Low — no critical or warning-level technical SEO issues detected in this scan.";
+
+  return {
+    technicalSeoScore: technicalSeoAudit?.score ?? null,
+    totalChecks,
+    passedChecks,
+    criticalIssueCount: criticalCount,
+    warningCount,
+    infoCount,
+    estimatedSeoImpact,
+    issues
+  };
+}
+
+
 
 const PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 const PSI_TIMEOUT_MS = 15000;

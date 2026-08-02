@@ -1631,12 +1631,23 @@ export async function getBrowserInstance() {
         "--disable-dev-shm-usage",
         "--disable-accelerated-2d-canvas",
         "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--disable-extensions",
+        "--disable-component-extensions-with-background-pages",
+        "--disable-default-apps",
+        "--no-first-run",
+        "--single-process=false",
         "--blink-settings=imagesEnabled=false"
       ]
     });
     return globalBrowser;
   } catch (err) {
-    logger.error("CRAWL", "playwright_launch_failed", { error: err.message });
+    logger.error("CRAWL", "playwright_launch_failed", {
+      error: err.message,
+      stack: err.stack,
+      code: err.code
+    });
+    globalBrowser = null;
     return null;
   }
 }

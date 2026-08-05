@@ -5511,7 +5511,6 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
   const schemasDetected = auditPageSchemas($, crawl.html);
     const mixedContent = detectMixedContent($, crawl.finalUrl);
     const brokenAssetData = await sampleBrokenAssets($, crawl.finalUrl, 6);
-    const brokenExternalLinkData = await sampleBrokenExternalLinks($, crawl.finalUrl, 6);
     const securityHeaders = analyzeSecurityHeaders(crawl.headers);
     pageData.securityHeaders = securityHeaders; // consumed by Trust scoring (Phase 2)
 

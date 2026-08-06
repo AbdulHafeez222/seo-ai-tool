@@ -1,7 +1,7 @@
 provider = "node"
 
-[packages]
-apt = [
+[phases.setup]
+aptPackages = [
   "libxcb-shm0",
   "libx11-xcb1",
   "libxrandr2",

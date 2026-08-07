@@ -9,8 +9,12 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
 
 dotenv.config();
+
 
 // =========================================================================
 // ========== SECTION 0: GLOBAL CONSTANTS, CONFIGS & REGEXES ==============
@@ -1620,23 +1624,40 @@ export async function getBrowserInstance() {
       globalBrowser = null;
     }
   }
-
   try {
-    const { chromium } = await import("playwright");
-    globalBrowser = await chromium.launch({
+    const playwright = require("playwright");
+    const chromium = playwright.chromium;
+
+    const launchArgs = {
       headless: true,
+      executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH ?
+        `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium` : undefined,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-accelerated-2d-canvas",
         "--disable-gpu",
+        "--disable-extensions",
+        "--disable-component-extensions-with-background-pages",
+        "--disable-default-apps",
+        "--no-first-run",
+        "--single-process=false",
         "--blink-settings=imagesEnabled=false"
       ]
-    });
+    };
+
+    globalBrowser = await chromium.launch(launchArgs);
     return globalBrowser;
   } catch (err) {
-    logger.error("CRAWL", "playwright_launch_failed", { error: err.message });
+    logger.error("CRAWL", "playwright_launch_failed", {
+      error: err.message,
+      stack: err.stack,
+      code: err.code,
+      browserPath: process.env.PLAYWRIGHT_BROWSERS_PATH
+    });
+    console.error("PLAYWRIGHT LAUNCH FAILED:", err);
+    globalBrowser = null;
     return null;
   }
 }
@@ -1649,6 +1670,7 @@ export async function closeBrowserInstance() {
   if (!globalBrowser) return;
   try {
     await globalBrowser.close();
+
   } catch (err) {
     logger.warn("CRAWL", "browser_close_failed", { error: err.message });
   } finally {

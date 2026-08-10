@@ -20,3 +20,6 @@ aptPackages = [
   "libglib2.0-0",
   "libasound2"
 ]
+
+[phases.install]
+cmds = ["npm install", "npx playwright install chromium"]

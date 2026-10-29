@@ -605,7 +605,9 @@ app.use((req, res, next) => {
       method: req.method,
       path: req.path,
       status: res.statusCode,
-      durationMs: Date.now() - startedAt
+      durationMs: Date.now() - startedAt,
+      responseBytes: Number(res.getHeader("Content-Length")) || 0,
+      responseType: String(res.getHeader("Content-Type") || "")
     });
   });
   next();
@@ -5991,6 +5993,25 @@ app.get("/auth/me", asyncHandler(async (req, res) => {
     logger.error("AUTH", "me_lookup_failed", { error: err.message });
     res.status(500).json({ success: false, message: "Account lookup failed." });
   }
+}));
+
+// Read an already-completed result without reserving quota, crawling or writing data.
+// The same account/project cache scope is used by the analysis pipeline.
+app.get("/scan-result", requireAuth, asyncHandler(async (req, res) => {
+  const normalized = enforceSecureUrl(req.query.url);
+  if (!normalized) return res.status(400).json({ success: false, message: "Provide a valid public website URL." });
+  let projectId = "none";
+  if (req.query.projectId) {
+    if (!mongoose.Types.ObjectId.isValid(req.query.projectId)) return res.status(400).json({ success: false, message: "Invalid project." });
+    const project = await Project.findOne({ _id: req.query.projectId, userId: req.authUser._id });
+    if (!project) return res.status(404).json({ success: false, message: "Project not found." });
+    projectId = String(project._id);
+  }
+  const entry = scanCache.get(`${req.authUser._id}:${projectId}:${normalizeUrl(normalized)}`);
+  if (!entry || Date.now() - entry.timestamp >= CACHE_TTL_MS) {
+    return res.status(404).json({ success: false, message: "No recent completed result is available. Check Reports for the saved summary. No new scan was started." });
+  }
+  res.json({ ...entry.data, recovered: true });
 }));
 
 app.get("/scan", authenticateAndRateLimit, asyncHandler(async (req, res) => {

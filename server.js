@@ -2,13 +2,17 @@ import express from "express";
 import * as cheerio from "cheerio";
 import cors from "cors";
 import axios from "axios";
-import https from "https";
+import { safeHttp, parsePublicUrl, resolvePublicUrl } from "./lib/outbound.js";
+import { fileURLToPath } from "node:url";
 import path from "path";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { parseRobots, robotsAllows } from "./lib/robots.js";
+import { analyzePageEvidence } from "./lib/evidence.js";
+import { installAccountRoutes, deletingAccountIds } from "./lib/accounts.js";
 
 dotenv.config();
 
@@ -51,24 +55,7 @@ export const trendDB = {};
 export const activeScans = new Map();
 export const scanCache = new Map();
 
-export const saasUsers = {
-  "free-dev-key-9999": {
-    email: "developer@free.aeo",
-    plan: "free",
-    scansToday: 0,
-    lastScanReset: Date.now(),
-    lastSeenAt: Date.now(),
-    apiKey: "free-dev-key-9999"
-  },
-  "pro-member-key-7777": {
-    email: "enterprise@premium.aeo",
-    plan: "pro",
-    scansToday: 0,
-    lastScanReset: Date.now(),
-    lastSeenAt: Date.now(),
-    apiKey: "pro-member-key-7777"
-  }
-};
+export const saasUsers = Object.create(null);
 
 export const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 export const PHONE_REGEX = /[\+]?[(]?[0-9]{3}[)]?[-\s.]?[0-9]{3}[-\s.]?[0-9]{4,6}/;
@@ -163,7 +150,11 @@ function logMessage(level, context, message, meta) {
   };
   let serialized;
   try {
-    serialized = JSON.stringify(entry);
+    serialized = JSON.stringify(entry, (key, value) => {
+      if (/password|secret|token|apiKey|authorization|cookie|email|stack|host|name/i.test(key)) return undefined;
+      if (typeof value === "string") return value.replace(/mongodb(?:\+srv)?:\/\/[^\s]+/gi, "[redacted]").replace(/(https?:\/\/[^?\s]+)\?[^\s]+/g, "$1?[redacted]");
+      return value;
+    });
   } catch {
     serialized = `${entry.timestamp} [${level}] [${context}] ${message}`;
   }
@@ -217,6 +208,8 @@ export async function connectToDatabase() {
     .connect(uri, {
       // Connection pooling best practices: bounded pool, fail fast rather
       // than hanging the process if Atlas is unreachable.
+      autoIndex: process.env.NODE_ENV !== "production",
+      autoCreate: process.env.NODE_ENV !== "production",
       maxPoolSize: 10,
       minPoolSize: 1,
       serverSelectionTimeoutMS: 8000,
@@ -398,9 +391,9 @@ export async function saveReportToDatabase(payload, crawl, ownerContext = {}) {
       title: safeText(payload.title, ""),
       overallScore: payload.overallAIVisibilityScore != null ? payload.overallAIVisibilityScore : null,
       crawlResult: {
-        method: crawl?.crawlMethod,
+        method: crawl?.crawlMethod || crawl?.method,
         status: crawl?.status,
-        contentSize: crawl?.contentLength,
+        contentSize: crawl?.contentLength || crawl?.contentSize,
         duration: safeGetProperty(payload, "crawl.duration"),
         retryCount: crawl?.retryCount
       },
@@ -455,7 +448,7 @@ function safeGetProperty(obj, path) {
 
 // --- User accounts ---------------------------------------------------------
 const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
+if (!JWT_SECRET || Buffer.byteLength(JWT_SECRET) < 32) {
   // Fatal, by design: authentication must never sign tokens with a
   // hardcoded or generated fallback secret. Fail loudly at startup rather
   // than silently running with an insecure key.
@@ -540,13 +533,28 @@ export async function verifyPasswordHash(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
+export function authStamp(user) {
+  return crypto.createHmac("sha256", JWT_SECRET).update(`${user.passwordHash}:${user.apiKey}`).digest("hex");
+}
+export function requestToken(req) {
+  if (req.headers.authorization) return safeText(req.headers.authorization).replace(/^Bearer\s+/i, "");
+  const cookie = safeText(req.headers.cookie).split(";").find(x => x.trim().startsWith("aegis_session="));
+  return cookie ? cookie.trim().slice("aegis_session=".length) : "";
+}
+function setSession(res, token) {
+  res.cookie("aegis_session", token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", path: "/", maxAge: 8 * 3600000 });
+  res.setHeader("Cache-Control", "no-store");
+}
+function sessionMatches(user, decoded) {
+  return decoded?.stamp === authStamp(user);
+}
 export function signAuthToken(user) {
-  return jwt.sign({ sub: user._id.toString(), email: user.email }, JWT_SECRET, { expiresIn: "30d" });
+  return jwt.sign({ sub: user._id.toString(), stamp: authStamp(user) }, JWT_SECRET, { expiresIn: "8h", algorithm: "HS256" });
 }
 
 export function verifyAuthToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] });
   } catch {
     return null;
   }
@@ -556,16 +564,24 @@ export function verifyAuthToken(token) {
 // ========== SECTION 1: EXPRESS MIDDLEWARE SETUP =========================
 // =========================================================================
 
-const app = express();
+export const app = express();
+const publicDir = fileURLToPath(new URL("./public", import.meta.url));
 
 // Required for correct req.ip resolution behind reverse proxies (Render, etc.)
-app.set("trust proxy", 1);
+app.set("trust proxy", process.env.TRUST_PROXY_HOPS === "1" ? 1 : false);
 app.disable("x-powered-by");
 
-app.use(cors());
+app.use(cors({ origin: process.env.APP_ORIGIN || false }));
 app.use(express.json({ limit: "1mb" }));
-app.use(express.static(".", { maxAge: "1h" }));
-app.use(express.static("public", { maxAge: "1h" }));
+app.use((req, res, next) => {
+  if (!['GET','HEAD','OPTIONS'].includes(req.method) && req.headers.cookie && !req.headers.authorization) {
+    const expected = process.env.APP_ORIGIN || `${req.protocol}://${req.get('host')}`;
+    if (req.get('origin') !== expected) return res.status(403).json({ success: false, message: "Request origin rejected." });
+  }
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
 
 // Manual security headers (avoids introducing new npm dependencies while
 // still shipping the standard hardening headers a production API needs).
@@ -594,6 +610,8 @@ app.use((req, res, next) => {
   });
   next();
 });
+
+app.use(express.static(publicDir, { maxAge: "1h", dotfiles: "deny" }));
 
 // =========================================================================
 // ========== SECTION 1.5: MIDDLEWARE SECURITY & LIMITS ===================
@@ -627,106 +645,51 @@ function pruneAnonymousUsers() {
 
 setInterval(pruneAnonymousUsers, 30 * 60 * 1000).unref();
 
+export async function reserveAccountUsage(user, units) {
+  const limit = PLAN_LIMITS[user.plan] || PLAN_LIMITS.free;
+  const cutoff = new Date(Date.now() - 86400000);
+  await User.updateOne({ _id: user._id, lastScanReset: { $lte: cutoff } },
+    { $set: { scansToday: 0, lastScanReset: new Date() } });
+  return User.findOneAndUpdate({ _id: user._id, scansToday: { $lte: limit - units }, plan: user.plan },
+    { $inc: { scansToday: units } }, { new: true });
+}
+
 export async function authenticateAndRateLimit(req, res, next) {
-  const authHeader = safeText(req.headers.authorization || req.query.apiKey);
-  const rawToken = authHeader.replace(/^Bearer\s+/i, "");
-
-  // --- Registered-account (JWT) authentication, tried first -------------
-  // Only attempted when MongoDB is connected and the token looks like a
-  // JWT (three dot-separated segments). Any failure at any point here
-  // (invalid token, user not found, DB error) falls through to the
-  // original in-memory logic below rather than blocking the request.
-  if (mongoose.connection.readyState === 1 && rawToken && rawToken.split(".").length === 3) {
-    try {
-      const decoded = verifyAuthToken(rawToken);
-      if (decoded?.sub) {
-        const dbUser = await User.findById(decoded.sub);
-        if (dbUser) {
-          if (Date.now() - new Date(dbUser.lastScanReset).getTime() > 24 * 60 * 60 * 1000) {
-            dbUser.scansToday = 0;
-            dbUser.lastScanReset = new Date();
-          }
-
-          const limit = PLAN_LIMITS[dbUser.plan] || 5;
-          if (dbUser.scansToday >= limit) {
-            return res.status(429).json({
-              success: false,
-              status: "LIMIT_EXCEEDED",
-              message: `You have reached your tier daily limits (${dbUser.scansToday}/${limit} Scans). Please upgrade plans.`
-            });
-          }
-
-          // Plain-object mirror so existing route code (which mutates
-          // req.user.scansToday directly, e.g. in /scan and /compare)
-          // works completely unchanged regardless of auth method.
-          // _id is additive — only new report-ownership/project code reads
-          // it; nothing pre-existing depended on req.user shape being exact.
-          req.user = {
-            _id: dbUser._id,
-            email: dbUser.email,
-            plan: dbUser.plan,
-            scansToday: dbUser.scansToday,
-            lastScanReset: dbUser.lastScanReset.getTime(),
-            apiKey: dbUser.apiKey
-          };
-
-          // Persist whatever the route mutated on req.user back to
-          // MongoDB after the response completes — no route handler
-          // needs to know or care that this user is Mongo-backed.
-          res.on("finish", () => {
-            User.updateOne(
-              { _id: dbUser._id },
-              { scansToday: req.user.scansToday, lastScanReset: new Date(req.user.lastScanReset) }
-            ).catch(err => logger.error("AUTH", "usage_persist_failed", { error: err.message, userId: dbUser._id.toString() }));
-          });
-
-          return next();
-        }
-      }
-    } catch (err) {
-      logger.warn("AUTH", "jwt_auth_fallback", { error: err.message });
-      // Intentionally fall through to the unchanged logic below.
+  try {
+    if (req.query.apiKey) return res.status(400).json({ success: false, message: "Send credentials in the Authorization header." });
+    const rawToken = requestToken(req);
+    let user;
+    if (rawToken) {
+      const decoded = rawToken.split(".").length === 3 ? verifyAuthToken(rawToken) : null;
+      if (rawToken.includes(".") && !decoded?.sub) return res.status(401).json({ success: false, message: "Invalid authentication token." });
+      if (mongoose.connection.readyState !== 1) return res.status(503).json({ success: false, message: "Account services temporarily unavailable." });
+      user = decoded?.sub ? await User.findById(decoded.sub) : await User.findOne({ apiKey: rawToken });
+      if (!user || decoded && !sessionMatches(user, decoded)) return res.status(401).json({ success: false, message: "Invalid credentials." });
+    } else {
+      if (process.env.ENABLE_ANONYMOUS_SCANS !== "true") return res.status(401).json({ success: false, message: "Please log in to scan websites." });
+      pruneAnonymousUsers();
+      const key = `anon-${req.ip}`;
+      user = saasUsers[key] ||= { plan: "free", scansToday: 0, lastScanReset: Date.now(), apiKey: key };
+      user.lastSeenAt = Date.now();
+      if (Date.now() - user.lastScanReset >= 86400000) { user.scansToday = 0; user.lastScanReset = Date.now(); }
     }
-  }
-
-  // --- Original in-memory API-key / anonymous logic, unchanged ----------
-  const key = rawToken.slice(0, 128);
-
-  let user = key ? saasUsers[key] : null;
-  if (!user) {
-    const ip = safeText(req.ip) || "unknown-client";
-    const cacheKey = `anon-${ip}`;
-    if (!saasUsers[cacheKey]) {
-      saasUsers[cacheKey] = {
-        email: "anonymous@platform.aeo",
-        plan: "free",
-        scansToday: 0,
-        lastScanReset: Date.now(),
-        lastSeenAt: Date.now(),
-        apiKey: cacheKey
-      };
+    if (user._id && deletingAccountIds.has(String(user._id))) return res.status(409).json({success:false,message:"Account deletion in progress."});
+    const urls = req.path === "/compare-multi" ? safeText(req.query.urls).split(",").filter(Boolean) :
+      [req.query.url, ...(["/compare", "/content-gap", "/gap-analysis", "/keyword-theft"].includes(req.path) ? [req.query.competitor] : [])];
+    if (urls.length < 1 || urls.length > 5 || urls.some(u => !enforceSecureUrl(u))) return res.status(400).json({ success: false, message: "Provide valid public website URLs." });
+    // Alias only redirects and must not consume quota twice.
+    const units = req.path === "/gap-analysis" ? 0 : urls.length;
+    if (user._id) {
+      const reserved = await reserveAccountUsage(user, units);
+      if (!reserved) return res.status(429).json({ success: false, status: "LIMIT_EXCEEDED", message: "Insufficient daily scan quota." });
+      req.user = { _id: reserved._id, plan: reserved.plan, scansToday: reserved.scansToday, apiKey: reserved.apiKey };
+    } else {
+      if (user.scansToday + units > PLAN_LIMITS.free) return res.status(429).json({ success: false, status: "LIMIT_EXCEEDED", message: "Daily scan quota exceeded." });
+      user.scansToday += units;
+      req.user = user;
     }
-    user = saasUsers[cacheKey];
-  }
-
-  user.lastSeenAt = Date.now();
-
-  if (Date.now() - user.lastScanReset > 24 * 60 * 60 * 1000) {
-    user.scansToday = 0;
-    user.lastScanReset = Date.now();
-  }
-
-  const limit = PLAN_LIMITS[user.plan] || 5;
-  if (user.scansToday >= limit) {
-    return res.status(429).json({
-      success: false,
-      status: "LIMIT_EXCEEDED",
-      message: `You have reached your tier daily limits (${user.scansToday}/${limit} Scans). Please upgrade plans.`
-    });
-  }
-
-  req.user = user;
-  next();
+    next();
+  } catch (err) { next(err); }
 }
 
 /**
@@ -737,11 +700,10 @@ export async function authenticateAndRateLimit(req, res, next) {
  * simply requires a valid, currently-issued JWT for a real Mongo account.
  */
 export async function requireAuth(req, res, next) {
-  const authHeader = safeText(req.headers.authorization);
-  const token = authHeader.replace(/^Bearer\s+/i, "");
+  const token = requestToken(req);
   const decoded = token ? verifyAuthToken(token) : null;
 
-  if (!decoded?.sub) {
+  if (!decoded?.sub || !mongoose.Types.ObjectId.isValid(decoded.sub)) {
     return res.status(401).json({ success: false, message: "Authentication required. Please log in." });
   }
   if (mongoose.connection.readyState !== 1) {
@@ -749,8 +711,8 @@ export async function requireAuth(req, res, next) {
   }
 
   try {
-    const dbUser = await User.findById(decoded.sub).select("-passwordHash");
-    if (!dbUser) {
+    const dbUser = await User.findById(decoded.sub);
+    if (!dbUser || !sessionMatches(dbUser, decoded)) {
       return res.status(401).json({ success: false, message: "Account not found." });
     }
     req.authUser = dbUser;
@@ -802,7 +764,8 @@ export const clamp = (num, min = 0, max = 100) => {
   const val = Number(num);
   return Math.min(max, Math.max(min, isNaN(val) ? 0 : val));
 };
-export function buildMetric({ name, raw, max, weight, reason, evidence, recommendation }) {
+export function buildMetric({ name, raw, max, weight, reason, evidence, recommendation, available = raw != null }) {
+  if (!available) return { metric: name, rawValue: null, maxValue: max, weight: 0, contribution: 0, passed: null, reason: "Not measured or unavailable.", evidence: evidence || "No supporting evidence available.", recommendation: null, expectedImprovement: 0 };
   const safeMax = max > 0 ? max : 1;
   const clampedRaw = clamp(raw, 0, safeMax);
   const ratio = clampedRaw / safeMax;
@@ -823,17 +786,17 @@ export function buildMetric({ name, raw, max, weight, reason, evidence, recommen
   };
 }
 export function aggregateMetrics(metrics) {
-  const totalWeight = metrics.reduce((sum, m) => sum + m.weight, 0) || 100;
+  const totalWeight = metrics.reduce((sum, m) => sum + m.weight, 0);
   const totalContribution = metrics.reduce((sum, m) => sum + m.contribution, 0);
-  const score = clamp(Math.round((totalContribution / totalWeight) * 100));
+  const score = totalWeight > 0 ? clamp(Math.round((totalContribution / totalWeight) * 100)) : null;
 
   return {
     score,
-    status: score >= 80 ? "Optimized" : score >= 50 ? "Satisfactory" : "Critical Improvements Needed",
+    status: score === null ? "No Data Available" : score >= 80 ? "Optimized" : score >= 50 ? "Satisfactory" : "Critical Improvements Needed",
     auditPassed: score >= 80,
     metrics,
     passedMetrics: metrics.filter(m => m.passed).map(m => m.metric),
-    failedMetrics: metrics.filter(m => !m.passed).map(m => m.metric),
+    failedMetrics: metrics.filter(m => m.passed === false).map(m => m.metric),
     totalExpectedImprovement: Math.round(metrics.reduce((s, m) => s + m.expectedImprovement, 0) * 100) / 100
   };
 }
@@ -866,9 +829,10 @@ export function classifyRecommendation(metric) {
  * standardized keys on top so existing frontend/API consumers are unaffected.
  */
 export function buildStandardizedScoreOutput(aggregateResult, categoryWeight = 100) {
-  const failed = aggregateResult.metrics.filter(m => !m.passed);
+  const failed = aggregateResult.metrics.filter(m => m.passed === false);
   return {
     ...aggregateResult,
+    score: aggregateResult.score ?? aggregateResult.aeoScore ?? aggregateResult.authorityScore ?? aggregateResult.trustScore,
     maxScore: 100,
     weight: categoryWeight,
     evidence: aggregateResult.metrics.map(m => `${m.metric}: ${m.evidence}`),
@@ -902,7 +866,8 @@ export const cleanDomainBrand = (url) => {
 export const tokenizeKeywords = (text = "") => {
   const clean = String(text)
     .toLowerCase()
-    .replace(/[^\w\s]/g, " ")
+    .normalize("NFKC")
+    .replace(/[^\p{L}\p{N}\p{M}\s]/gu, " ")
     .split(/\s+/)
     .filter(word => word && word.length > 3);
 
@@ -915,37 +880,19 @@ export const tokenizeKeywords = (text = "") => {
   });
 
   const sorted = Object.keys(freq).sort((a, b) => freq[b] - freq[a]);
-  const finalKeywords = sorted.length > 0 ? sorted.slice(0, 15) : ["optimized", "framework", "intelligence", "analytics"];
+  const finalKeywords = sorted.slice(0, 15);
   return [...new Set(finalKeywords)];
 };
 
-export const normalizeUrl = (url) => {
-  let u = cleanText(safeText(url))
-    .replace(/^(https?:\/\/)?(www\.)?/, "")
-    .replace(/\/$/, "");
-  return u.replace(/\s+/g, '').toLowerCase();
+export const normalizeUrl = (value) => {
+  try { const url = new URL(value); url.hash = ""; return url.href; }
+  catch { return safeText(value); }
 };
 
-export const getKeywordDifficulty = (kw) => {
-  const hash = String(kw).split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return clamp((hash % 40) + 30, 10, 99);
-};
-
-export const getKeywordOpportunity = (difficulty, searchVolume = 1200) => {
-  return clamp(Math.round(((100 - difficulty) * 0.7) + ((searchVolume / 1000) * 10)), 5, 95);
-};
-
-/**
- * Deterministic pseudo-volume derived from the keyword itself rather than
- * Math.random(), so identical keywords always produce identical, reproducible
- * output across requests (important for caching and for not presenting
- * unrepeatable random noise as if it were real search-volume data).
- */
-export const getDeterministicSearchVolume = (kw) => {
-  const hash = crypto.createHash("md5").update(String(kw).toLowerCase()).digest("hex");
-  const numeric = parseInt(hash.slice(0, 8), 16);
-  return 500 + (numeric % 4500);
-};
+// Real keyword demand/ranking data is unavailable without a connected data source.
+export const getKeywordDifficulty = () => null;
+export const getKeywordOpportunity = () => null;
+export const getDeterministicSearchVolume = () => null;
 
 /**
  * Returns true if a hostname resolves to a private/loopback/link-local
@@ -962,13 +909,13 @@ export function isPrivateOrReservedHost(hostname) {
 export const enforceSecureUrl = (inputUrl) => {
   let cleaned = safeText(inputUrl).trim();
   if (!cleaned || cleaned.length > MAX_URL_LENGTH) return null;
-  cleaned = cleaned.replace(/[[\]()]/g, "").trim();
+
   if (!cleaned.match(/^https?:\/\//i)) {
     cleaned = "https://" + cleaned;
   }
 
   try {
-    const parsed = new URL(cleaned);
+    const parsed = parsePublicUrl(cleaned);
     if (!/^https?:$/i.test(parsed.protocol)) return null;
 
     const hostParts = parsed.hostname.split('.');
@@ -1009,8 +956,15 @@ export function countSyllables(word) {
  * Real Flesch Reading Ease score computed from actual word/sentence/
  * syllable counts in the supplied text — not a static estimate.
  */
-export function calculateReadability(text) {
+export function calculateReadability(text, language = "") {
   const clean = safeText(text);
+  const letters = clean.match(/\p{L}/gu) || [];
+  const latinShare = letters.length ? letters.filter(c => /[a-z]/i.test(c)).length / letters.length : 0;
+  // Flesch uses English syllable patterns. Never reward or penalize unsupported languages.
+  const english = /^en(?:-|$)/i.test(language);
+  if (!letters.length || (language && !english) || latinShare < 0.95) {
+    return {available: false, fleschScore: null, label: "English readability unavailable for this text", avgWordsPerSentence: null, avgSyllablesPerWord: null};
+  }
   const sentences = clean.split(/[.!?]+/).filter(s => s.trim().length > 0);
   const words = clean.split(/\s+/).filter(Boolean);
   const sentenceCount = sentences.length || 1;
@@ -1026,7 +980,7 @@ export function calculateReadability(text) {
   else if (clampedScore >= 30) label = "Fairly difficult";
   else label = "Very difficult to read";
 
-  return { fleschScore: clampedScore, label, avgWordsPerSentence: parseFloat((wordCount / sentenceCount).toFixed(1)), avgSyllablesPerWord: parseFloat((syllableCount / wordCount).toFixed(2)) };
+  return { available: true, languageAssumed: !language, fleschScore: clampedScore, label, avgWordsPerSentence: parseFloat((wordCount / sentenceCount).toFixed(1)), avgSyllablesPerWord: parseFloat((syllableCount / wordCount).toFixed(2)) };
 }
 
 /**
@@ -1330,7 +1284,7 @@ export function runPageValidationEngine(html, status, redirectCount = 0) {
     protectionType = primaryBlockCheck.system;
     evidence = primaryBlockCheck.reason;
     retryRecommendation = state === "BLOCKED_PAGE"
-      ? "Retry with stealth Playwright rendering; if this persists, the target likely requires IP allowlisting or a residential proxy."
+      ? "Access protection detected. Ask the site owner to permit the crawler; no challenge bypass is attempted."
       : "Retry with standard rendering after confirming the URL is correct.";
   } else if (additionalSignature.matched) {
     state = additionalSignature.category;
@@ -1350,7 +1304,7 @@ export function runPageValidationEngine(html, status, redirectCount = 0) {
   } else {
     state = "ERROR_PAGE"; protectionType = "Unclassified Low-Integrity Page";
     evidence = `Document scored only ${integrity.integrityScore}/100 on integrity checks with no specific signature matched.`;
-    retryRecommendation = "Retry with Playwright or stealth Playwright rendering.";
+    retryRecommendation = "Verify the page is public and accessible to standard crawlers.";
   }
 
   const analyzable = state === "VALID_PAGE" || state === "PARTIAL_PAGE";
@@ -1435,39 +1389,24 @@ export async function fetchRobotsTxt(baseUrl) {
   try {
     const origin = new URL(baseUrl).origin;
     const robotsUrl = `${origin}/robots.txt`;
-    const response = await axios.get(robotsUrl, {
+    const response = await safeHttp.get(robotsUrl, {
       timeout: 8000,
       validateStatus: () => true,
       headers: { "User-Agent": USER_AGENTS[0] },
-      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
       maxContentLength: 2 * 1024 * 1024
     });
 
     if (response.status >= 400) {
-      return { found: false, disallowedPaths: [], sitemaps: [], raw: "" };
+      return { found: false, available: [404,410].includes(response.status), status: response.status, disallowedPaths: [], rules: [], sitemaps: [], raw: "" };
     }
 
     const raw = typeof response.data === "string" ? response.data : "";
-    const disallowedPaths = [];
-    const sitemaps = [];
+    const parsed = parseRobots(raw);
+    return { found: true, available: true, status: response.status, ...parsed, raw };
 
-    raw.split(/\r?\n/).forEach(line => {
-      const trimmed = line.trim();
-      const disallowMatch = trimmed.match(/^disallow:\s*(.*)$/i);
-      const sitemapMatch = trimmed.match(/^sitemap:\s*(.*)$/i);
-      if (disallowMatch && disallowMatch[1]) disallowedPaths.push(disallowMatch[1].trim());
-      if (sitemapMatch && sitemapMatch[1]) sitemaps.push(sitemapMatch[1].trim());
-    });
-
-    return {
-      found: true,
-      disallowedPaths: unique(disallowedPaths).slice(0, 50),
-      sitemaps: unique(sitemaps),
-      raw: raw.slice(0, 2000)
-    };
   } catch (err) {
     logger.debug("ROBOTS", "robots_txt_fetch_failed", { baseUrl, error: err.message });
-    return { found: false, disallowedPaths: [], sitemaps: [], raw: "" };
+    return { found: false, available: false, status: null, disallowedPaths: [], rules: [], sitemaps: [], raw: "" };
   }
 }
 
@@ -1476,30 +1415,20 @@ export async function fetchRobotsTxt(baseUrl) {
  * conventional root path fallback.
  */
 export async function detectSitemap(baseUrl, robotsData) {
-  const declared = safeArray(robotsData?.sitemaps);
-  if (declared.length > 0) {
-    return { found: true, source: "robots.txt", urls: declared };
+  const origin = new URL(baseUrl).origin;
+  const candidates = [...safeArray(robotsData?.sitemaps).slice(0, 1), `${origin}/sitemap.xml`];
+  let available = true;
+  for (const candidate of [...new Set(candidates)]) {
+    try {
+      const response = await safeHttp.get(candidate, { timeout: 8000, maxContentLength: 5 * 1024 * 1024 });
+      if ([401,403,429].includes(response.status) || response.status >= 500) { available = false; continue; }
+      if (response.status >= 200 && response.status < 300 && typeof response.data === "string" &&
+          !/<!doctype/i.test(response.data) && /<(urlset|sitemapindex)(?:\s|>)/i.test(response.data)) {
+        return { found: true, available: true, source: candidate === `${origin}/sitemap.xml` ? "conventional-path" : "robots.txt", urls: [candidate] };
+      }
+    } catch { available = false; }
   }
-
-  try {
-    const origin = new URL(baseUrl).origin;
-    const fallbackUrl = `${origin}/sitemap.xml`;
-    const response = await axios.get(fallbackUrl, {
-      timeout: 8000,
-      validateStatus: () => true,
-      headers: { "User-Agent": USER_AGENTS[0] },
-      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
-      maxContentLength: 5 * 1024 * 1024
-    });
-    const bodyLower = typeof response.data === "string" ? response.data.toLowerCase() : "";
-    if (response.status < 400 && (bodyLower.includes("<urlset") || bodyLower.includes("<sitemapindex"))) {
-      return { found: true, source: "conventional-path", urls: [fallbackUrl] };
-    }
-    return { found: false, source: null, urls: [] };
-  } catch (err) {
-    logger.debug("SITEMAP", "sitemap_fetch_failed", { baseUrl, error: err.message });
-    return { found: false, source: null, urls: [] };
-  }
+  return { found: false, available, source: null, urls: [] };
 }
 
 /**
@@ -1510,11 +1439,10 @@ export async function detectSitemap(baseUrl, robotsData) {
  */
 export async function fetchSitemapUrls(sitemapUrl, maxUrls = 50) {
   try {
-    const response = await axios.get(sitemapUrl, {
+    const response = await safeHttp.get(sitemapUrl, {
       timeout: 8000,
       validateStatus: () => true,
       headers: { "User-Agent": USER_AGENTS[0] },
-      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
       maxContentLength: 5 * 1024 * 1024
     });
     if (response.status >= 400 || typeof response.data !== "string") return [];
@@ -1527,11 +1455,10 @@ export async function fetchSitemapUrls(sitemapUrl, maxUrls = 50) {
     if (isSitemapIndex && locs.length > 0) {
       // One level of child-sitemap expansion only.
       const childSitemapUrl = locs[0];
-      const childResponse = await axios.get(childSitemapUrl, {
+      const childResponse = await safeHttp.get(childSitemapUrl, {
         timeout: 8000,
         validateStatus: () => true,
         headers: { "User-Agent": USER_AGENTS[0] },
-        httpsAgent: new https.Agent({ rejectUnauthorized: false }),
         maxContentLength: 5 * 1024 * 1024
       });
       if (childResponse.status < 400 && typeof childResponse.data === "string") {
@@ -1569,7 +1496,9 @@ export async function discoverSitePages(rootUrl, maxPages, homepageLinkMap) {
       const sitemapUrls = await fetchSitemapUrls(sitemapData.urls[0], maxPages * 2);
       for (const u of sitemapUrls) {
         if (discovered.length >= maxPages) break;
-        const norm = normalizeUrl(u);
+        const candidate = enforceSecureUrl(u);
+        if (!candidate || new URL(candidate).origin !== new URL(rootUrl).origin) continue;
+        const norm = normalizeUrl(candidate);
         if (!seen.has(norm)) {
           seen.add(norm);
           discovered.push(u);
@@ -1589,7 +1518,8 @@ export async function discoverSitePages(rootUrl, maxPages, homepageLinkMap) {
 
     for (const normalizedPath of Object.keys(homepageLinkMap)) {
       if (discovered.length >= maxPages) break;
-      const fullUrl = origin + normalizedPath;
+      const fullUrl = normalizedPath.startsWith("http") ? normalizedPath : origin + normalizedPath;
+      if (!enforceSecureUrl(fullUrl) || new URL(fullUrl).origin !== new URL(rootUrl).origin) continue;
       const norm = normalizeUrl(fullUrl);
       if (!seen.has(norm)) {
         seen.add(norm);
@@ -1607,6 +1537,7 @@ export async function discoverSitePages(rootUrl, maxPages, homepageLinkMap) {
 // =========================================================================
 
 let globalBrowser = null;
+let browserLaunchPromise = null;
 let browserLastUsedAt = Date.now();
 const BROWSER_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -1621,6 +1552,8 @@ export async function getBrowserInstance() {
     }
   }
 
+  if (browserLaunchPromise) return browserLaunchPromise;
+  browserLaunchPromise = (async () => {
   try {
     const { chromium } = await import("playwright");
     globalBrowser = await chromium.launch({
@@ -1639,6 +1572,8 @@ export async function getBrowserInstance() {
     logger.error("CRAWL", "playwright_launch_failed", { error: err.message });
     return null;
   }
+  })();
+  try { return await browserLaunchPromise; } finally { browserLaunchPromise = null; }
 }
 
 /**
@@ -1665,48 +1600,28 @@ setInterval(() => {
 }, 60 * 1000).unref();
 
 export async function fetchAxios(url) {
-  const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-  const redirectChain = [];
-
-  const response = await axios.get(url, {
-    headers: {
-      "User-Agent": ua,
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Accept-Encoding": "gzip, deflate, br",
-      "Cache-Control": "no-cache",
-      "Pragma": "no-cache",
-      "Connection": "keep-alive"
-    },
-    timeout: 12000,
-    maxRedirects: 6,
-    validateStatus: () => true,
-    decompress: true,
-    maxContentLength: 15 * 1024 * 1024,
-    httpsAgent: new https.Agent({
-      rejectUnauthorized: false,
-      keepAlive: true
-    }),
-    beforeRedirect: (options, responseDetails) => {
-      redirectChain.push({
-        from: responseDetails?.headers?.location ? options.href : undefined,
-        status: responseDetails?.statusCode,
-        location: responseDetails?.headers?.location
-      });
-    }
-  });
+  const response = await safeHttp.get(url, { timeout: 12000, maxRedirects: 6, decompress: true });
 
   return {
     html: typeof response.data === "string" ? response.data : JSON.stringify(response.data),
     status: response.status,
     headers: response.headers || {},
-    finalUrl: response.request?.res?.responseUrl || url,
-    redirectChain,
-    redirectCount: redirectChain.length,
+    finalUrl: response.safeFinalUrl || url,
+    redirectChain: response.safeRedirectChain || [],
+    redirectCount: response.safeRedirectChain?.length || 0,
     httpVersion: response.request?.res?.httpVersion || null
   };
 }
+let renderingContexts = 0;
 export async function fetchPlaywright(url) {
+  if (renderingContexts >= 2) return null;
+  renderingContexts++;
+  try { return await fetchPlaywrightInternal(url); }
+  finally { renderingContexts--; }
+}
+async function fetchPlaywrightInternal(url) {
+  if (process.env.CRAWLER_EGRESS_ISOLATED !== "true") return null;
+  await resolvePublicUrl(url);
   const browser = await getBrowserInstance();
   if (!browser) return null;
 
@@ -1714,12 +1629,20 @@ export async function fetchPlaywright(url) {
     userAgent: USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)],
     viewport: { width: 1280, height: 800 },
     deviceScaleFactor: 1,
-    bypassCSP: true
+    serviceWorkers: "block",
+    acceptDownloads: false
   });
 
-  await context.route("**/*.{png,jpg,jpeg,gif,svg,css,woff,woff2,ttf,otf,ico}", route => route.abort());
-  await context.route("**/*analytics*/**", route => route.abort());
-
+  let requestCount = 0;
+  await context.route("**/*", async route => {
+    try {
+      if (++requestCount > 80 || ["image", "font", "media"].includes(route.request().resourceType())) return await route.abort();
+      await resolvePublicUrl(route.request().url());
+      return await route.continue();
+    } catch { return route.abort().catch(() => {}); }
+  });
+  await context.routeWebSocket("**/*", socket => socket.close());
+  const contextDeadline = setTimeout(() => context.close().catch(() => {}), 25000);
   const page = await context.newPage();
   page.setDefaultTimeout(20000);
 
@@ -1744,11 +1667,13 @@ export async function fetchPlaywright(url) {
     } catch {}
 
     const content = await page.content();
+    if (Buffer.byteLength(content) > 5 * 1024 * 1024) throw new Error("Rendered page exceeds size limit");
     const status = response ? response.status() : 200;
     const finalUrl = page.url() || url;
 
     return { html: content, status, finalUrl, infiniteScrollDetected };
   } finally {
+    clearTimeout(contextDeadline);
     await page.close().catch(() => {});
     await context.close().catch(() => {});
     browserLastUsedAt = Date.now();
@@ -1787,13 +1712,12 @@ export async function sampleBrokenLinks(baseUrl, linkMap, sampleSize = 8) {
   }
 
   const checks = paths.map(async (p) => {
-    const target = p.startsWith("http") ? p : `${origin}/${p.replace(/^\/*/, "")}`;
+    const target = p.startsWith("http") ? p : new URL(p, baseUrl).href;
     try {
-      const res = await axios.head(target, {
+      const res = await safeHttp.head(target, {
         timeout: 5000,
         maxRedirects: 4,
         validateStatus: () => true,
-        httpsAgent: new https.Agent({ rejectUnauthorized: false })
       });
       return { url: target, ok: res.status < 400, status: res.status };
     } catch (err) {
@@ -1803,10 +1727,12 @@ export async function sampleBrokenLinks(baseUrl, linkMap, sampleSize = 8) {
 
   const results = await Promise.allSettled(checks);
   const resolved = results.map(r => r.status === "fulfilled" ? r.value : { ok: false, status: 0, url: "unknown" });
-  const broken = resolved.filter(r => !r.ok);
+  const broken = resolved.filter(r => [404,410].includes(r.status));
 
   return {
-    checked: resolved.length,
+    attempted: resolved.length,
+    unknown: resolved.filter(r => r.status === 0 || [401,403,405,429].includes(r.status) || r.status >= 500).length,
+    checked: resolved.filter(r => r.status >= 200 && r.status < 400 || [404,410].includes(r.status)).length,
     broken: broken.length,
     brokenUrls: broken.map(b => ({ url: b.url, status: b.status })),
     sampleRate: paths.length > 0 ? Math.round((resolved.length / Object.keys(linkMap).length) * 100) : 0
@@ -1840,11 +1766,10 @@ export async function sampleBrokenExternalLinks($, baseUrl, sampleSize = 8) {
 
   const checks = targets.map(async (target) => {
     try {
-      const res = await axios.head(target, {
+      const res = await safeHttp.head(target, {
         timeout: 5000,
         maxRedirects: 4,
         validateStatus: () => true,
-        httpsAgent: new https.Agent({ rejectUnauthorized: false })
       });
       return { url: target, ok: res.status < 400, status: res.status };
     } catch (err) {
@@ -1854,10 +1779,12 @@ export async function sampleBrokenExternalLinks($, baseUrl, sampleSize = 8) {
 
   const results = await Promise.allSettled(checks);
   const resolved = results.map(r => r.status === "fulfilled" ? r.value : { ok: false, status: 0, url: "unknown" });
-  const broken = resolved.filter(r => !r.ok);
+  const broken = resolved.filter(r => [404,410].includes(r.status));
 
   return {
-    checked: resolved.length,
+    attempted: resolved.length,
+    unknown: resolved.filter(r => r.status === 0 || [401,403,405,429].includes(r.status) || r.status >= 500).length,
+    checked: resolved.filter(r => r.status >= 200 && r.status < 400 || [404,410].includes(r.status)).length,
     broken: broken.length,
     brokenUrls: broken.map(b => ({ url: b.url, status: b.status })),
     sampleRate: externalUrls.size > 0 ? Math.round((resolved.length / externalUrls.size) * 100) : 0,
@@ -1884,11 +1811,10 @@ export async function sampleBrokenAssets($, baseUrl, sampleSize = 6) {
 
   const checks = sampled.map(async (src) => {
     let target;
-    try { target = new URL(src, origin).href; } catch { return { url: src, ok: false, status: 0 }; }
+    try { target = new URL(src, baseUrl).href; } catch { return { url: src, ok: false, status: 0 }; }
     try {
-      const res = await axios.head(target, {
+      const res = await safeHttp.head(target, {
         timeout: 5000, maxRedirects: 4, validateStatus: () => true,
-        httpsAgent: new https.Agent({ rejectUnauthorized: false })
       });
       return { url: target, ok: res.status < 400, status: res.status };
     } catch {
@@ -1897,9 +1823,9 @@ export async function sampleBrokenAssets($, baseUrl, sampleSize = 6) {
   });
 
   const results = (await Promise.allSettled(checks)).map(r => r.status === "fulfilled" ? r.value : { ok: false, status: 0, url: "unknown" });
-  const broken = results.filter(r => !r.ok);
+  const broken = results.filter(r => [404,410].includes(r.status));
 
-  return { checked: results.length, broken: broken.length, brokenAssets: broken.map(b => ({ url: b.url, status: b.status })) };
+  return { attempted: results.length, unknown: results.filter(r => !r.ok && ![404,410].includes(r.status)).length, checked: results.filter(r => r.ok || [404,410].includes(r.status)).length, broken: broken.length, brokenAssets: broken.map(b => ({ url: b.url, status: b.status })) };
 }
 
 /**
@@ -1971,14 +1897,14 @@ export function calculateTechnicalSeoScore({ pageData, headers, robotsData, site
   }));
 
   metrics.push(buildMetric({
-    name: "Sitemap Availability", raw: sitemapData?.found ? 10 : 0, max: 10, weight: 10,
+    name: "Sitemap Availability", available: sitemapData?.available !== false, raw: sitemapData?.found ? 10 : 0, max: 10, weight: 10,
     reason: sitemapData?.found ? `Sitemap found via ${sitemapData.source}.` : "No sitemap.xml found.",
     evidence: sitemapData?.found ? safeArray(sitemapData.urls).join(", ") : "Checked robots.txt and /sitemap.xml.",
     recommendation: "Publish and reference an XML sitemap."
   }));
 
   metrics.push(buildMetric({
-    name: "Robots.txt Availability", raw: robotsData?.found ? 8 : 0, max: 8, weight: 8,
+    name: "Robots.txt Availability", available: robotsData?.available !== false, raw: robotsData?.found ? 8 : 0, max: 8, weight: 8,
     reason: robotsData?.found ? "robots.txt is published." : "No robots.txt found.",
     evidence: robotsData?.found ? `${safeArray(robotsData.disallowedPaths).length} disallow rule(s) declared.` : "GET /robots.txt did not resolve.",
     recommendation: "Publish a robots.txt at the domain root."
@@ -2002,7 +1928,7 @@ export function calculateTechnicalSeoScore({ pageData, headers, robotsData, site
   const contentEncoding = safeText(headers?.["content-encoding"]).toLowerCase();
   const isCompressed = ["gzip", "br", "deflate"].includes(contentEncoding);
   metrics.push(buildMetric({
-    name: "Compression", raw: isCompressed ? 10 : 0, max: 10, weight: 10,
+    name: "Compression", available: Boolean(headers?.["content-encoding"]), raw: isCompressed ? 10 : 0, max: 10, weight: 10,
     reason: isCompressed ? `Response compressed via ${contentEncoding}.` : "No compression detected on the response.",
     evidence: `Content-Encoding header: ${contentEncoding || "none"}.`,
     recommendation: "Enable gzip or Brotli compression on the web server."
@@ -2010,9 +1936,9 @@ export function calculateTechnicalSeoScore({ pageData, headers, robotsData, site
 
   const httpVersionNum = parseFloat(httpVersion) || 1.1;
   metrics.push(buildMetric({
-    name: "Modern Protocol (HTTP/2+)", raw: httpVersionNum >= 2 ? 8 : 0, max: 8, weight: 8,
+    name: "Modern Protocol (HTTP/2+)", available: false, raw: httpVersionNum >= 2 ? 8 : 0, max: 8, weight: 8,
     reason: httpVersionNum >= 2 ? `Served over HTTP/${httpVersion}.` : `Served over HTTP/${httpVersion || "1.1"}, not HTTP/2 or HTTP/3.`,
-    evidence: `Detected protocol version: HTTP/${httpVersion || "1.1"}.`,
+    evidence: "The HTTP client does not test HTTP/2 or HTTP/3 capability. No protocol capability judgement was made.",
     recommendation: "Enable HTTP/2 or HTTP/3 on the server/CDN for reduced latency and multiplexing."
   }));
 
@@ -2200,7 +2126,7 @@ export function generateTechnicalSeoMonitorReport(ctx) {
   } else { passedChecks++; }
 
   // 11. Robots.txt Validation
-  if (!robotsData?.found) {
+  if (!robotsData?.found && robotsData?.available !== false) {
     issues.push(buildTechnicalIssue({
       issueName: "Missing robots.txt",
       severity: "Info",
@@ -2213,7 +2139,7 @@ export function generateTechnicalSeoMonitorReport(ctx) {
   } else { passedChecks++; }
 
   // 12. Sitemap.xml Validation
-  if (!sitemapData?.found) {
+  if (!sitemapData?.found && sitemapData?.available !== false) {
     issues.push(buildTechnicalIssue({
       issueName: "Missing XML Sitemap",
       severity: "Warning",
@@ -2252,7 +2178,7 @@ export function generateTechnicalSeoMonitorReport(ctx) {
 
 
 const PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
-const PSI_TIMEOUT_MS = 15000;
+const PSI_TIMEOUT_MS = 12000;
 
 // Official Google thresholds (web.dev / Search Central), stable since INP
 // replaced FID as a Core Web Vital in March 2024. Verified current as of
@@ -2309,6 +2235,7 @@ export async function fetchCoreWebVitals(url, strategy = "mobile") {
     const hasPageFieldData = data.loadingExperience?.overall_category !== undefined && fieldData;
     const hasOriginFieldData = data.originLoadingExperience?.overall_category !== undefined && originFieldData;
 
+    const chosenField = hasPageFieldData ? fieldData : hasOriginFieldData ? originFieldData : null;
     const readField = (metrics, key) => metrics?.[key]?.percentile ?? null;
     const readLab = (auditKey) => lighthouse?.audits?.[auditKey]?.numericValue ?? null;
 
@@ -2318,13 +2245,13 @@ export async function fetchCoreWebVitals(url, strategy = "mobile") {
       hasFieldData: Boolean(hasPageFieldData || hasOriginFieldData),
       fieldDataScope: hasPageFieldData ? "url" : hasOriginFieldData ? "origin" : null,
       field: {
-        lcp: readField(fieldData, "LARGEST_CONTENTFUL_PAINT_MS") ?? readField(originFieldData, "LARGEST_CONTENTFUL_PAINT_MS"),
-        inp: readField(fieldData, "INTERACTION_TO_NEXT_PAINT") ?? readField(originFieldData, "INTERACTION_TO_NEXT_PAINT"),
+        lcp: readField(chosenField, "LARGEST_CONTENTFUL_PAINT_MS"),
+        inp: readField(chosenField, "INTERACTION_TO_NEXT_PAINT"),
         cls: (() => {
-          const raw = readField(fieldData, "CUMULATIVE_LAYOUT_SHIFT_SCORE") ?? readField(originFieldData, "CUMULATIVE_LAYOUT_SHIFT_SCORE");
+          const raw = readField(chosenField, "CUMULATIVE_LAYOUT_SHIFT_SCORE");
           return raw !== null ? raw / 100 : null; // CrUX reports CLS * 100 as an integer percentile
         })(),
-        fcp: readField(fieldData, "FIRST_CONTENTFUL_PAINT_MS") ?? readField(originFieldData, "FIRST_CONTENTFUL_PAINT_MS")
+        fcp: readField(chosenField, "FIRST_CONTENTFUL_PAINT_MS")
       },
       lab: {
         lcp: readLab("largest-contentful-paint"),
@@ -2423,14 +2350,14 @@ export function calculateCoreWebVitalsScore(psiData) {
     : { score: null, status: "No Data Available", totalExpectedImprovement: 0 };
 
   return {
-    available: true,
+    available: scorableMetrics.length > 0,
     dataSource: psiData.hasFieldData ? "field" : "lab",
     fieldDataScope: psiData.fieldDataScope,
     sourceExplanation: sourceLabel,
     score: result.score,
     status: result.status,
     metrics: displayMetrics,
-    passesAllThresholds: scorableMetrics.length > 0 && scorableMetrics.every(m => m.passed),
+    passesAllThresholds: psiData.hasFieldData && scorableMetrics.length === 3 ? scorableMetrics.every(m => m.passed) : null,
     unavailableMetricCount: displayMetrics.length - scorableMetrics.length,
     raw: {
       field: psiData.field,
@@ -2514,76 +2441,9 @@ export function assessCrawlReliability({ html, status, blockCheck, redirectCount
     reliable: result.score >= 60
   };
 }
-/**
- * Stage 3: Stealth Playwright retry. Same rendering approach as
- * fetchPlaywright, but with headless-detection evasions applied (patches
- * navigator.webdriver, plugins, languages, adds realistic headers, and
- * simulates minimal mouse movement) — used only when a normal Playwright
- * render is still blocked/challenged.
- */
+/** Backward-compatible export; no browser fingerprint evasion is performed. */
 export async function fetchPlaywrightStealth(url) {
-  const browser = await getBrowserInstance();
-  if (!browser) return null;
-
-  const context = await browser.newContext({
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    viewport: { width: 1366, height: 768 },
-    deviceScaleFactor: 1,
-    locale: "en-US",
-    timezoneId: "America/New_York",
-    bypassCSP: true,
-    extraHTTPHeaders: {
-      "Accept-Language": "en-US,en;q=0.9",
-      "Upgrade-Insecure-Requests": "1",
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "none",
-      "Sec-Fetch-User": "?1"
-    }
-  });
-
-  await context.addInitScript(() => {
-    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
-    Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3, 4, 5] });
-    Object.defineProperty(navigator, "languages", { get: () => ["en-US", "en"] });
-    window.chrome = { runtime: {} };
-  });
-
-  await context.route("**/*.{png,jpg,jpeg,gif,svg,woff,woff2,ttf,otf,ico}", route => route.abort());
-  await context.route("**/*analytics*/**", route => route.abort());
-
-  const page = await context.newPage();
-  page.setDefaultTimeout(25000);
-
-  try {
-    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
-    try { await page.waitForLoadState("networkidle", { timeout: 5000 }); } catch {}
-
-    try {
-      await page.mouse.move(200, 300);
-      await page.waitForTimeout(600);
-      await page.mouse.move(400, 500);
-      await page.waitForTimeout(1200);
-    } catch {}
-
-    let infiniteScrollDetected = false;
-    try {
-      const initialHeight = await page.evaluate(() => document.body.scrollHeight);
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(1000);
-      const newHeight = await page.evaluate(() => document.body.scrollHeight);
-      if (newHeight > initialHeight + 200) infiniteScrollDetected = true;
-    } catch {}
-
-    const content = await page.content();
-    const status = response ? response.status() : 200;
-    const finalUrl = page.url() || url;
-    return { html: content, status, finalUrl, infiniteScrollDetected };
-  } finally {
-    await page.close().catch(() => {});
-    await context.close().catch(() => {});
-    browserLastUsedAt = Date.now();
-  }
+  return fetchPlaywright(url);
 }
 
 // --- Internal stage runners (not exported; used only by smartCrawl) ---
@@ -2598,7 +2458,7 @@ async function attemptStandardGet(url) {
   let headers = {};
 
   try {
-    const outcome = await withHardTimeout(withRetry(() => fetchAxios(url), 2, 1200), CRAWL_HARD_TIMEOUT_MS, "Standard fetch");
+    const outcome = { result: await fetchAxios(url), attempts: 1 };
     result = outcome.result;
     retryCount = outcome.attempts - 1;
     status = result?.status || 0;
@@ -2706,28 +2566,22 @@ function finalizeCrawlResult(winningStage, allStages) {
   };
 }
 
-/**
- * Multi-stage crawl pipeline:
- *   1. Standard HTTP GET
- *   2. Automatic Playwright retry
- *   3. Stealth Playwright retry
- *   4. DOM validation (per stage)
- *   5. Content validation (per stage)
- *   6. Block detection (per stage)
- *   7. Final blocked response ONLY if every stage above fails
- *
- * HTTP 401/403/429 no longer cause an immediate stop — they simply mark a
- * stage as unsuccessful, triggering escalation to the next stage. If
- * Playwright (stealth or not) successfully renders real content after an
- * earlier 401/403/429, that content is used and full analysis proceeds.
+/** Standard public HTTP fetch with ordinary browser fallback for incomplete content.
+ * Robots restrictions and security/CAPTCHA/rate-limit responses stop the crawl.
  */
 export async function smartCrawl(url) {
+  await resolvePublicUrl(url);
+  const robotsData = await fetchRobotsTxt(url);
+  if (robotsData.available === false || !robotsAllows(url, robotsData.rules || [])) {
+    return { finalUrl: url, status: robotsData.status || 0, crawlMethod: "STANDARD_GET", blockCheck: { blocked: true, system: "Robots policy", reason: robotsData.available === false ? "robots.txt could not be verified. Retry later." : "robots.txt disallows this crawler for this path." }, pageValidation: { state: "BLOCKED_PAGE", analyzable: false } };
+  }
   const stages = [];
 
   const stage1 = await attemptStandardGet(url);
   stages.push(stage1);
   logger.info("CRAWL", "stage_completed", { url, stage: stage1.stageName, success: stage1.success, status: stage1.status });
   if (stage1.success) return finalizeCrawlResult(stage1, stages);
+  if (stage1.pageValidation?.state === "BLOCKED_PAGE" || [401,403,429].includes(stage1.status)) return finalizeCrawlResult(null, stages);
 
   logger.info("CRAWL", "escalating_to_playwright", { url, priorStatus: stage1.status, priorBlockSystem: stage1.blockCheck?.system });
   const stage2 = await attemptPlaywrightRender(url, "PLAYWRIGHT_RENDERED", fetchPlaywright);
@@ -2735,13 +2589,6 @@ export async function smartCrawl(url) {
   logger.info("CRAWL", "stage_completed", { url, stage: stage2.stageName, success: stage2.success, status: stage2.status });
   if (stage2.success) return finalizeCrawlResult(stage2, stages);
 
-  logger.info("CRAWL", "escalating_to_stealth_playwright", { url, priorBlockSystem: stage2.blockCheck?.system });
-  const stage3 = await attemptPlaywrightRender(url, "PLAYWRIGHT_STEALTH_RENDERED", fetchPlaywrightStealth);
-  stages.push(stage3);
-  logger.info("CRAWL", "stage_completed", { url, stage: stage3.stageName, success: stage3.success, status: stage3.status });
-  if (stage3.success) return finalizeCrawlResult(stage3, stages);
-
-  logger.warn("CRAWL", "all_stages_exhausted", { url, stagesAttempted: stages.map(s => s.stageName) });
   return finalizeCrawlResult(null, stages);
 }
 // =========================================================================
@@ -2815,9 +2662,9 @@ export function regexFallbackParser(html, url) {
   const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
 
   return {
-    title: titleMatch ? cleanText(titleMatch[1]) : cleanDomainBrand(url),
-    metaDescription: metaDescMatch ? cleanText(metaDescMatch[1]) : "Expert digital insights and optimization framework.",
-    h1: h1Match ? cleanText(h1Match[1]) : cleanDomainBrand(url)
+    title: titleMatch ? cleanText(titleMatch[1]) : "",
+    metaDescription: metaDescMatch ? cleanText(metaDescMatch[1]) : "",
+    h1: h1Match ? cleanText(h1Match[1]) : ""
   };
 }
 
@@ -2920,7 +2767,7 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
 
   const brandName = getBrandNameEnhanced(url, $, title, schemas);
   if (brandName && brandName !== "Brand Authority") {
-    verified.brands.push({ name: brandName, source: "meta/title/domain-derived" });
+    // Domain/title-derived brand remains a legacy display hint, not verified structured data.
   }
 
   // Verified entities: only from structured data the page itself declares.
@@ -3043,7 +2890,7 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
     // (e.g. isGenericTitle checks) already recognizes it as a deliberate
     // "brand undetermined" marker, not a fabricated entity name.
     brands: namesOnly(finalVerified.brands, [brandName || "Brand Authority"]),
-    organizations: namesOnly(finalVerified.organizations, [brandName || "Brand Authority"]),
+    organizations: namesOnly(finalVerified.organizations, []),
     locations: namesOnly([...finalVerified.locations], namesOnly(finalCandidates.locations, [])),
     services: namesOnly(finalCandidates.services, []),
     people: namesOnly(finalVerified.people, []),
@@ -3101,7 +2948,7 @@ export function analyzeInternalLinks($, url, h2s) {
         }
 
         const parsedFull = new URL(fullUrl);
-        const normalizedPath = parsedFull.hostname.replace('www.', '') + parsedFull.pathname.replace(/\/$/, "");
+        const normalizedPath = parsedFull.href.split("#")[0];
         const linkHostname = parsedFull.hostname.replace('www.', '');
 
         if (linkHostname === baseHostname) {
@@ -3218,7 +3065,10 @@ export function extractPageData($, html, url) {
       hasFilenameContext: /[a-z0-9][-_][a-z0-9]/i.test(src.split("/").pop() || "") && !/^(img|image|dsc|photo)\d*\./i.test(src.split("/").pop() || "")
     };
   }).get();
-  const bodyText = cleanText($("p, li, h2, h3, h4, td, span, article").map((_, el) => $(el).text()).get().join(" "));
+  const textRoot = $("body").clone();
+  textRoot.find("script, style, noscript, template, [hidden], [aria-hidden='true']").remove();
+  textRoot.find("br, p, li, h1, h2, h3, h4, td, div, section, article").prepend(" ").append(" ");
+  const bodyText = safeText(textRoot.text()).replace(/\s+/g, " ");
   const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 0;
 
   const schemas = detectAllSchemas($, html);
@@ -3228,6 +3078,10 @@ entities.totalEntityCount = entities.verifiedEntityCount + entities.candidateEnt
   const dateInfo = extractDatesAndAuthor($, schemas);
 
   return {
+    resolvedUrl: url,
+    listItemsCount: $("li").length,
+    tableRowsCount: $("tr").length,
+    mapDetected: $("a[href*=\"google.com/maps\"], iframe[src*=\"google.com/maps\"]").length > 0,
     title,
     metaDescription,
     canonical,
@@ -3396,9 +3250,10 @@ export function validateSchemaRequiredProperties(detectedSchemas) {
         instanceIndex: idx,
         requiredProperties: requiredProps,
         missingProperties: missingProps,
-        richResultEligible: missingProps.length === 0,
+        propertiesComplete: missingProps.length === 0,
+        richResultEligible: null,
         reason: missingProps.length === 0
-          ? `${type} schema #${idx + 1} contains all properties required for Rich Result eligibility.`
+          ? `${type} schema #${idx + 1} contains the properties checked by this structural heuristic. Rich result eligibility has not been verified.`
           : `${type} schema #${idx + 1} is missing required propert${missingProps.length === 1 ? "y" : "ies"}: ${missingProps.join(", ")}.`
       });
     });
@@ -3406,8 +3261,9 @@ export function validateSchemaRequiredProperties(detectedSchemas) {
 
   return {
     checkedTypes: findings.map(f => f.type),
-    eligibleCount: findings.filter(f => f.richResultEligible).length,
-    ineligibleCount: findings.filter(f => !f.richResultEligible).length,
+    eligibleCount: null,
+    completeCount: findings.filter(f => f.propertiesComplete).length,
+    ineligibleCount: null,
     findings
   };
 }
@@ -3431,7 +3287,7 @@ export function auditPageSchemas($, html) {
     richResultEligibility: requiredPropertyValidation
   };
 }
- 
+
 export function inferWebsiteType(detectedTypes, pageData) {
   const types = safeArray(detectedTypes).map(t => String(t).toLowerCase());
   const url = safeText(pageData?.resolvedUrl).toLowerCase();
@@ -3457,138 +3313,15 @@ export function getRecommendedSchemas(detectedTypes, websiteType = "general") {
   const detectedSet = new Set(safeArray(detectedTypes).map(t => String(t).toLowerCase()));
   const priorityOrder = WEBSITE_TYPE_SCHEMA_PRIORITY[websiteType] || WEBSITE_TYPE_SCHEMA_PRIORITY.general;
   const prioritized = priorityOrder.filter(type => !detectedSet.has(type.toLowerCase()));
-  const remaining = ALLOWED_RECOMMENDED_TYPES.filter(type => !detectedSet.has(type.toLowerCase()) && !prioritized.includes(type));
-  return [...prioritized, ...remaining];
+  return prioritized;
 }
 export function generateRecommendedSchemaBlock(type, title, metaDescription, url) {
-  const baseSchema = { "@context": "https://schema.org" };
-  const safeTitle = title || "Brand Authority";
-  const safeUrl = url || "https://example.com";
-  const safeDesc = metaDescription || "Expert digital insights and technical system optimizations.";
-
-  switch (type) {
-    case "FAQPage":
-      return {
-        ...baseSchema,
-        "@type": "FAQPage",
-        "mainEntity": [{
-          "@type": "Question",
-          "name": `What core topics are discussed on ${safeTitle}?`,
-          "acceptedAnswer": { "@type": "Answer", "text": safeDesc }
-        }]
-      };
-
-    case "Organization":
-      return {
-        ...baseSchema,
-        "@type": "Organization",
-        "name": safeTitle,
-        "url": safeUrl,
-        "logo": `${safeUrl}/logo.png`,
-        "description": safeDesc
-      };
-
-    case "LocalBusiness":
-      return {
-        ...baseSchema,
-        "@type": "LocalBusiness",
-        "name": safeTitle,
-        "description": safeDesc,
-        "url": safeUrl,
-        "telephone": "+1-000-000-0000"
-      };
-
-    case "WebSite":
-      return { ...baseSchema, "@type": "WebSite", "name": safeTitle, "url": safeUrl };
-
-    case "WebPage":
-      return {
-        ...baseSchema,
-        "@type": "WebPage",
-        "name": safeTitle,
-        "description": safeDesc,
-        "url": safeUrl
-      };
-
-    case "Article":
-      return {
-        ...baseSchema,
-        "@type": "Article",
-        "headline": safeTitle,
-        "description": safeDesc,
-        "author": { "@type": "Person", "name": "Platform Specialist" }
-      };
-
-    case "BlogPosting":
-      return {
-        ...baseSchema,
-        "@type": "BlogPosting",
-        "headline": safeTitle,
-        "description": safeDesc,
-        "author": { "@type": "Person", "name": "Platform Specialist" }
-      };
-
-    case "HowTo":
-      return {
-        ...baseSchema,
-        "@type": "HowTo",
-        "name": `How to optimize ${safeTitle}`,
-        "step": [
-          { "@type": "HowToStep", "text": "Review technical metrics and analyze schema layouts." },
-          { "@type": "HowToStep", "text": "Embed missing semantic key phrases into content nodes." }
-        ]
-      };
-
-    case "BreadcrumbList":
-      return {
-        ...baseSchema,
-        "@type": "BreadcrumbList",
-        "itemListElement": [
-          { "@type": "ListItem", "position": 1, "name": "Home", "item": safeUrl }
-        ]
-      };
-
-    case "Product":
-      return {
-        ...baseSchema,
-        "@type": "Product",
-        "name": safeTitle,
-        "description": safeDesc
-      };
-
-    case "Review":
-      return {
-        ...baseSchema,
-        "@type": "Review",
-        "itemReviewed": { "@type": "Thing", "name": safeTitle },
-        "reviewRating": { "@type": "Rating", "ratingValue": "5", "bestRating": "5" },
-        "author": { "@type": "Person", "name": "Verified Client" }
-      };
-
-    case "Person":
-      return { ...baseSchema, "@type": "Person", "name": "Industry Specialist" };
-
-    case "Service":
-      return {
-        ...baseSchema,
-        "@type": "Service",
-        "name": safeTitle,
-        "description": safeDesc,
-        "provider": { "@type": "Organization", "name": safeTitle }
-      };
-
-    case "VideoObject":
-      return {
-        ...baseSchema,
-        "@type": "VideoObject",
-        "name": safeTitle,
-        "description": safeDesc,
-        "uploadDate": new Date().toISOString().split("T")[0]
-      };
-
-    default:
-      return null;
-  }
+  // Draft only observed properties. No invented people, ratings, phones or dates.
+  const block = { "@context": "https://schema.org", "@type": type };
+  if (title) block[/Article|BlogPosting/.test(type) ? "headline" : "name"] = title;
+  if (metaDescription) block.description = metaDescription;
+  if (url) block.url = url;
+  return block;
 }
 
 export function buildSchemaRecommendations(detectedTypes, title, metaDescription, url, websiteType = "general") {
@@ -3604,6 +3337,7 @@ export function buildSchemaRecommendations(detectedTypes, title, metaDescription
 
   return {
     websiteType,
+    draftNotice: "Incomplete structural drafts: add only accurate properties supported by visible content before publishing. Not validated for rich results.",
     missingSchemas: missingTypes,
     highPriorityMissing: missingTypes.slice(0, 3),
     schemaGeneratorCode: blocks.join("\n\n")
@@ -3885,7 +3619,7 @@ export async function calculateDynamicSeoScore(pageData, loadTimeMs, context = {
 
   // 11. Sitemap
   metrics.push(buildMetric({
-    name: "XML Sitemap",
+    name: "XML Sitemap", available: sitemapData?.available !== false,
     raw: sitemapData?.found ? 4 : 0,
     max: 4,
     weight: 4,
@@ -3896,7 +3630,7 @@ export async function calculateDynamicSeoScore(pageData, loadTimeMs, context = {
 
   // 12. Robots.txt
   metrics.push(buildMetric({
-    name: "Robots.txt",
+    name: "Robots.txt", available: robotsData?.available !== false,
     raw: robotsData?.found ? 3 : 0,
     max: 3,
     weight: 3,
@@ -4012,7 +3746,7 @@ export async function calculateDynamicSeoScore(pageData, loadTimeMs, context = {
   // Backward-compatible fields for the existing frontend/payload contract.
   return {
     ...result,
-    deductions: metrics.filter(m => !m.passed).map(m => ({
+    deductions: metrics.filter(m => m.passed === false).map(m => ({
       factor: m.metric,
       penalty: m.expectedImprovement,
       reason: m.reason
@@ -4032,11 +3766,11 @@ export function calculateContentQualityScore(pageData, $) {
     recommendation: "Expand thin sections with substantive, non-redundant content."
   }));
 
-  const readability = calculateReadability(text);
+  const readability = calculateReadability(text, pageData?.language);
   metrics.push(buildMetric({
-    name: "Readability", raw: readability.fleschScore >= 50 ? 15 : readability.fleschScore >= 30 ? 8 : 0, max: 15, weight: 15,
-    reason: `Flesch Reading Ease score: ${readability.fleschScore} (${readability.label}).`,
-    evidence: `Avg ${readability.avgWordsPerSentence} words/sentence, ${readability.avgSyllablesPerWord} syllables/word.`,
+    name: "Readability", available: readability.available, raw: readability.fleschScore >= 50 ? 15 : readability.fleschScore >= 30 ? 8 : 0, max: 15, weight: 15,
+    reason: readability.available ? `English Flesch estimate: ${readability.fleschScore} (${readability.label})${readability.languageAssumed ? "; language assumed from Latin text" : ""}.` : readability.label,
+    evidence: readability.available ? `Avg ${readability.avgWordsPerSentence} words/sentence, ${readability.avgSyllablesPerWord} syllables/word.` : "English syllable formula is inapplicable or text is missing; excluded from score.",
     recommendation: "Shorten sentences and use simpler vocabulary to improve readability."
   }));
 
@@ -4176,7 +3910,7 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
     recommendation: "Open key sections with a clear one-sentence definition of the core concept being discussed."
   }));
 
-  const listItemsCount = (text.match(/<li>/g) || []).length;
+  const listItemsCount = safeNumber(pageData?.listItemsCount);
   metrics.push(buildMetric({
     name: "List Formatting",
     raw: listItemsCount > 5 ? 8 : listItemsCount > 0 ? 4 : 0,
@@ -4187,7 +3921,7 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
     recommendation: "Break stepwise or enumerable information into <ul>/<ol> lists — LLMs favor extractable list structures."
   }));
 
-  const tableRowsCount = (text.match(/<tr>/g) || []).length;
+  const tableRowsCount = safeNumber(pageData?.tableRowsCount);
   metrics.push(buildMetric({
     name: "Table Formatting",
     raw: tableRowsCount > 0 ? 8 : 0,
@@ -4441,7 +4175,7 @@ export function analyzeEEATAdvanced($, bodyText, pageData) {
     totalExpectedImprovement: result.totalExpectedImprovement,
     // Backward-compatible fields for the existing frontend contract.
     factors: result.metrics.filter(m => m.passed).map(m => m.reason),
-    issues: result.metrics.filter(m => !m.passed).map(m => m.reason),
+    issues: result.metrics.filter(m => m.passed === false).map(m => m.reason),
     auditMetrics: {
       hasAuthor, hasAbout, hasContact, hasPrivacy, hasTerms,
       organizationDetected, externalRefLinksCount,
@@ -4525,7 +4259,7 @@ export function calculateDynamicAuthority(pageData) {
     failedMetrics: result.failedMetrics,
     totalExpectedImprovement: result.totalExpectedImprovement,
     factors: result.metrics.filter(m => m.passed).map(m => m.reason),
-    suggestions: result.metrics.filter(m => !m.passed).map(m => m.recommendation)
+    suggestions: result.metrics.filter(m => m.passed === false).map(m => m.recommendation)
   };
 }
 
@@ -4624,7 +4358,7 @@ export function scanDynamicTrustSignals($, html, url, pageData) {
     failedMetrics: result.failedMetrics,
     totalExpectedImprovement: result.totalExpectedImprovement,
     factors: result.metrics.filter(m => m.passed).map(m => m.reason),
-    issues: result.metrics.filter(m => !m.passed).map(m => m.reason)
+    issues: result.metrics.filter(m => m.passed === false).map(m => m.reason)
   };
 }
 export function calculateImageSeoScore(pageData) {
@@ -4713,7 +4447,7 @@ export function calculateLocalSeoScore(pageData, schemaAudit) {
   const hasLocalBusinessSchema = safeArray(schemaAudit?.detectedTypes).some(t => String(t).toLowerCase() === "localbusiness");
   const hasPhone = safeArray(pageData?.entityDetails?.phones).length > 0;
   const hasAddress = /\b\d{5}\b/.test(safeText(pageData?.visibleText)) || /address|suite|street|avenue/i.test(safeText(pageData?.visibleText));
-  const hasMapEmbed = /google\.com\/maps|maps\.google/i.test(safeText(pageData?.visibleText));
+  const hasMapEmbed = Boolean(pageData?.mapDetected);
   const hasHoursText = /(open|hours)[^.]{0,40}(mon|tue|wed|thu|fri|sat|sun|\d{1,2}\s*(am|pm))/i.test(safeText(pageData?.visibleText).toLowerCase());
   const hasReviewsText = /review|testimonial|star rating|rated \d/i.test(safeText(pageData?.visibleText).toLowerCase());
 
@@ -4900,6 +4634,9 @@ export function estimateAIEngineCitations(crawlData) {
     };
   };
   return {
+    heuristic: true,
+    actualCitations: null,
+    methodology: "Uncalibrated 0–100 readiness heuristic from on-page signals; not an observed citation count or a probability.",
     citationProbability: averageProbability,
     engines: {
       chatgpt: { score: chatgpt, status: getEngineVerdict(chatgpt), ...buildEvidenceBlock("chatgpt", chatgpt) },
@@ -4913,9 +4650,9 @@ export function estimateAIEngineCitations(crawlData) {
 }
 
 function getEngineVerdict(score) {
-  if (score >= 80) return "Highly Likely Source";
-  if (score >= 50) return "Likely Candidate";
-  return "Unlikely Source";
+  if (score >= 80) return "Strong readiness signals";
+  if (score >= 50) return "Moderate readiness signals";
+  return "Limited readiness signals";
 }
 
 function jsonLdCountForEngine(crawlData) {
@@ -5090,6 +4827,7 @@ export function compareTargetToCompetitor(targetData, competitorData) {
   }
 
   const buildComparison = (label, targetVal, compVal, higherIsBetter = true) => {
+    if (targetVal == null || compVal == null) return { metric: label, target: targetVal ?? null, competitor: compVal ?? null, difference: null, winner: "Not Available", leader: "Not Available", impact: 0, reason: "Comparable evidence is unavailable.", recommendedAction: "Collect comparable measurements before drawing a conclusion." };
     const t = safeNumber(targetVal);
     const c = safeNumber(compVal);
     const diff = t - c;
@@ -5118,6 +4856,7 @@ export function compareTargetToCompetitor(targetData, competitorData) {
 
   const metricComparisons = [
     buildComparison("SEO", targetData.seoScore, competitorData.seoScore),
+    buildComparison("GEO", targetData.geoScore, competitorData.geoScore),
     buildComparison("AEO", targetData.aeoScore, competitorData.aeoScore),
     buildComparison("E-E-A-T", targetData.eeatScore, competitorData.eeatScore),
     buildComparison("Authority", targetData.authorityScore, competitorData.authorityScore),
@@ -5170,8 +4909,8 @@ export function compareTargetToCompetitor(targetData, competitorData) {
     topPriorityAction: losingMetrics.length > 0 ? losingMetrics[0].recommendedAction : "Maintain current standing across all measured metrics.",
     // Backward-compatible shape for existing frontend contract.
     metrics: {
-      seo: metricComparisons[0], aeo: metricComparisons[1], eeat: metricComparisons[2],
-      authority: metricComparisons[3], trust: metricComparisons[4]
+      seo: metricComparisons[0], geo: metricComparisons[1], aeo: metricComparisons[2], eeat: metricComparisons[3],
+      authority: metricComparisons[4], trust: metricComparisons[5]
     },
     gaps: {
       headingGaps: [...new Set(headingGaps)].slice(0, 10),
@@ -5205,7 +4944,7 @@ function rankDimension(values) {
   const scored = withIndex.filter(x => x.v !== null).sort((a, b) => b.v - a.v);
   const unscored = withIndex.filter(x => x.v === null);
   const ranks = new Array(values.length).fill(null);
-  scored.forEach((x, rankIdx) => { ranks[x.i] = rankIdx + 1; });
+  scored.forEach((x, rankIdx) => { ranks[x.i] = rankIdx > 0 && x.v === scored[rankIdx - 1].v ? ranks[scored[rankIdx - 1].i] : rankIdx + 1; });
   return { ranks, rankedCount: scored.length, unavailableIndices: unscored.map(x => x.i) };
 }
 
@@ -5223,7 +4962,7 @@ const COMPARISON_DIMENSIONS = [
   { key: "heading", label: "Heading Structure", path: "__headingCount" }, // computed, see below
   { key: "internalLink", label: "Internal Linking", path: "internalLinkDetail.score" },
   { key: "imageSeo", label: "Image SEO", path: "imageSeo.score" },
-  { key: "performance", label: "Performance", path: "technicalSeo.score" }
+  { key: "performance", label: "Technical SEO", path: "technicalSeo.score" }
 ];
 
 function classifyGapPriority(gapSize, maxPossibleGap = 100) {
@@ -5242,11 +4981,13 @@ function classifyGapPriority(gapSize, maxPossibleGap = 100) {
  * for the purposes of the executive summary's action-list target.
  */
 export function compareMultipleSites(sites, urls) {
+  if (!sites[0] || sites[0].blocked) return { success: false, reason: "Your target site could not be analyzed. Competitors cannot replace it." };
   const validSites = sites.map((s, i) => ({ site: s, url: urls[i], index: i })).filter(x => x.site && !x.site.blocked);
   if (validSites.length < 2) {
     return { success: false, reason: "At least 2 successfully analyzed sites are required for comparison." };
   }
 
+  const pairwiseGaps = validSites.slice(1).map(x => ({ url: x.url, ...compareTargetToCompetitor(sites[0], x.site).gaps }));
   const labels = validSites.map(x => safeText(x.site.title, cleanDomainBrand ? cleanDomainBrand(x.url) : x.url) || x.url);
 
   // Precompute heading counts once (not a raw payload field, but a direct,
@@ -5360,6 +5101,8 @@ export function compareMultipleSites(sites, urls) {
   return {
     success: true,
     sitesCompared: validSites.length,
+    scopeNote: "Single-page comparisons; content/entity gaps are observed differences, not search demand or proven ranking gaps. CWV sources must match for meaningful comparisons.",
+    pairwiseGaps,
     labels,
     urls: validSites.map(x => x.url),
     dimensions: dimensionResults,
@@ -5441,13 +5184,25 @@ function recordTrendPoint(cacheKey, payload) {
   }
 }
 
+let runningAnalyses = 0;
 export async function analyzeSingleUrl(url, ownerContext = {}) {
-  const cacheKey = normalizeUrl(url);
+  if (ownerContext.userId && deletingAccountIds.has(String(ownerContext.userId))) return { success:false,blocked:true,reason:"Account deletion in progress." };
+  if (runningAnalyses >= 5) return { success: false, blocked: true, reason: "Scanner capacity reached. Retry later." };
+  runningAnalyses++;
+  try { return await analyzeSingleUrlInternal(url, ownerContext); }
+  finally { runningAnalyses--; }
+}
+async function analyzeSingleUrlInternal(url, ownerContext = {}) {
+  const cacheKey = `${ownerContext.userId || "anonymous"}:${ownerContext.projectId || "none"}:${normalizeUrl(url)}`;
   if (scanCache.has(cacheKey)) {
     const entry = scanCache.get(cacheKey);
     if (Date.now() - entry.timestamp < CACHE_TTL_MS) {
       logger.info("CACHE", "serving_cached_scan", { url, cacheKey });
-      return entry.data;
+      const payload = structuredClone(entry.data);
+      const saved = await saveReportToDatabase(payload, payload.crawl, ownerContext);
+      payload.reportId = saved?._id || null;
+      payload.persistence = { saved: Boolean(saved), message: saved ? "Summary saved." : "Report could not be saved; result is available for this response only." };
+      return payload;
     }
     scanCache.delete(cacheKey);
   }
@@ -5487,6 +5242,12 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
   try {
     const $ = cheerio.load(crawl.html || "");
     const pageData = extractPageData($, crawl.html, crawl.finalUrl);
+    const schemasDetected = auditPageSchemas($, crawl.html);
+    pageData.schema = { ...pageData.schema, ...schemasDetected };
+    const semanticEntities = extractSemanticEntities($, crawl.html, crawl.finalUrl, pageData);
+    pageData.entityDetails.emails = semanticEntities.emails;
+    pageData.entityDetails.phones = semanticEntities.phones;
+    pageData.entityDetails.socialProfiles = semanticEntities.socialProfiles;
 
     // Kicked off now, awaited much later — Core Web Vitals via PageSpeed
     // Insights can be genuinely slow (real-world observed range: a few
@@ -5495,10 +5256,7 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
     // everything else below and can NEVER add latency beyond this cap to
     // the scan response — if it hasn't resolved in time, the scan simply
     // proceeds without it rather than making the user wait.
-    const coreWebVitalsPromise = Promise.race([
-      fetchCoreWebVitals(crawl.finalUrl),
-      new Promise(resolve => setTimeout(() => resolve(null), 12000))
-    ]);
+    const coreWebVitalsPromise = fetchCoreWebVitals(crawl.finalUrl);
 
     // Robots and sitemap detection are independent network calls; run them
     // concurrently rather than sequentially to cut orchestrator latency.
@@ -5508,7 +5266,6 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
     ]);
     const sitemapData = await detectSitemap(crawl.finalUrl, robotsData);
     void sitemapDataSeed;
-  const schemasDetected = auditPageSchemas($, crawl.html);
     const mixedContent = detectMixedContent($, crawl.finalUrl);
     const brokenAssetData = await sampleBrokenAssets($, crawl.finalUrl, 6);
     const securityHeaders = analyzeSecurityHeaders(crawl.headers);
@@ -5574,8 +5331,8 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
       eeatScore: eeatAudit.score,
       topicalAuthorityScore: authorityAudit.authorityScore,
       wordCount: pageData.wordCount,
-      listCount: (lowercaseText.match(/<li>/g) || []).length,
-      tableCount: (lowercaseText.match(/<tr>/g) || []).length,
+      listCount: pageData.listItemsCount,
+      tableCount: pageData.tableRowsCount,
       externalLinksCount: pageData.links.external,
       hasDirectAnswer: aeoAudit.structuralAeoMetrics.hasDirectAnswer,
       hasLastModified: Boolean(pageData.modifiedDate),
@@ -5672,25 +5429,33 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
     const coreWebVitalsAudit = calculateCoreWebVitalsScore(psiData);
     if (!coreWebVitalsAudit.available) {
       roadmap.push("Core Web Vitals data was unavailable for this scan — retry via the dedicated Core Web Vitals check.");
-    } else if (!coreWebVitalsAudit.passesAllThresholds) {
-      roadmap.push(`Improve Core Web Vitals: ${coreWebVitalsAudit.metrics.filter(m => !m.passed).map(m => m.metric).join(", ")}.`);
+    } else if (coreWebVitalsAudit.metrics.some(m => m.passed === false)) {
+      roadmap.push(`Improve Core Web Vitals: ${coreWebVitalsAudit.metrics.filter(m => m.passed === false).map(m => m.metric).join(", ")}.`);
       autopilotTasks.push({
         id: `task_${taskIdCounter++}`,
         priority: "HIGH",
         impact: Math.round(coreWebVitalsAudit.metrics.reduce((s, m) => s + m.expectedImprovement, 0)),
         title: "Fix Core Web Vitals",
-        description: `${coreWebVitalsAudit.dataSource === "field" ? "Real user data" : "Lab simulation"} shows ${coreWebVitalsAudit.metrics.filter(m => !m.passed).map(m => m.metric).join(", ")} not meeting Google's "good" threshold.`
+        description: `${coreWebVitalsAudit.dataSource === "field" ? "Real user data" : "Lab simulation"} shows ${coreWebVitalsAudit.metrics.filter(m => m.passed === false).map(m => m.metric).join(", ")} not meeting Google's "good" threshold.`
       });
     }
 
+    const brokenExternalLinkData = await sampleBrokenExternalLinks($, crawl.finalUrl);
+    const technicalMonitor = generateTechnicalSeoMonitorReport({ pageData, resolvedUrl: crawl.finalUrl,
+      robotsData, sitemapData, redirectCount: crawl.redirectCount, redirectChain: crawl.redirectChain,
+      mixedContent, brokenAssetData, brokenLinkData: seoAudit.brokenLinkSample, brokenExternalLinkData,
+      httpStatus: crawl.status, technicalSeoAudit });
+    technicalMonitor.scopeNote = "Single page and bounded HEAD samples only. Unreachable/protected/HEAD-unsupported resources are unknown, not verified broken. Hreflang and remote canonical targets are not yet verified.";
     const payload = {
       success: true,
       status: "SUCCESS",
       blocked: false,
       resolvedUrl: crawl.finalUrl,
-      title: pageData.title || cleanDomainBrand(crawl.finalUrl),
-      metaDescription: pageData.metaDescription || "Expert platform insights and optimization.",
+      title: pageData.title,
+      metaDescription: pageData.metaDescription,
       wordCount: pageData.wordCount,
+      h1s: pageData.headings.h1s,
+      links: pageData.links,
       h2s: pageData.headings.h2s,
       h3s: pageData.headings.h3s,
       keywords: tokenizeKeywords(pageData.visibleText),
@@ -5699,6 +5464,8 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
       author: pageData.author,
       schemaCount: schemasDetected.schemaCount,
       technicalSeo: technicalSeoAudit,
+      technicalMonitor,
+      pageEvidence: analyzePageEvidence($, pageData, robotsData),
       mixedContent,
       brokenAssets: brokenAssetData,
       securityHeaders,
@@ -5741,7 +5508,8 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
       trustScore: trustAudit.trustScore,
       citationScore: aiEngineCitations.citationProbability,
       overallAIVisibilityScore: finalAIVisibilityScore,
-      potentialAIVisibility: clamp(finalAIVisibilityScore + 18, 50, 99),
+      potentialAIVisibility: null,
+      evidenceNotice: "SEO/GEO/AEO and AI readiness are heuristic page-level assessments. No live AI citations, rankings or search volumes were measured.",
       entities: pageData.entities,
       entityDetails: pageData.entityDetails,
       seo: buildStandardizedScoreOutput(seoAudit, 20),
@@ -5808,21 +5576,12 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
     scanCache.set(cacheKey, { timestamp: Date.now(), data: payload });
     enforceScanCacheLimit();
 
-    recordTrendPoint(cacheKey, payload);
-
-    scanHistory.unshift({
-      url: crawl.finalUrl,
-      title: payload.title,
-      score: payload.overallAIVisibilityScore,
-      timestamp: new Date().toISOString()
-    });
-    if (scanHistory.length > MAX_SCAN_HISTORY) scanHistory.length = MAX_SCAN_HISTORY;
-
     // Persist the completed report to MongoDB, best-effort. This never
     // throws (see saveReportToDatabase) and never prevents the scan result
     // from being returned to the caller, even if MongoDB is unreachable.
     const savedReportDoc = await saveReportToDatabase(payload, crawl, ownerContext);
     payload.reportId = savedReportDoc?._id || null;
+    payload.persistence = { saved: Boolean(savedReportDoc), message: savedReportDoc ? "Summary saved." : "Report could not be saved; result is available for this response only." };
 
     return payload;
   } catch (err) {
@@ -5896,7 +5655,7 @@ function findOrphanPages(pageResults, rootUrl) {
     p.internalLinkTargets.forEach(targetPath => {
       let origin = "https://";
       try { origin = new URL(rootUrl).protocol + "//"; } catch {}
-      const norm = normalizeUrl(origin + targetPath);
+      const norm = normalizeUrl(targetPath.startsWith("http") ? targetPath : origin + targetPath);
       if (inboundCounts.has(norm) && normalizeUrl(p.url) !== norm) {
         inboundCounts.set(norm, (inboundCounts.get(norm) || 0) + 1);
       }
@@ -6042,14 +5801,6 @@ export async function runSiteCrawlJob(jobId) {
     job.completedAt = new Date();
     await job.save();
 
-    // Reflect the pages actually crawled against the owning user's daily
-    // scan quota, consistent with how a single /scan counts against it.
-    try {
-      await User.findByIdAndUpdate(job.userId, { $inc: { scansToday: pageResults.length } });
-    } catch (err) {
-      logger.error("SITE_CRAWL", "quota_update_failed", { jobId, error: err.message });
-    }
-
     logger.info("SITE_CRAWL", "job_completed", { jobId, pagesCrawled: successfulPages.length, pagesFailed: pageResults.length - successfulPages.length });
   } catch (err) {
     logger.error("SITE_CRAWL", "job_failed", { jobId, error: err.message, stack: err.stack });
@@ -6091,12 +5842,14 @@ function validateComparisonParams(req, res) {
 
 app.get("/", (req, res) => {
   try {
-    res.sendFile(path.resolve("public/index.html"));
+    res.sendFile(path.join(publicDir, "index.html"));
   } catch (err) {
     logger.error("API", "root_path_failed", { error: err.message });
     res.status(500).json({ success: false, error: "Root path configuration error" });
   }
 });
+
+app.get("/health/ready", (req, res) => res.status(mongoose.connection.readyState === 1 ? 200 : 503).json({ ready: mongoose.connection.readyState === 1 }));
 
 app.get("/api/status", (req, res) => {
   res.json({
@@ -6112,15 +5865,25 @@ app.get("/api/status", (req, res) => {
 // ========== SECTION 15.7: USER ACCOUNT ROUTES ============================
 // =========================================================================
 
+const authRequestWindows = new Map();
+app.use("/auth", (req, res, next) => {
+  const now = Date.now();
+  for (const [ip, record] of authRequestWindows) if (record.until <= now) authRequestWindows.delete(ip);
+  if (authRequestWindows.size > 5000) return res.status(503).json({ success: false, message: "Retry later." });
+  const record = authRequestWindows.get(req.ip) || { count: 0, until: now + 60000 };
+  authRequestWindows.set(req.ip, record);
+  if (++record.count > 20) return res.status(429).json({ success: false, message: "Too many account requests. Retry later." });
+  next();
+});
 app.post("/auth/register", asyncHandler(async (req, res) => {
   const email = safeText(req.body?.email).toLowerCase();
-  const password = safeText(req.body?.password);
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ success: false, message: "A valid email address is required." });
   }
-  if (!password || password.length < 8) {
-    return res.status(400).json({ success: false, message: "Password must be at least 8 characters long." });
+  if (!password || password.length < 8 || Buffer.byteLength(password) > 72) {
+    return res.status(400).json({ success: false, message: "Password must be at least 8 characters and at most 72 UTF-8 bytes." });
   }
   if (mongoose.connection.readyState !== 1) {
     return res.status(503).json({ success: false, message: "Account creation is temporarily unavailable (database not connected)." });
@@ -6136,6 +5899,7 @@ app.post("/auth/register", asyncHandler(async (req, res) => {
     const apiKey = generateApiKey();
     const user = await User.create({ email, passwordHash, apiKey });
     const token = signAuthToken(user);
+    setSession(res, token);
 
     logger.info("AUTH", "user_registered", { email });
     res.status(201).json({ success: true, token, apiKey: user.apiKey, plan: user.plan, email: user.email });
@@ -6147,10 +5911,10 @@ app.post("/auth/register", asyncHandler(async (req, res) => {
 
 app.post("/auth/login", asyncHandler(async (req, res) => {
   const email = safeText(req.body?.email).toLowerCase();
-  const password = safeText(req.body?.password);
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
   const ip = safeText(req.ip) || "unknown-client";
 
-  if (!email || !password) {
+  if (!email || !password || email.length > 254 || Buffer.byteLength(password) > 72) {
     return res.status(400).json({ success: false, message: "Email and password are required." });
   }
 
@@ -6183,6 +5947,7 @@ app.post("/auth/login", asyncHandler(async (req, res) => {
 
     resetLoginAttempts(ip, email);
     const token = signAuthToken(user);
+    setSession(res, token);
     logger.info("AUTH", "user_logged_in", { email });
     res.json({ success: true, token, apiKey: user.apiKey, plan: user.plan, email: user.email });
   } catch (err) {
@@ -6191,12 +5956,18 @@ app.post("/auth/login", asyncHandler(async (req, res) => {
   }
 }));
 
+app.post("/auth/logout", (req, res) => {
+  res.clearCookie("aegis_session", { path: "/" });
+  res.json({ success: true });
+});
+installAccountRoutes(app, { User, Report, Project, SiteCrawlJob, requireAuth, asyncHandler,
+  hashPassword, verifyPasswordHash, generateApiKey, activeSiteCrawlJobIds, scanCache, logger, hasActiveAnalyses: () => runningAnalyses > 0 || pendingSiteCrawlReservations > 0 });
+
 app.get("/auth/me", asyncHandler(async (req, res) => {
-  const authHeader = safeText(req.headers.authorization);
-  const token = authHeader.replace(/^Bearer\s+/i, "");
+  const token = requestToken(req);
   const decoded = token ? verifyAuthToken(token) : null;
 
-  if (!decoded?.sub) {
+  if (!decoded?.sub || !mongoose.Types.ObjectId.isValid(decoded.sub)) {
     return res.status(401).json({ success: false, message: "Invalid or missing authentication token." });
   }
   if (mongoose.connection.readyState !== 1) {
@@ -6204,8 +5975,8 @@ app.get("/auth/me", asyncHandler(async (req, res) => {
   }
 
   try {
-    const user = await User.findById(decoded.sub).select("-passwordHash");
-    if (!user) {
+    const user = await User.findById(decoded.sub);
+    if (!user || !sessionMatches(user, decoded)) {
       return res.status(404).json({ success: false, message: "Account not found." });
     }
     res.json({
@@ -6246,11 +6017,15 @@ app.get("/scan", authenticateAndRateLimit, asyncHandler(async (req, res) => {
   activeScans.set(cacheKey, Date.now());
 
   try {
-    const data = await analyzeSingleUrl(normalized, { userId: req.user?._id || null });
-
-    if (data && data.success && req.user) {
-      req.user.scansToday = safeNumber(req.user.scansToday) + 1;
+    let projectId = null;
+    if (req.query.projectId) {
+      if (!req.user?._id || !mongoose.Types.ObjectId.isValid(req.query.projectId)) return res.status(400).json({ success: false, message: "Invalid project." });
+      const project = await Project.findOne({ _id: req.query.projectId, userId: req.user._id });
+      if (!project) return res.status(404).json({ success: false, message: "Project not found." });
+      projectId = project._id;
     }
+    const data = await analyzeSingleUrl(normalized, { userId: req.user?._id || null, projectId });
+
 
     if (data && data.blocked) {
       return res.status(200).json(data);
@@ -6290,9 +6065,6 @@ app.get("/compare", authenticateAndRateLimit, asyncHandler(async (req, res) => {
     });
   }
 
-  if (req.user) {
-    req.user.scansToday = Math.min(PLAN_LIMITS[req.user.plan], safeNumber(req.user.scansToday) + 2);
-  }
 
   const comparativeResult = compareTargetToCompetitor(site1, site2);
 
@@ -6355,9 +6127,6 @@ app.get("/compare-multi", authenticateAndRateLimit, asyncHandler(async (req, res
     });
   }
 
-  if (req.user) {
-    req.user.scansToday = Math.min(PLAN_LIMITS[req.user.plan], safeNumber(req.user.scansToday) + normalizedUrls.length);
-  }
 
   const comparison = compareMultipleSites(sites, normalizedUrls);
 
@@ -6472,7 +6241,8 @@ app.get("/keyword-theft", authenticateAndRateLimit, asyncHandler(async (req, res
       const diff = getKeywordDifficulty(k);
       return {
         keyword: String(k),
-        searchVolume: getDeterministicSearchVolume(k),
+        source: "Observed competitor page text, absent from target top terms; no ranking data connected",
+        searchVolume: null,
         difficulty: diff,
         opportunityScore: getKeywordOpportunity(diff)
       };
@@ -6585,8 +6355,8 @@ const REPORT_SORTABLE_FIELDS = ["scanDate", "seoScore", "geoScore", "aeoScore", 
 
 app.get("/reports", requireAuth, asyncHandler(async (req, res) => {
   const userId = req.authUser._id;
-  const page = Math.max(1, safeNumber(req.query.page, 1));
-  const limit = Math.min(100, Math.max(1, safeNumber(req.query.limit, 20)));
+  const page = Math.min(10000, Math.max(1, Math.floor(safeNumber(req.query.page, 1))));
+  const limit = Math.min(100, Math.max(1, Math.floor(safeNumber(req.query.limit, 20))));
   const sortField = REPORT_SORTABLE_FIELDS.includes(req.query.sortBy) ? req.query.sortBy : "scanDate";
   const sortDir = req.query.sortDir === "asc" ? 1 : -1;
 
@@ -6595,7 +6365,7 @@ app.get("/reports", requireAuth, asyncHandler(async (req, res) => {
     filter.projectId = req.query.projectId;
   }
   if (safeText(req.query.search)) {
-    filter.url = { $regex: safeText(req.query.search).slice(0, 200), $options: "i" };
+    filter.url = { $regex: safeText(req.query.search).slice(0, 200).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
   }
 
   const [total, reports] = await Promise.all([
@@ -6667,39 +6437,9 @@ app.delete("/reports/:id", requireAuth, asyncHandler(async (req, res) => {
  * legacy in-memory array on any token/DB issue, so this route can never
  * regress for existing callers.
  */
-app.get("/history", asyncHandler(async (req, res) => {
-  const authHeader = safeText(req.headers.authorization);
-  const token = authHeader.replace(/^Bearer\s+/i, "");
-  const decoded = token ? verifyAuthToken(token) : null;
-
-  if (decoded?.sub && mongoose.connection.readyState === 1) {
-    try {
-      const reports = await Report.find({ userId: decoded.sub })
-        .sort({ scanDate: -1 })
-        .limit(MAX_SCAN_HISTORY)
-        .lean();
-
-      return res.json(reports.map(r => ({
-        id: r._id.toString(),
-        url: r.finalUrl || r.url,
-        title: r.title || r.url,
-        score: r.overallScore,
-        seoScore: r.seoScore,
-        aeoScore: r.aeoScore,
-        timestamp: r.scanDate
-      })));
-    } catch (err) {
-      logger.error("API", "mongo_history_failed", { error: err.message });
-      // Falls through to legacy in-memory behavior below.
-    }
-  }
-
-  try {
-    res.json(safeArray(scanHistory));
-  } catch (err) {
-    logger.error("API", "history_retrieval_failed", { error: err.message });
-    res.status(500).json({ success: false, error: "History retrieval failed" });
-  }
+app.get("/history", requireAuth, asyncHandler(async (req, res) => {
+  const reports = await Report.find({ userId: req.authUser._id }).sort({ scanDate: -1 }).limit(MAX_SCAN_HISTORY).lean();
+  res.json(reports.map(r => ({ id: String(r._id), url: r.finalUrl || r.url, title: r.title, score: r.overallScore, timestamp: r.scanDate })));
 }));
 
 /**
@@ -6725,9 +6465,6 @@ app.get("/core-web-vitals", authenticateAndRateLimit, asyncHandler(async (req, r
   const psiData = await fetchCoreWebVitals(normalized, strategyValue);
   const audit = calculateCoreWebVitalsScore(psiData);
 
-  if (req.user) {
-    req.user.scansToday = safeNumber(req.user.scansToday) + 1;
-  }
 
   res.json({ success: true, url: normalized, coreWebVitals: audit });
 }));
@@ -6756,27 +6493,12 @@ app.get("/content-optimizer", authenticateAndRateLimit, asyncHandler(async (req,
   res.json({ success: true, url: normalized, title: data.title, contentOptimizer: data.contentOptimizer });
 }));
 
-app.get("/trend", (req, res) => {
-  try {
-    const { url } = req.query;
-    if (!safeText(url)) {
-      return res.status(400).json({ success: false, error: "URL parameter required" });
-    }
-    const normalized = enforceSecureUrl(url);
-    if (!normalized) {
-      return res.status(400).json({ success: false, error: "Invalid or unsafe URL structure received" });
-    }
-    const cacheKey = normalizeUrl(normalized);
-    res.json({
-      success: true,
-      url: normalized,
-      points: safeArray(trendDB[cacheKey])
-    });
-  } catch (err) {
-    logger.error("API", "trend_retrieval_failed", { error: err.message });
-    res.status(500).json({ success: false, error: "Trend retrieval failed" });
-  }
-});
+app.get("/trend", requireAuth, asyncHandler(async (req, res) => {
+  const normalized = enforceSecureUrl(req.query.url);
+  if (!normalized) return res.status(400).json({ success: false, message: "Valid URL required." });
+  const reports = await Report.find({ userId: req.authUser._id, url: normalized }).sort({ scanDate: -1 }).limit(MAX_TREND_POINTS_PER_URL).lean();
+  res.json({ success: true, url: normalized, points: reports.reverse().map(r => ({ timestamp: r.scanDate, overallAIVisibilityScore: r.overallScore, seoScore: r.seoScore })) });
+}));
 
 // =========================================================================
 // ========== SECTION 16.7: PROJECTS SYSTEM =================================
@@ -6787,10 +6509,11 @@ app.post("/projects", requireAuth, asyncHandler(async (req, res) => {
   const urls = safeArray(req.body?.urls).map(u => safeText(u)).filter(Boolean).slice(0, 100);
   const description = safeText(req.body?.description).slice(0, 500);
 
-  if (!name) {
-    return res.status(400).json({ success: false, message: "A project name is required." });
+  if (!name || name.length > 100 || urls.some(u => !enforceSecureUrl(u))) {
+    return res.status(400).json({ success: false, message: "Project requires a name up to 100 characters and valid public URLs." });
   }
 
+  if (await Project.countDocuments({userId:req.authUser._id}) >= 100) return res.status(429).json({success:false,message:"Maximum project count reached."});
   const project = await Project.create({
     userId: req.authUser._id,
     name,
@@ -6818,7 +6541,7 @@ app.get("/projects", requireAuth, asyncHandler(async (req, res) => {
   const projectIds = projects.map(p => p._id);
   const counts = projectIds.length > 0
     ? await Report.aggregate([
-        { $match: { projectId: { $in: projectIds } } },
+        { $match: { projectId: { $in: projectIds }, userId: req.authUser._id } },
         { $group: { _id: "$projectId", count: { $sum: 1 } } }
       ])
     : [];
@@ -6849,7 +6572,7 @@ app.get("/projects/:id", requireAuth, asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: "Project not found." });
   }
 
-  const reports = await Report.find({ projectId: id }).sort({ scanDate: -1 }).limit(100).lean();
+  const reports = await Report.find({ projectId: id, userId: req.authUser._id }).sort({ scanDate: -1 }).limit(100).lean();
 
   res.json({
     success: true,
@@ -6880,11 +6603,12 @@ app.put("/projects/:id", requireAuth, asyncHandler(async (req, res) => {
   const updates = {};
   if (req.body?.name !== undefined) {
     const name = safeText(req.body.name);
-    if (!name) return res.status(400).json({ success: false, message: "Project name cannot be empty." });
+    if (!name || name.length > 100) return res.status(400).json({ success: false, message: "Project name requires 1–100 characters." });
     updates.name = name;
   }
   if (req.body?.urls !== undefined) {
     updates.urls = safeArray(req.body.urls).map(u => safeText(u)).filter(Boolean).slice(0, 100);
+    if (updates.urls.some(u => !enforceSecureUrl(u))) return res.status(400).json({ success: false, message: "Invalid project URL." });
   }
   if (req.body?.description !== undefined) {
     updates.description = safeText(req.body.description).slice(0, 500);
@@ -6926,7 +6650,7 @@ app.delete("/projects/:id", requireAuth, asyncHandler(async (req, res) => {
   // Detach (not delete) any reports that were tagged with this project —
   // their scan data remains valid and owned by the user independent of
   // the project grouping being removed.
-  await Report.updateMany({ projectId: id }, { projectId: null });
+  await Report.updateMany({ projectId: id, userId: req.authUser._id }, { projectId: null });
 
   logger.info("PROJECTS", "project_deleted", { id, userId: req.authUser._id.toString() });
   res.json({ success: true, message: "Project deleted." });
@@ -6936,10 +6660,12 @@ app.delete("/projects/:id", requireAuth, asyncHandler(async (req, res) => {
 // ========== SECTION 16.8: SITE-WIDE MULTI-PAGE CRAWLER ROUTES ============
 // =========================================================================
 
+let pendingSiteCrawlReservations = 0;
 const SITE_CRAWL_MAX_PAGES_CAP = 25;
 const SITE_CRAWL_STALE_MS = 15 * 60 * 1000;
 
 app.post("/site-crawl", requireAuth, asyncHandler(async (req, res) => {
+  if (deletingAccountIds.has(String(req.authUser._id))) return res.status(409).json({success:false,message:"Account deletion in progress."});
   const rootUrl = enforceSecureUrl(safeText(req.body?.url));
   if (!rootUrl) {
     return res.status(400).json({ success: false, message: "A valid, safe URL is required." });
@@ -6947,24 +6673,12 @@ app.post("/site-crawl", requireAuth, asyncHandler(async (req, res) => {
 
   const requestedMaxPages = clamp(safeNumber(req.body?.maxPages, 10), 1, SITE_CRAWL_MAX_PAGES_CAP);
 
-  // Respect the same daily quota a single /scan draws from — a site-wide
-  // crawl of N pages is fairly counted as N scans, not one free pass.
-  const limit = PLAN_LIMITS[req.authUser.plan] || 5;
-  if (Date.now() - new Date(req.authUser.lastScanReset).getTime() > 24 * 60 * 60 * 1000) {
-    req.authUser.scansToday = 0;
-    req.authUser.lastScanReset = new Date();
-    await req.authUser.save();
-  }
-  const remainingQuota = limit - safeNumber(req.authUser.scansToday, 0);
-  if (remainingQuota <= 0) {
-    return res.status(429).json({
-      success: false,
-      status: "LIMIT_EXCEEDED",
-      message: `You have reached your tier daily limits (${req.authUser.scansToday}/${limit} scans). Please upgrade plans.`
-    });
-  }
-
-  const allowedMaxPages = Math.min(requestedMaxPages, remainingQuota);
+  const allowedMaxPages = Math.floor(requestedMaxPages);
+  if (activeSiteCrawlJobIds.size + pendingSiteCrawlReservations >= 1) return res.status(503).json({ success: false, message: "A site crawl is active. Retry later." });
+  pendingSiteCrawlReservations++;
+  try {
+  const reserved = await reserveAccountUsage(req.authUser, allowedMaxPages);
+  if (!reserved) return res.status(429).json({ success: false, message: "Insufficient daily quota for this crawl. Reduce max pages." });
 
   const job = await SiteCrawlJob.create({
     userId: req.authUser._id,
@@ -6991,11 +6705,12 @@ app.post("/site-crawl", requireAuth, asyncHandler(async (req, res) => {
       ? `Crawl limited to ${allowedMaxPages} page(s) based on your remaining daily quota.`
       : "Site-wide crawl started. Poll GET /site-crawl/:jobId for progress."
   });
+  } finally { pendingSiteCrawlReservations--; }
 }));
 
 app.get("/site-crawl", requireAuth, asyncHandler(async (req, res) => {
-  const page = Math.max(1, safeNumber(req.query.page, 1));
-  const limit = Math.min(50, Math.max(1, safeNumber(req.query.limit, 10)));
+  const page = Math.min(10000, Math.max(1, Math.floor(safeNumber(req.query.page, 1))));
+  const limit = Math.min(50, Math.max(1, Math.floor(safeNumber(req.query.limit, 10))));
 
   const [total, jobs] = await Promise.all([
     SiteCrawlJob.countDocuments({ userId: req.authUser._id }),
@@ -7060,6 +6775,7 @@ app.get("/site-crawl/:jobId", requireAuth, asyncHandler(async (req, res) => {
       discoveredUrls: job.discoveredUrls,
       pages: job.pages,
       siteWideFindings: job.siteWideFindings,
+      scopeNote: "Bounded same-origin sample only. Orphan candidates have no observed inbound link within this sample; site-wide orphan status is unverified.",
       errorMessage: job.errorMessage,
       startedAt: job.startedAt,
       completedAt: job.completedAt,
@@ -7074,7 +6790,8 @@ app.delete("/site-crawl/:jobId", requireAuth, asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: "Invalid job ID." });
   }
 
-  const result = await SiteCrawlJob.deleteOne({ _id: jobId, userId: req.authUser._id });
+  if (activeSiteCrawlJobIds.has(jobId)) return res.status(409).json({ success: false, message: "Wait for this crawl to finish before deleting it." });
+  const result = await SiteCrawlJob.deleteOne({ _id: jobId, userId: req.authUser._id, status: { $nin: ["pending", "running"] } });
   if (result.deletedCount === 0) {
     return res.status(404).json({ success: false, message: "Site-crawl job not found, or you do not have permission to delete it." });
   }
@@ -7104,7 +6821,7 @@ app.use((err, req, res, next) => {
 
   if (res.headersSent) return next(err);
 
-  res.status(500).json({
+  res.status([400,413].includes(err.status) ? err.status : 500).json({
     success: false,
     status: "ERROR",
     message: "An unexpected internal error occurred while processing the request."
@@ -7115,6 +6832,10 @@ app.use((err, req, res, next) => {
 // ========== SECTION 17: EXPRESS HTTP SERVER INITIALIZATION ==============
 // =========================================================================
 
+if (process.env.NODE_ENV === "production" && (!process.env.MONGODB_URI || !process.env.APP_ORIGIN?.startsWith("https://"))) {
+  throw new Error("Production requires MONGODB_URI and an HTTPS APP_ORIGIN");
+}
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
 const server = app.listen(PORT, () => {
   logger.info("SYSTEM", "server_started", { port: PORT, version: "10.1-enterprise-hardened" });
 });
@@ -7132,7 +6853,8 @@ process.on("unhandledRejection", (reason) => {
 });
 
 process.on("uncaughtException", (err) => {
-  logger.error("PROCESS", "uncaught_exception", { error: err.message, stack: err.stack });
+  logger.error("PROCESS", "uncaught_exception", { error: err.message });
+  gracefulShutdown("uncaughtException");
 });
 
 async function gracefulShutdown(signal) {
@@ -7174,3 +6896,5 @@ async function gracefulShutdown(signal) {
 
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+}

@@ -2613,7 +2613,7 @@ function setAllButtonsDisabled(disabled) {
 // =========================================================================
 // API HELPER — normalizes error handling across every endpoint shape
 // =========================================================================
-async function apiFetch(path) {
+async function apiFetch(path, allowRecovery = true) {
   let res, json;
   const token = getStoredToken();
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -2621,13 +2621,23 @@ async function apiFetch(path) {
   try {
     res = await fetch(`${window.API_BASE}${path}`, { headers, signal: AbortSignal.timeout(120000) });
   } catch (networkErr) {
-    throw new Error(`Network error while reaching the analysis server: ${networkErr.message}`);
+    if (allowRecovery && path.startsWith('/scan?')) return recoverScanResponse(path);
+    throw new Error("Connection interrupted. No automatic new scan was started.");
   }
 
+  let body;
   try {
-    json = await res.json();
+    body = await res.text();
+    json = JSON.parse(body.replace(/^\uFEFF/, ''));
+    if (!json || typeof json !== 'object') throw new Error('Invalid API payload');
   } catch (parseErr) {
-    throw new Error(`Server returned an unreadable response (HTTP ${res.status}).`);
+    if (allowRecovery && path.startsWith('/scan?') && res.ok) return recoverScanResponse(path);
+    const kind = body === undefined ? 'interrupted' : !body.trim() ? 'empty' : /^\s*</.test(body) ? 'HTML instead of JSON' : 'invalid JSON';
+    const requestId = res.headers.get('X-Request-Id');
+    const reference = /^[a-f0-9-]{36}$/i.test(requestId || '') ? ` Reference: ${requestId}.` : '';
+    const err = new Error(`Server response was ${kind} (HTTP ${res.status}).${reference}`);
+    err.status = res.status;
+    throw err;
   }
 
   if (!res.ok) {
@@ -2770,6 +2780,31 @@ function emptyStateHtml(icon, title, text) {
     </div>`;
 }
 
+// This reads cached results only: it never starts another scan or charges quota.
+async function recoverScanResponse(path) {
+  try {
+    return await apiFetch(path.replace(/^\/scan\?/, '/scan-result?'), false);
+  } catch (cause) {
+    const error = new Error(`The scan response could not be received. Check Reports for a saved summary. No automatic new scan was started. ${cause.message}`);
+    error.recoverable = true;
+    throw error;
+  }
+}
+
+async function recoverLastScan() {
+  if (scanInProgress) return;
+  scanInProgress = true;
+  try {
+    const data = await apiFetch(`/scan-result?url=${encodeURIComponent(getUrlValue())}`, false);
+    lastScanData = data;
+    renderAllResults(data);
+    showToast("Completed result recovered. No scan quota charged.", "success");
+  } catch (err) {
+    err.recoverable = true;
+    renderScanErrorState(err);
+  } finally { scanInProgress = false; }
+}
+
 // =========================================================================
 // SCAN
 // =========================================================================
@@ -2849,9 +2884,9 @@ function renderScanErrorState(err) {
   resultEl.innerHTML = `
     <div class="card" style="border-color:var(--accent-danger);" role="alert">
       <h3 style="color:var(--accent-danger); border-bottom-color:var(--accent-danger);"><span aria-hidden="true">⚠️</span> Analysis Failure</h3>
-      <p>${escapeHtml(extraNote || "The system was unable to analyze this domain target.")}</p>
+      <p>${escapeHtml(extraNote || (err.recoverable ? "The result could not be displayed. The scan may have completed on the server." : "The system was unable to analyze this domain target."))}</p>
       <p><strong>Detailed Error:</strong> ${escapeHtml(err.message)}</p>
-      <button type="button" onclick="retryLastScan()" style="background:var(--accent-primary); margin-top:10px;"><span aria-hidden="true">🔄</span> Retry Scan</button>
+      ${err.recoverable ? '<button type="button" onclick="recoverLastScan()">Recover Result (no quota)</button><button type="button" onclick="openReportsModal()">Saved Reports</button>' : '<button type="button" onclick="retryLastScan()">Retry Scan (uses quota)</button>'}
     </div>`;
 }
 

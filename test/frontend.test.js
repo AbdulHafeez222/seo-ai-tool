@@ -27,7 +27,7 @@ test('frontend renders real payload shapes, comparison and optimizer controls wi
     else if(String(path).includes('/content-optimizer?')) data={success:true,contentOptimizer:optimizer};
     else if(String(path).includes('/compare-multi?')) data={success:true,scopeNote:'Page sample',labels:['Your site','Competitor'],dimensions:[{key:'seo',label:'SEO',values:[{value:50,display:50,rank:1},{value:50,display:50,rank:1}]}],pairwiseGaps:[],executiveSummary:{winnerReason:'Tied',topActionsToBeatLeader:[],perSiteAnalysis:[]}};
     else if(String(path).endsWith('/projects')) data={success:true,projects:[{id:'project1',name:'My project',urls:['https://example.com'],reportCount:1}]};
-    return {ok:status<400,status,json:async()=>data};
+    return {ok:status<400,status,headers:new Headers({'Content-Type':'application/json'}),text:async()=>JSON.stringify(data),json:async()=>data};
   };
   try {
     const inline = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join('\n');
@@ -68,5 +68,48 @@ test('frontend renders real payload shapes, comparison and optimizer controls wi
     assert.ok(rescan);assert.equal(rescan.getAttribute('onclick'),null);assert.equal(window.INJECTED,undefined);
     assert.deepEqual(errors,[]);
     assert.ok(requests.some(r=>r.path.includes('/content-optimizer?')));
+  } finally {window.close();}
+});
+
+
+test('scan response failures recover without another quota-charging request and never display HTML', async () => {
+  const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const dom = new JSDOM(html, {url:'https://app.example',runScripts:'outside-only'});
+  const {window} = dom; window.AbortSignal = AbortSignal;
+  const requests = [];
+  const response = (body,status=200) => ({ok:status<400,status,headers:new Headers({'X-Request-Id':'a11cbfcb-c922-4240-b37b-3ad004f65bef'}),text:async()=>body,json:async()=>JSON.parse(body)});
+  let mode = 'html';
+  window.fetch = async url => {
+    requests.push(String(url));
+    if (String(url).endsWith('/auth/me')) return response('{}',401);
+    if (String(url).includes('/scan-result?')) return mode === 'missing' ? response('{"message":"Result expired"}',404) : response('{"success":true,"recovered":true,"seoScore":55}');
+    if (mode === 'network') throw new TypeError('Connection reset');
+    return response(mode === 'empty' ? '' : '<html><body>Proxy page <script>secret</script></body></html>');
+  };
+  try {
+    window.eval([...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join('\n'));
+    await new Promise(r=>setTimeout(r,0));
+    for (mode of ['html','empty','network']) {
+      const start = requests.length;
+      const data = await window.apiFetch('/scan?url=https%3A%2F%2Fexample.com');
+      assert.equal(data.recovered,true);
+      assert.equal(requests.slice(start).filter(x=>x.includes('/scan?')).length,1);
+      assert.equal(requests.slice(start).filter(x=>x.includes('/scan-result?')).length,1);
+    }
+    mode='missing';
+    await assert.rejects(window.apiFetch('/scan?url=https%3A%2F%2Fexample.com'),err=>{
+      assert.equal(err.recoverable,true);
+      assert.match(err.message,/No automatic new scan/);
+      window.renderScanErrorState(err);
+      return true;
+    });
+    const result=window.document.getElementById('result');
+    assert.match(result.textContent,/Recover Result \(no quota\)/);
+    assert.equal(result.querySelector('[onclick="retryLastScan()"]'),null);
+    assert.equal(result.querySelector('script'),null);
+    // Non-scan failures carry a safe request reference, without leaking body content.
+    await assert.rejects(window.apiFetch('/history'),/HTML instead of JSON.*Reference: a11cbfcb/);
+    window.fetch=async()=>response('\ufeff{"success":true}');
+    assert.equal((await window.apiFetch('/history')).success,true);
   } finally {window.close();}
 });

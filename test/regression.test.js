@@ -229,3 +229,35 @@ test('production startup does not create collections or indexes implicitly (mock
     if (uri === undefined) delete process.env.MONGODB_URI; else process.env.MONGODB_URI=uri;
   }
 });
+
+
+test('completed result recovery is owner/project scoped, expires and never reserves quota or writes reports', async () => {
+  const state=mongoose.connection.readyState;
+  const find=appModule.User.findById, reserve=appModule.User.findOneAndUpdate, create=appModule.Report.create;
+  const user={_id:'507f1f77bcf86cd799439011',passwordHash:'hash',apiKey:'key',plan:'free'};
+  const other={...user,_id:'507f1f77bcf86cd799439012'};
+  mongoose.connection.readyState=1;
+  appModule.User.findById=async id=>String(id)===user._id?user:other;
+  appModule.User.findOneAndUpdate=()=>{throw new Error('Recovery must not reserve quota');};
+  appModule.Report.create=()=>{throw new Error('Recovery must not write data');};
+  const key=`${user._id}:none:${normalizeUrl('https://example.com')}`;
+  const payload={success:true,title:'Observed guide',seoScore:55,reportId:'saved-report'};
+  appModule.scanCache.set(key,{timestamp:Date.now(),data:payload});
+  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+  const base=`http://127.0.0.1:${server.address().port}/scan-result?url=https://example.com`;
+  const request=(url=base,account=user)=>fetch(url,{headers:{Authorization:`Bearer ${appModule.signAuthToken(account)}`}});
+  try {
+    const recovered=await request();
+    assert.equal(recovered.status,200);assert.match(recovered.headers.get('content-type'),/application\/json/);
+    assert.deepEqual(await recovered.json(),{...payload,recovered:true});
+    assert.equal((await request(base,other)).status,404);
+    assert.equal((await request(base+'&projectId=invalid')).status,400);
+    assert.equal((await request(base.replace('https://example.com','http://127.0.0.1'))).status,400);
+    assert.equal((await fetch(base)).status,401);
+    appModule.scanCache.get(key).timestamp=Date.now()-appModule.CACHE_TTL_MS;
+    assert.equal((await request()).status,404);
+  } finally {
+    await new Promise(r=>server.close(r));mongoose.connection.readyState=state;
+    appModule.User.findById=find;appModule.User.findOneAndUpdate=reserve;appModule.Report.create=create;appModule.scanCache.clear();
+  }
+});

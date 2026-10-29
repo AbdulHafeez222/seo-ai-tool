@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <title>Aegis AI Visibility — Enterprise SEO, AEO & GEO Intelligence Platform</title>
-  <meta name="description" content="Enterprise-grade AI visibility auditing platform. Analyze SEO, AEO, E-E-A-T, topical authority, and AI citation probability across ChatGPT, Gemini, Perplexity, and Claude.">
+  <meta name="description" content="Evidence-based SEO, GEO and AEO page audits with clearly labelled AI readiness heuristics. No live citation or ranking measurements.">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0b0f19">
   <meta name="robots" content="noindex, nofollow">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1" defer></script>
 
 <style>
 /* =========================================================================
@@ -1021,6 +1021,7 @@ li { margin: 6px 0; color: var(--text-secondary); }
     <button type="button" class="nav-link-btn" onclick="navGoToScan()">New Scan</button>
     <button type="button" class="nav-link-btn" onclick="navGoToHistory()">History</button>
     <button type="button" class="nav-link-btn" onclick="openReportsModal()">Reports</button>
+    <button type="button" class="nav-link-btn" onclick="openProjectsModal()">Projects</button>
     <button type="button" class="nav-link-btn" onclick="openSiteCrawlModal()">Site Crawl</button>
   </nav>
 
@@ -1082,6 +1083,7 @@ li { margin: 6px 0; color: var(--text-secondary); }
         <span class="btn-spinner" aria-hidden="true"></span>
         <span class="btn-label-text" id="authSubmitLabel">Log In</span>
       </button>
+      <button type="button" onclick="requestPasswordReset()">Forgot password?</button>
     </form>
 
     <p class="auth-switch-text" id="authSwitchText">
@@ -1339,9 +1341,11 @@ li { margin: 6px 0; color: var(--text-secondary); }
         <canvas id="citationChart" role="img" aria-label="AI citation score gauge"></canvas>
         <div class="centerScore" id="citationScore">Data unavailable</div>
       </div>
-      <div style="font-weight:700; margin-top:10px;">AI CITATION</div>
+      <div style="font-weight:700; margin-top:10px;">AI READINESS (HEURISTIC)</div>
     </div>
   </section>
+
+  <p style="font-size:13px;">Scores are page-level heuristics, not measured AI citations, search rankings, or calibrated probabilities. Each attempted website consumes one quota unit; failed attempts and unused crawl reservations are charged.</p>
 
   <section class="dual-visuals-grid" id="chartsTrendContainer" style="display:none;" aria-label="Footprint radar and historical trend charts">
     <div class="chartBox" style="align-items:stretch; height: 350px;">
@@ -1365,7 +1369,7 @@ li { margin: 6px 0; color: var(--text-secondary); }
     </section>
 
     <section id="realCitationCard" class="card" style="display:none; margin-top:0;" aria-labelledby="realCitationHeading">
-      <h3 id="realCitationHeading"><span class="card-title-group"><span aria-hidden="true">📊</span> LLM Engine Citation Probability</span></h3>
+      <h3 id="realCitationHeading"><span class="card-title-group"><span aria-hidden="true">📊</span> AI Engine Readiness Heuristics (Not Measured Citations)</span></h3>
       <div id="aeoSimulationExplanation"></div>
     </section>
   </div>
@@ -1448,7 +1452,7 @@ li { margin: 6px 0; color: var(--text-secondary); }
 
   <div class="grid-3" style="margin-top:24px;">
     <section id="citationOppCard" class="card" style="display:none; margin-top:0;" aria-labelledby="citationOppHeading">
-      <h3 id="citationOppHeading"><span class="card-title-group"><span aria-hidden="true">🤖</span> AI Citation Opportunities</span></h3>
+      <h3 id="citationOppHeading"><span class="card-title-group"><span aria-hidden="true">🤖</span> AI Readiness Improvement Suggestions</span></h3>
       <div id="citationOppContent"></div>
     </section>
 
@@ -1477,13 +1481,16 @@ li { margin: 6px 0; color: var(--text-secondary); }
     <div id="comparisonDetails"></div>
   </section>
 
+  <section id="pageEvidenceCard" class="card" style="display:none;"><h3>AI Access &amp; Multilingual Evidence</h3><div id="pageEvidenceResults"></div></section>
+  <section id="technicalMonitorCard" class="card" style="display:none;"><h3>Technical SEO Monitor</h3><div id="technicalMonitorResults"></div></section>
+
   <section id="contentOptimizerCard" class="card" style="display:none;" aria-labelledby="contentOptimizerHeading">
     <h3 id="contentOptimizerHeading"><span class="card-title-group"><span aria-hidden="true">🧠</span> AI Content Optimizer Pro</span></h3>
     <div id="contentOptimizerResults"></div>
   </section>
 
   <section id="gapCard" class="card" style="display:none;" aria-labelledby="gapHeading">
-    <h3 id="gapHeading"><span class="card-title-group"><span aria-hidden="true">🔍</span> AI Citation Gap Finder</span></h3>
+    <h3 id="gapHeading"><span class="card-title-group"><span aria-hidden="true">🔍</span> Observed Content Gap Finder</span></h3>
     <div id="gapContent"></div>
   </section>
 
@@ -1563,14 +1570,10 @@ let currentUser = null; // { email, plan, apiKey, scansToday, createdAt } once l
 let authLogoutTimer = null;
 let authMode = "login"; // "login" | "register"
 
-function getStoredToken() {
-  return localStorage.getItem(AUTH_TOKEN_KEY) || null;
-}
-
-function setStoredToken(token) {
-  if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
-  else localStorage.removeItem(AUTH_TOKEN_KEY);
-}
+// Browser sessions use an HttpOnly SameSite cookie. Legacy bearer storage is removed.
+localStorage.removeItem(AUTH_TOKEN_KEY);
+function getStoredToken() { return null; }
+function setStoredToken() {}
 
 /**
  * Decodes a JWT's payload WITHOUT verifying its signature — this is purely
@@ -1612,7 +1615,7 @@ function scheduleAutoLogout(token) {
  */
 async function initAuthState() {
   const token = getStoredToken();
-  if (!token) { updateNavbarAuthUI(); return; }
+
 
   const payload = decodeJwtPayload(token);
   if (payload?.exp && payload.exp * 1000 <= Date.now()) {
@@ -1622,7 +1625,7 @@ async function initAuthState() {
   }
 
   try {
-    const res = await fetch(`${window.API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${window.API_BASE}/auth/me`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
     const data = await res.json();
     if (res.ok && data?.success) {
       currentUser = data;
@@ -1773,7 +1776,7 @@ async function submitAuthForm() {
     setStoredToken(data.token);
     scheduleAutoLogout(data.token);
 
-    const meRes = await fetch(`${window.API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${data.token}` } });
+    const meRes = await fetch(`${window.API_BASE}/auth/me`, { headers: {} });
     const meData = await meRes.json();
     currentUser = meRes.ok && meData?.success ? meData : { email: data.email, plan: data.plan, apiKey: data.apiKey, scansToday: 0 };
 
@@ -1789,12 +1792,15 @@ async function submitAuthForm() {
 }
 
 function logoutUser(silent) {
+  fetch(`${window.API_BASE}/auth/logout`, { method: "POST" }).catch(() => {});
   setStoredToken(null);
   currentUser = null;
   if (authLogoutTimer) { clearTimeout(authLogoutTimer); authLogoutTimer = null; }
   updateNavbarAuthUI();
   closeProfileModal();
   closeSettingsModal();
+  closeReportsModal(); closeReportDetailModal(); closeDashboardModal(); closeSiteCrawlModal();
+  resetReportState(); historyRecordsCache = [];
   if (!silent) showToast("Logged out.", "success");
   else showToast("Your session expired. Please log in again.", "info");
 }
@@ -1967,7 +1973,7 @@ function renderDashboardStats(data) {
       ${statCard("Avg E-E-A-T Score", avg.eeatScore, "%")}
       ${statCard("Avg Authority Score", avg.authorityScore, "%")}
       ${statCard("Avg Trust Score", avg.trustScore, "%")}
-      ${statCard("Avg AI Citation", avg.citationScore, "%")}
+      ${statCard("Avg AI Readiness (Heuristic)", avg.citationScore, "%")}
     </div>
     ${!hasAnyData ? `<div style="margin-top:16px;">${emptyStateHtml("🔍", "No Scans Yet", "Run your first scan while logged in to start populating your dashboard.")}</div>` : `
     <div style="margin-top:20px; text-align:center;">
@@ -2060,7 +2066,7 @@ function renderReportsTable(data) {
               <td>${scoreBadge(r.citationScore)}</td>
               <td style="white-space:nowrap;">
                 <button type="button" onclick="viewReportDetail('${r.id}')" style="font-size:11px; padding:6px 10px;" title="View">👁️</button>
-                <button type="button" onclick="rescanFromReport('${escapeHtml(r.url).replace(/'/g, "&#39;")}')" style="font-size:11px; padding:6px 10px;" title="Re-Scan">🔄</button>
+                <button type="button" data-rescan-url="${escapeHtml(r.url)}" style="font-size:11px; padding:6px 10px;" title="Re-Scan">🔄</button>
                 <button type="button" onclick="deleteReport('${r.id}')" style="font-size:11px; padding:6px 10px; background:var(--accent-danger);" title="Delete">🗑️</button>
               </td>
             </tr>`).join('')}
@@ -2176,7 +2182,7 @@ function renderReportDetail(r) {
     ${scoreRow("E-E-A-T Score", r.eeatScore)}
     ${scoreRow("Authority Score", r.authorityScore)}
     ${scoreRow("Trust Score", r.trustScore)}
-    ${scoreRow("AI Citation Score", r.citationScore)}
+    ${scoreRow("AI Readiness Heuristic", r.citationScore)}
     ${safeArray(r.schemaSummary?.detectedTypes).length > 0 ? `
     <div style="margin-top:14px;">
       <div class="profile-field-label" style="margin-bottom:8px;">Detected Schemas</div>
@@ -2193,7 +2199,7 @@ function renderReportDetail(r) {
       <ul>${r.recommendations.map(rec => `<li>${escapeHtml(typeof rec === 'string' ? rec : JSON.stringify(rec))}</li>`).join('')}</ul>
     </details>` : ''}
     <div style="margin-top:18px; text-align:right;">
-      <button type="button" onclick="rescanFromReport('${escapeHtml(r.finalUrl || r.url).replace(/'/g, "&#39;")}')">🔄 Re-Scan This Site</button>
+      <button type="button" data-rescan-url="${escapeHtml(r.finalUrl || r.url)}">🔄 Re-Scan This Site</button>
     </div>
   `;
 }
@@ -2226,6 +2232,7 @@ async function renderSiteCrawlLanding() {
   stopSiteCrawlPolling();
 
   content.innerHTML = `
+    <p>Bounded same-origin sample. Orphan candidates and duplicates describe sampled pages only.</p>
     <div class="auth-form-group">
       <label for="siteCrawlUrl">Root Domain URL</label>
       <input type="text" id="siteCrawlUrl" placeholder="e.g. hafeezdigitalstudio.com">
@@ -2332,7 +2339,7 @@ function viewSiteCrawlJob(jobId) {
 async function watchSiteCrawlJob(jobId) {
   stopSiteCrawlPolling();
   siteCrawlCurrentJobId = jobId;
-  await fetchAndRenderSiteCrawlJob(jobId);
+  if (!await fetchAndRenderSiteCrawlJob(jobId)) return;
 
   siteCrawlPollTimer = setInterval(async () => {
     if (siteCrawlCurrentJobId !== jobId) { stopSiteCrawlPolling(); return; }
@@ -2419,7 +2426,7 @@ function renderSiteCrawlJobDetail(job) {
 
     ${safeArray(findings.orphanPages).length > 0 ? `
     <details style="margin-bottom:12px;">
-      <summary><span aria-hidden="true">🔗</span> Orphan Pages (${findings.orphanPages.length}) — no internal links found pointing to these</summary>
+      <summary><span aria-hidden="true">🔗</span> Orphan Candidates Within Sample (${findings.orphanPages.length}) — no internal links found pointing to these</summary>
       <ul>${findings.orphanPages.map(u => `<li>${escapeHtml(u)}</li>`).join('')}</ul>
     </details>` : ''}
 
@@ -2480,7 +2487,7 @@ document.addEventListener("keydown", (e) => {
 });
 ["authModalOverlay", "profileModalOverlay", "settingsModalOverlay", "dashboardModalOverlay", "reportsModalOverlay", "reportDetailModalOverlay", "siteCrawlModalOverlay"].forEach(id => {
   document.addEventListener("click", (e) => {
-    if (e.target && e.target.id === id) e.target.classList.remove("open");
+    if (e.target && e.target.id === id) { e.target.classList.remove("open"); if (id === "siteCrawlModalOverlay") stopSiteCrawlPolling(); }
   });
 });
 
@@ -2504,6 +2511,7 @@ function safeText(value, fallback = "Data unavailable") {
 function safeArray(arr) { return Array.isArray(arr) ? arr : []; }
 
 function safeNumber(num, fallback = null) {
+  if (num === null || num === undefined || num === "") return fallback;
   const parsed = Number(num);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
@@ -2611,7 +2619,7 @@ async function apiFetch(path) {
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
   try {
-    res = await fetch(`${window.API_BASE}${path}`, { headers });
+    res = await fetch(`${window.API_BASE}${path}`, { headers, signal: AbortSignal.timeout(120000) });
   } catch (networkErr) {
     throw new Error(`Network error while reaching the analysis server: ${networkErr.message}`);
   }
@@ -2735,7 +2743,7 @@ function resetReportState() {
   const cards = [
     "executiveSummaryPanel", "gaugeChartsContainer", "chartsTrendContainer",
     "aiReasoningCard", "realCitationCard", "aiSimulationCard", "seoAuditCard",
-    "coreWebVitalsCard",
+    "coreWebVitalsCard", "contentOptimizerCard", "technicalMonitorCard", "pageEvidenceCard",
     "titleAnalyzerCard", "metaAnalyzerCard", "headingCard", "internalLinkCard",
     "imageSeoCard", "entityCard", "eeatCard", "schemaCard", "competitorCard",
     "gapCard", "roadmapCard", "keywordTheftCard", "briefCard", "autopilotCard",
@@ -2864,6 +2872,8 @@ function renderAllResults(data) {
     renderModelSimulations(data);
     renderSeoAudit(data);
     renderCoreWebVitals(data);
+    renderTechnicalMonitor(data.technicalMonitor);
+    renderPageEvidence(data.pageEvidence);
     renderTitleMeta(data);
     renderHeadings(data);
     renderInternalLinks(data);
@@ -2882,6 +2892,7 @@ function renderAllResults(data) {
       resultEl.innerHTML = `
         <div class="card" style="border-left:5px solid var(--accent-success);">
           <h4><span aria-hidden="true">✅</span> Domain Scan Matrix Parsed</h4>
+          ${data.persistence?.saved === false ? `<p role="alert">${escapeHtml(data.persistence.message)}</p>` : ""}
           <p>Structural indexes analyzed successfully for <strong>${escapeHtml(safeText(data.resolvedUrl))}</strong>. Use the checklist actions above to run comparisons, roadmaps, or keyword analysis.</p>
         </div>`;
     }
@@ -2948,7 +2959,7 @@ function renderExecutiveSummaryAndGauges(data) {
   animateValue("seoScore", 0, seoScore, 1000, "%<span>SEO</span>");
   animateValue("aeoScore", 0, aeoScore, 1000, "%<span>AEO</span>");
   animateValue("eeatScore", 0, eeatScore, 1000, "%<span>EEAT</span>");
-  animateValue("citationScore", 0, citationScore, 1000, "%<span>Citation</span>");
+  animateValue("citationScore", 0, citationScore, 1000, "/100<span>Readiness</span>");
 
   if (seoChart) seoChart.destroy();
   if (aeoChart) aeoChart.destroy();
@@ -2983,7 +2994,7 @@ function renderExecutiveSummaryAndGauges(data) {
     ${metricBox(seoScore, "SEO Score", seoScore)}
     ${metricBox(aeoScore, "AEO Score", aeoScore)}
     ${metricBox(eeatScore, "EEAT Score", eeatScore)}
-    ${metricBox(citationScore, "AI Citation", citationScore)}
+    ${metricBox(citationScore, "AI Readiness (Heuristic)", citationScore)}
     ${metricBox(authorityScore, "Authority Score", authorityScore)}
     ${metricBox(trustScore, "Trust Score", trustScore)}
     ${metricBox(potential, "Potential Visibility", potential)}
@@ -3027,7 +3038,7 @@ function renderTrendAndRadar(data) {
 
   // Historical trend is sourced from the dedicated /trend endpoint (populated
   // server-side per repeat scan) rather than fabricated client-side.
-  fetchTrendAndRenderChart(data.resolvedUrl, citationScore, seoScore);
+  fetchTrendAndRenderChart(data.resolvedUrl, data.overallAIVisibilityScore, seoScore);
 }
 
 async function fetchTrendAndRenderChart(url, fallbackCitation, fallbackSeo) {
@@ -3112,9 +3123,9 @@ function renderCitationProbability(data) {
   const engines = safeGet(data, "citation.engines") || {};
   const entries = [
     { key: "chatgpt", label: "ChatGPT (OpenAI Search)", color: "var(--accent-success)" },
-    { key: "gemini", label: "Gemini (Google Overviews)", color: "var(--accent-primary)" },
+    { key: "gemini", label: "Gemini Readiness Profile", color: "var(--accent-primary)" },
     { key: "perplexity", label: "Perplexity Engine (Discovery)", color: "var(--accent-purple)" },
-    { key: "claude", label: "Claude (Anthropic Index)", color: "var(--accent-warning)" },
+    { key: "claude", label: "Claude Readiness Profile", color: "var(--accent-warning)" },
     { key: "copilot", label: "Copilot (Microsoft Search)", color: "#22d3ee" },
     { key: "mistral", label: "Mistral (Le Chat)", color: "#f472b6" }
   ].map(e => ({ ...e, score: safeNumber(engines[e.key]?.score), status: engines[e.key]?.status }));
@@ -3125,13 +3136,13 @@ function renderCitationProbability(data) {
 
   const explanationEl = document.getElementById("aeoSimulationExplanation");
   if (explanationEl) {
-    explanationEl.innerHTML = entries.filter(e => e.score != null).map(e => `
+    explanationEl.innerHTML = `<p>Uncalibrated readiness heuristics from on-page signals. These are not citation probabilities or observed AI citations.</p>` + entries.filter(e => e.score != null).map(e => `
       <div class="progress-row">
         <div class="progress-row-head">
           <span><strong>${escapeHtml(e.label)}</strong> <span class="badge badge-neutral" style="margin-left:6px;">${escapeHtml(safeText(e.status))}</span></span>
-          <span><strong>${e.score}%</strong></span>
+          <span><strong>${e.score}/100</strong></span>
         </div>
-        <div class="progress-track" role="progressbar" aria-valuenow="${e.score}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(e.label)} citation probability">
+        <div class="progress-track" role="progressbar" aria-valuenow="${e.score}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(e.label)} readiness heuristic">
           <div class="progress-fill" style="width:${e.score}%; background:${e.color};"></div>
         </div>
       </div>`).join('');
@@ -3153,7 +3164,7 @@ function renderModelSimulations(data) {
     const renderItem = (title, key) => {
       const item = sims[key];
       if (!item) return '';
-      return `<div class="ai-box"><strong>${escapeHtml(title)} — ${item.score}% likelihood:</strong><p style="margin-top:5px; line-height:1.6;">${escapeHtml(item.reasoning)}</p></div>`;
+      return `<div class="ai-box"><strong>${escapeHtml(title)} — ${item.score}/100 readiness heuristic:</strong><p style="margin-top:5px; line-height:1.6;">${escapeHtml(item.reasoning)}</p></div>`;
     };
     simText.innerHTML = `
       ${renderItem("ChatGPT Simulation", "chatgpt")}
@@ -3236,7 +3247,7 @@ function renderCoreWebVitalsContent(cwv) {
 
   const metricCard = (m) => {
     const passed = m.passed;
-    const color = passed ? "var(--accent-success)" : m.rawValue > 0 ? "var(--accent-warning)" : "var(--accent-danger)";
+    const color = passed === null ? "var(--text-muted)" : passed ? "var(--accent-success)" : m.rawValue > 0 ? "var(--accent-warning)" : "var(--accent-danger)";
     return `
       <div class="metric-box" style="background:${color};">
         <div class="metric-value" style="font-size:20px;">${escapeHtml(m.metric)}</div>
@@ -3314,12 +3325,13 @@ function renderHeadings(data) {
 
   const h2s = safeArray(data.h2s);
   const h3s = safeArray(data.h3s);
-  if (h2s.length === 0 && h3s.length === 0) { headingCard.style.display = "none"; return; }
+
   headingCard.style.display = "block";
 
-  const h1Deduction = safeArray(safeGet(data, "seo.deductions")).find(d => d.factor && d.factor.startsWith("H1"));
+  const h1Deduction = safeArray(safeGet(data, "seo.deductions")).find(d => d.factor === "Heading Structure");
 
   document.getElementById("headingResults").innerHTML = `
+    <p><strong>H1 Count:</strong> ${safeArray(data.h1s).length}</p>
     <p><strong>H2 Subsection Count:</strong> ${h2s.length} detected</p>
     <p><strong>H3 Topic Count:</strong> ${h3s.length} detected</p>
     ${h1Deduction ? `<p><span class="badge badge-orange">H1 Notice</span> ${escapeHtml(h1Deduction.reason)}</p>` : `<p><span class="badge badge-green">H1 Structure OK</span></p>`}
@@ -3350,7 +3362,7 @@ function renderImageSeo(data) {
   const imageCard = document.getElementById("imageSeoCard");
   if (!imageCard) return;
 
-  const imgDeduction = safeArray(safeGet(data, "seo.deductions")).find(d => d.factor === "Image Alt Tags");
+  const imgDeduction = safeArray(safeGet(data, "seo.deductions")).find(d => d.factor === "Image ALT Tags");
   imageCard.style.display = "block";
 
   if (imgDeduction) {
@@ -3450,7 +3462,7 @@ function renderSchema(data) {
   // this script) now reads the attribute and decodes the HTML entities.
   const schemaCodeHtml = rawSchema ? `
     <div class="ai-box" style="margin-top:15px;">
-      <strong>Recommended Structured Markup Draft:</strong>
+      <strong>Incomplete schema drafts — verify every value against visible content and supply required properties before publishing:</strong>
       <pre>${escapeHtml(rawSchema)}</pre>
       <button type="button" class="copy-schema-btn" data-schema="${escapeHtml(rawSchema)}"><span aria-hidden="true">📋</span> Copy Markup</button>
     </div>` : '';
@@ -3523,7 +3535,7 @@ function renderCitationOpportunities(data) {
   document.getElementById("citationOppContent").innerHTML = weakEngines.map(([key, v]) => `
     <div class="ai-box">
       <strong>${escapeHtml(engineLabels[key] || key)} Engine Opportunity:</strong>
-      <p>Current citation likelihood is scored as "${escapeHtml(v.status)}" at ${v.score}%${v.potentialScore != null ? ` (potential: ${v.potentialScore}%)` : ''}.</p>
+      <p>Heuristic readiness is labelled "${escapeHtml(v.status)}" at ${v.score}/100${v.potentialScore != null ? ` (heuristic ceiling: ${v.potentialScore}/100)` : ''}.</p>
       <span class="badge badge-orange" style="margin-top:5px;">Priority: ${v.score < 40 ? 'High' : 'Medium'}</span>
       ${safeArray(v.missingSignals).length > 0
         ? `<ul style="margin-top:8px; font-size:13px;">${v.missingSignals.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>`
@@ -3542,7 +3554,7 @@ function renderTrustSignals(data) {
   document.getElementById("trustSignalsContent").innerHTML = `
     <p><strong>Platform Trust Score:</strong> ${trust.trustScore != null ? trust.trustScore + '/100' : 'Data unavailable'}</p>
     <p><strong>Status:</strong> <span class="badge badge-info">${escapeHtml(safeText(trust.status))}</span></p>
-    ${safeArray(trust.factors).length > 0 ? `<h4>Verified Signals</h4><ul>${trust.factors.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>` : ''}
+    ${safeArray(trust.factors).length > 0 ? `<h4>Observed Signals</h4><ul>${trust.factors.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>` : ''}
     ${safeArray(trust.issues).length > 0 ? `<h4>Outstanding Gaps</h4><ul>${trust.issues.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>` : ''}
   `;
 }
@@ -3562,7 +3574,7 @@ function renderLocalSeo(data) {
   document.getElementById("localSEOContent").innerHTML = `
     <p><strong>Detected Locations:</strong> ${locations.length > 0 ? escapeHtml(locations.join(', ')) : 'None detected'}</p>
     <p><strong>LocalBusiness JSON-LD:</strong> ${hasLocalBusinessSchema ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Missing</span>'}</p>
-    <p><strong>NAP Consistency:</strong> ${napFactor ? `<span class="badge badge-green">Verified</span> ${escapeHtml(napFactor)}` : napIssue ? `<span class="badge badge-red">Incomplete</span> ${escapeHtml(napIssue)}` : 'Data unavailable'}</p>
+    <p><strong>NAP Consistency:</strong> ${napFactor ? `<span class="badge badge-green">Observed</span> ${escapeHtml(napFactor)}` : napIssue ? `<span class="badge badge-red">Incomplete</span> ${escapeHtml(napIssue)}` : 'Data unavailable'}</p>
   `;
 }
 
@@ -3651,7 +3663,7 @@ async function keywordTheft() {
     const theftCard = document.getElementById("keywordTheftCard");
     if (keywordTheftDataCache.length === 0) {
       theftCard.style.display = "block";
-      document.getElementById("keywordTheftResults").innerHTML = emptyStateHtml("💎", "No Keyword Gaps Found", "Your competitor doesn't appear to rank for keywords you're missing.");
+      document.getElementById("keywordTheftResults").innerHTML = emptyStateHtml("💎", "No Keyword Gaps Found", "No differences in the extracted page terms were found. Rankings were not checked.");
       return;
     }
     theftCard.style.display = "block";
@@ -3670,13 +3682,13 @@ function renderKeywordTheftTable() {
 
   let rows = [...keywordTheftDataCache];
   if (keywordTheftSortState.key) {
-    rows.sort((a, b) => (a[keywordTheftSortState.key] - b[keywordTheftSortState.key]) * keywordTheftSortState.dir);
+    rows.sort((a, b) => String(a[keywordTheftSortState.key] ?? "").localeCompare(String(b[keywordTheftSortState.key] ?? ""), undefined, { numeric: true }) * keywordTheftSortState.dir);
   }
 
   const sortIndicator = (key) => keywordTheftSortState.key === key ? (keywordTheftSortState.dir === 1 ? ' ▲' : ' ▼') : '';
 
   resultsEl.innerHTML = `
-    <p style="margin-bottom:12px;"><strong>${keywordTheftDataCache.length}</strong> high-yield opportunity keyword(s) your competitor ranks for:</p>
+    <p style="margin-bottom:12px;"><strong>${keywordTheftDataCache.length}</strong> term(s) observed on the competitor page and absent from your top extracted terms. Search volume, difficulty, and rankings were not measured:</p>
     <div class="table-scroll-wrap">
       <table>
         <caption class="visually-hidden">Competitor keyword opportunities sorted by column</caption>
@@ -3692,9 +3704,9 @@ function renderKeywordTheftTable() {
           ${rows.map(k => `
             <tr>
               <td>${escapeHtml(k.keyword)}</td>
-              <td>${escapeHtml(String(k.searchVolume))}</td>
-              <td><span class="badge ${k.difficulty > 70 ? 'badge-red' : k.difficulty > 40 ? 'badge-orange' : 'badge-green'}">${k.difficulty}</span></td>
-              <td><span class="badge ${k.opportunityScore > 70 ? 'badge-green' : 'badge-neutral'}">${k.opportunityScore}</span></td>
+              <td>${k.searchVolume == null ? "Unavailable" : escapeHtml(String(k.searchVolume))}</td>
+              <td><span class="badge ${k.difficulty > 70 ? 'badge-red' : k.difficulty > 40 ? 'badge-orange' : 'badge-green'}">${k.difficulty ?? "Unavailable"}</span></td>
+              <td><span class="badge ${k.opportunityScore > 70 ? 'badge-green' : 'badge-neutral'}">${k.opportunityScore ?? "Unavailable"}</span></td>
             </tr>`).join('')}
         </tbody>
       </table>
@@ -3825,7 +3837,7 @@ async function compareCompetitor() {
 
     document.getElementById("comparisonDetails").innerHTML = `
       <div style="margin-bottom:20px;">
-        <strong>AI Selection Winner:</strong> <span class="badge badge-green">${escapeHtml(safeText(comparison.winner))}</span>
+        <strong>Heuristic Score Leader:</strong> <span class="badge badge-green">${escapeHtml(safeText(comparison.winner))}</span>
         <p style="margin-top:8px;">${escapeHtml(safeText(comparison.winnerReason))}</p>
       </div>
       <div class="table-scroll-wrap">
@@ -3834,6 +3846,7 @@ async function compareCompetitor() {
           <thead><tr><th scope="col">Metric</th><th scope="col">${escapeHtml(yourLabel)} (You)</th><th scope="col">${escapeHtml(compLabel)}</th><th scope="col">Leader</th></tr></thead>
           <tbody>
             ${metricRow('SEO', comparison.metrics?.seo)}
+            ${metricRow('GEO', comparison.metrics?.geo)}
             ${metricRow('AEO', comparison.metrics?.aeo)}
             ${metricRow('E-E-A-T', comparison.metrics?.eeat)}
             ${metricRow('Authority', comparison.metrics?.authority)}
@@ -3938,7 +3951,7 @@ async function runAutopilot() {
               <span class="badge ${t.priority === 'HIGH' ? 'badge-red' : t.priority === 'MEDIUM' ? 'badge-orange' : 'badge-info'}">${escapeHtml(t.priority)}</span>
             </div>
             <p style="margin:0;">${escapeHtml(t.description)}</p>
-            <p style="font-size:13px; color:var(--text-muted); margin-top:6px;">Estimated Impact: +${t.impact}%</p>
+            <p style="font-size:13px; color:var(--text-muted); margin-top:6px;">Heuristic priority weight: ${t.impact} points (not a predicted traffic gain)</p>
           </div>`).join('')}
       </div>`;
   } catch (err) {
@@ -3952,9 +3965,10 @@ async function runAutopilot() {
 // =========================================================================
 // HISTORY — server-backed /history plus local re-audit convenience
 // =========================================================================
+function historyStorageKey() { return `scanHistory:${currentUser?.email || "anonymous"}`; }
 function saveLocalHistory(url, data) {
   try {
-    let history = JSON.parse(localStorage.getItem('scanHistory') || '[]');
+    let history = JSON.parse(localStorage.getItem(historyStorageKey()) || '[]');
     history = history.filter(h => h.url.toLowerCase() !== url.toLowerCase());
     history.unshift({
       url,
@@ -3964,12 +3978,12 @@ function saveLocalHistory(url, data) {
       timestamp: new Date().toISOString()
     });
     if (history.length > 20) history.pop();
-    localStorage.setItem('scanHistory', JSON.stringify(history));
+    localStorage.setItem(historyStorageKey(), JSON.stringify(history));
   } catch (e) { console.error("Local history save skipped", e); }
 }
 
 function clearLocalHistory() {
-  localStorage.removeItem('scanHistory');
+  localStorage.removeItem(historyStorageKey());
   showToast("Local history cleared.", "success");
   loadHistory();
 }
@@ -3988,7 +4002,7 @@ async function loadHistory() {
     serverHistory = [];
   }
 
-  const localHistory = JSON.parse(localStorage.getItem('scanHistory') || '[]');
+  const localHistory = JSON.parse(localStorage.getItem(historyStorageKey()) || '[]');
 
   historyRecordsCache = serverHistory.length > 0
     ? serverHistory.map(h => ({ url: h.url, title: h.title, score: h.score, timestamp: h.timestamp, source: "server" }))
@@ -4017,7 +4031,7 @@ function renderHistoryTable(records) {
               <td>${escapeHtml(safeText(h.title || h.url))}</td>
               <td><span class="badge ${getProgressColor(h.score) === '#10b981' ? 'badge-green' : 'badge-neutral'}">${safeText(h.score, '0')}%</span></td>
               <td>${h.timestamp ? new Date(h.timestamp).toLocaleString() : 'Data unavailable'}</td>
-              <td><button type="button" onclick="retriggerAudit('${escapeHtml(h.url).replace(/'/g, "&#39;")}')" style="font-size:11px; padding:8px 14px;">Re-Audit</button></td>
+              <td><button type="button" data-rescan-url="${escapeHtml(h.url)}" style="font-size:11px; padding:8px 14px;">Re-Audit</button></td>
             </tr>`).join('')}
         </tbody>
       </table>
@@ -4066,6 +4080,7 @@ document.addEventListener("click", (e) => {
 });
 
 function downloadPDF() {
+  if (!lastScanData) { showToast("Complete a scan before exporting a report.", "error"); return; }
   if (typeof html2pdf === "undefined") {
     showToast("PDF export library did not load. Try refreshing the page.", "error");
     return;
@@ -4086,5 +4101,6 @@ function downloadPDF() {
 syncThemeChoiceButtons();
 initAuthState();
 </script>
+<script src="/features.js"></script>
 </body>
 </html>

@@ -1,8 +1,16 @@
 # Beta release readiness — 2026-10-29
 
-**Verdict: DO NOT LAUNCH YET.** This development branch repairs confirmed blockers and adds tested foundations. It does not claim all ten requested phases are complete. No merge, production deployment, payment activation, paid service purchase, production database access, or customer email occurred.
+**Verdict: BETA DEPLOYED; full commercial launch acceptance remains incomplete.** The existing application and additive features are live on Railway with owner authorization. Not all ten phases are complete. Main was not merged, live payments were not activated, and no production migration or data deletion occurred.
 
-## Browser publication checkpoint
+## Live verification
+
+Deployment `0e28775c-2aac-4055-aa2e-12bad7fdbf51` reached SUCCESS after the owner resumed the existing paused FREE Atlas cluster. The live homepage renders, database readiness returns true, liveness reports running, the login modal and extra comparison fields open, and Projects rejects unauthenticated access. Source is pinned to `f1fc22a1e321e8c5f4bf5e02cff19e00965d053e`; later doc pushes cannot trigger deployment. See `DEPLOYED_BETA.md` for executed checks and limits.
+
+## Earlier failed attempt
+
+Draft PR #5 is published, with main unchanged. Remote source commit `f1fc22a1e321e8c5f4bf5e02cff19e00965d053e` matched local tree `8c2aa544ba54816e1c9767ab188d05f230bb54e0`; GitHub CI run 40801619778 passed all checks. One pinned Railway attempt built successfully but FAILED readiness due to MongoDB SRV `querySrv ENOTFOUND`. No repeat build was started. Atlas connection investigation is now required. See `PUBLISHING.md`.
+
+## Browser publication checkpoint (historical)
 
 The owner authorized the browser fallback. GitHub sign-in/device approval succeeded and the remote development branch now exists. Source and tests are being published in reviewable UI commits; main remains unchanged. Earlier 403/network failures below are historical, not evidence that browser publication failed. Remote file hashes, CI and Railway terminal deployment status remain to be verified.
 
@@ -52,4 +60,4 @@ All outbound provider calls in pipeline tests and all database operations in DB-
 6. Complete real desktop/mobile visual QA, accessibility, export layout, remote canonical/hreflang/indexability checks, broader scoring relevance and full-report persistence if promised to beta users. Legacy unwired modules remain documented rather than silently removed.
 7. Billing stays disabled. Pricing, provider contracts, webhook verification, entitlement transitions and subscription storage are a later approved milestone. Do not sell an automated subscription until it is implemented and tested.
 
-No deployment or merge is included. Once gates are satisfied, request explicit owner approval for the concrete release candidate and hosting deployment.
+The owner-authorized beta deployment is live. Main merge and live payment activation still require explicit owner approval. Complete the remaining launch gates before claiming a fully production-qualified commercial release.

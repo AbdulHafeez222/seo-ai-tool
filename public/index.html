@@ -983,6 +983,16 @@ li { margin: 6px 0; color: var(--text-secondary); }
   .action-bar, .btn-grid, .loading-overlay, .toast-region { display: none !important; }
   .card { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
 }
+
+.report-language-control {display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;max-width:100%;}
+.report-language-control select {width:auto;min-width:100px;padding:7px;border-radius:8px;background:var(--bg-card,#fff);color:var(--text-primary,#111);}
+#contentIntelligenceResults {overflow-wrap:anywhere;}
+#contentIntelligenceResults blockquote {margin:10px 0;padding:10px;border-inline-start:3px solid var(--accent-primary);white-space:pre-wrap;}
+#contentIntelligenceResults table {width:100%;}
+html[dir="rtl"] body {font-family:Tahoma,Arial,sans-serif;}
+html[dir="rtl"] .card,html[dir="rtl"] .input-group {text-align:start;}
+html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],html[dir="rtl"] input[type="url"] {direction:ltr;text-align:left;}
+@media(max-width:600px){.report-language-control {flex-basis:100%;justify-content:center;} #contentIntelligenceResults .grid-3 {grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
@@ -1017,15 +1027,20 @@ li { margin: 6px 0; color: var(--text-secondary); }
   </div>
 
   <nav class="nav-link-group" aria-label="Primary">
-    <button type="button" class="nav-link-btn" onclick="openDashboardModal()">Dashboard</button>
-    <button type="button" class="nav-link-btn" onclick="navGoToScan()">New Scan</button>
-    <button type="button" class="nav-link-btn" onclick="navGoToHistory()">History</button>
-    <button type="button" class="nav-link-btn" onclick="openReportsModal()">Reports</button>
-    <button type="button" class="nav-link-btn" onclick="openProjectsModal()">Projects</button>
-    <button type="button" class="nav-link-btn" onclick="openSiteCrawlModal()">Site Crawl</button>
+    <button type="button" class="nav-link-btn" onclick="openDashboardModal()"><span data-i18n="dashboard">Dashboard</span></button>
+    <button type="button" class="nav-link-btn" onclick="navGoToScan()"><span data-i18n="scan">New Scan</span></button>
+    <button type="button" class="nav-link-btn" onclick="navGoToHistory()"><span data-i18n="history">History</span></button>
+    <button type="button" class="nav-link-btn" onclick="openReportsModal()"><span data-i18n="reports">Reports</span></button>
+    <button type="button" class="nav-link-btn" onclick="openProjectsModal()"><span data-i18n="projects">Projects</span></button>
+    <button type="button" class="nav-link-btn" onclick="openSiteCrawlModal()"><span data-i18n="crawl">Site Crawl</span></button>
   </nav>
 
   <div class="action-bar-controls">
+    <label class="report-language-control"><span data-i18n="language">Report language</span>
+      <select id="reportLanguage" onchange="setReportLanguage(this.value)" aria-label="Report language">
+        <option value="en">English</option><option value="ur">اردو</option><option value="ps">پښتو</option><option value="ar">العربية</option>
+      </select>
+    </label>
     <div class="status-badge-live">
       <div class="status-dot" id="scanStatusDot"></div>
       <span id="scanStatusIndicator">Ready</span>
@@ -1037,8 +1052,8 @@ li { margin: 6px 0; color: var(--text-secondary); }
     <div class="navbar-auth-area" id="navbarAuthArea">
       <!-- Logged-out state -->
       <div id="authCtaGroup" style="display:flex; gap:8px;">
-        <button type="button" class="auth-cta-btn ghost" onclick="openAuthModal('login')">Log In</button>
-        <button type="button" class="auth-cta-btn" onclick="openAuthModal('register')">Sign Up</button>
+        <button type="button" class="auth-cta-btn ghost" onclick="openAuthModal('login')"><span data-i18n="login">Log In</span></button>
+        <button type="button" class="auth-cta-btn" onclick="openAuthModal('register')"><span data-i18n="signup">Sign Up</span></button>
       </div>
 
       <!-- Logged-in state -->
@@ -1252,19 +1267,19 @@ li { margin: 6px 0; color: var(--text-secondary); }
       <div class="btn-grid" role="group" aria-label="Analysis actions">
         <button type="button" id="scanBtn" onclick="scan()" aria-describedby="scanBtnTip">
           <span class="btn-spinner" aria-hidden="true"></span>
-          <span aria-hidden="true">🔍</span><span class="btn-label-text">Scan Website</span>
+          <span aria-hidden="true">🔍</span><span class="btn-label-text" data-i18n="run">Scan Website</span>
         </button>
         <button type="button" id="compareBtn" onclick="compareCompetitor()">
           <span class="btn-spinner" aria-hidden="true"></span>
-          <span aria-hidden="true">⚔️</span><span class="btn-label-text">Compare Competitor</span>
+          <span aria-hidden="true">⚔️</span><span class="btn-label-text" data-i18n="compare">Compare Competitor</span>
         </button>
         <button type="button" id="compareMultiBtn" onclick="compareMultiSite()" style="background:var(--accent-purple);">
           <span class="btn-spinner" aria-hidden="true"></span>
-          <span aria-hidden="true">🏆</span><span class="btn-label-text">Compare Up to 5 Sites</span>
+          <span aria-hidden="true">🏆</span><span class="btn-label-text" data-i18n="compare">Compare Up to 5 Sites</span>
         </button>
         <button type="button" id="contentOptimizerBtn" onclick="runContentOptimizer()" style="background:#0891b2;">
           <span class="btn-spinner" aria-hidden="true"></span>
-          <span aria-hidden="true">🧠</span><span class="btn-label-text">AI Content Optimizer</span>
+          <span aria-hidden="true">🧠</span><span class="btn-label-text" data-i18n="optimizer">AI Content Optimizer</span>
         </button>
         <button type="button" id="gapBtn" onclick="gapAnalysis()">
           <span class="btn-spinner" aria-hidden="true"></span>
@@ -1481,6 +1496,10 @@ li { margin: 6px 0; color: var(--text-secondary); }
     <div id="comparisonDetails"></div>
   </section>
 
+  <section id="contentIntelligenceCard" class="card" style="display:none;" aria-labelledby="contentIntelligenceHeading">
+    <h3 id="contentIntelligenceHeading" data-i18n="context">Page-specific Content Intelligence</h3>
+    <div id="contentIntelligenceResults"></div>
+  </section>
   <section id="pageEvidenceCard" class="card" style="display:none;"><h3>AI Access &amp; Multilingual Evidence</h3><div id="pageEvidenceResults"></div></section>
   <section id="technicalMonitorCard" class="card" style="display:none;"><h3>Technical SEO Monitor</h3><div id="technicalMonitorResults"></div></section>
 
@@ -1527,6 +1546,7 @@ li { margin: 6px 0; color: var(--text-secondary); }
 
 </main>
 
+<script src="/languages.js"></script>
 <script>
 // =========================================================================
 // GLOBAL CONFIG & STATE
@@ -2753,7 +2773,7 @@ function resetReportState() {
   const cards = [
     "executiveSummaryPanel", "gaugeChartsContainer", "chartsTrendContainer",
     "aiReasoningCard", "realCitationCard", "aiSimulationCard", "seoAuditCard",
-    "coreWebVitalsCard", "contentOptimizerCard", "technicalMonitorCard", "pageEvidenceCard",
+    "coreWebVitalsCard", "contentOptimizerCard", "technicalMonitorCard", "pageEvidenceCard", "contentIntelligenceCard",
     "titleAnalyzerCard", "metaAnalyzerCard", "headingCard", "internalLinkCard",
     "imageSeoCard", "entityCard", "eeatCard", "schemaCard", "competitorCard",
     "gapCard", "roadmapCard", "keywordTheftCard", "briefCard", "autopilotCard",
@@ -2766,6 +2786,7 @@ function resetReportState() {
   if (resultEl) resultEl.innerHTML = "";
 
   lastScanData = null;
+  if (typeof renderContentIntelligence === "function") renderContentIntelligence(null);
 }
 
 // =========================================================================
@@ -2909,6 +2930,7 @@ function renderAllResults(data) {
     renderCoreWebVitals(data);
     renderTechnicalMonitor(data.technicalMonitor);
     renderPageEvidence(data.pageEvidence);
+    renderContentIntelligence(data.contentEvidence);
     renderTitleMeta(data);
     renderHeadings(data);
     renderInternalLinks(data);
@@ -3548,8 +3570,8 @@ function renderSemanticSeo(data) {
   document.getElementById("semanticSEOContent").innerHTML = `
     <p><strong>Semantic Topic Coverage:</strong> ${semantic.coveragePercent != null ? semantic.coveragePercent + '%' : 'Data unavailable'}</p>
     <p><strong>Total Extracted Entities:</strong> ${safeText(semantic.entities?.totalEntityCount, "0")}</p>
-    <p><strong>Uncovered Intent Clusters:</strong></p>
-    <div style="margin-top:5px;">${gapBadges || 'No immediate semantic gaps identified'}</div>
+    <p><strong>Intent phrase observations (not measured topical gaps):</strong></p>
+    <div style="margin-top:5px;">${gapBadges || 'No missing topics can be established from these dictionary checks.'}</div>
   `;
 }
 
@@ -3810,12 +3832,12 @@ async function gapAnalysis() {
       </div>
       <p><strong>Competitor Has More Words:</strong> ${gaps.competitorHasMoreWords ? '<span class="badge badge-orange">Yes</span>' : '<span class="badge badge-green">No</span>'}</p>
       ${headingGaps.length > 0 ? `
-        <p style="margin-top:15px;"><strong>Missing Topic Headings:</strong></p>
+        <p style="margin-top:15px;"><strong>Different competitor headings — relevance unverified:</strong></p>
         <ul style="list-style-type:none; padding-left:0;">
           ${headingGaps.map((topic, idx) => `<li style="padding:12px; background:var(--bg-body); border-radius:8px; margin-bottom:8px; border-left:3px solid var(--accent-danger); font-weight:${idx < 3 ? 'bold' : 'normal'};">${idx < 3 ? '🚨 [HIGH]' : '❌'} ${escapeHtml(topic)}</li>`).join('')}
         </ul>` : ''}
       ${missingKeywords.length > 0 ? `
-        <p style="margin-top:15px;"><strong>Missing Keywords:</strong></p>
+        <p style="margin-top:15px;"><strong>Different observed terms — not researched keyword gaps:</strong></p>
         <div style="display:flex; flex-wrap:wrap; gap:6px;">${missingKeywords.map(k => `<span class="badge badge-purple">${escapeHtml(k)}</span>`).join('')}</div>` : ''}
     `;
   } catch (err) {
@@ -3934,8 +3956,10 @@ async function contentBrief() {
     const brief = data.brief || {};
 
     document.getElementById("briefResults").innerHTML = `
-      <p><strong>Recommended Title Hook:</strong> ${escapeHtml(keyword ? `Guide to ${keyword}` : `Comprehensive Guide: ${safeText(data.title, 'Your Topic')}`)}</p>
-      <p><strong>Target Word Count:</strong> ${safeText(brief.targetWordCount, 'Data unavailable')} words</p>
+      <p><strong>Observed title / source-based draft:</strong> <bdi>${escapeHtml(brief.title || data.title || 'Data unavailable')}</bdi></p>
+      ${keyword ? `<p><strong>Your requested focus (not researched demand):</strong> <bdi>${escapeHtml(keyword)}</bdi></p>` : ''}
+      <p><strong>Target Word Count:</strong> ${safeText(brief.targetWordCount, 'Not established from available evidence')}</p>
+      <p>${escapeHtml(brief.wordCountNote || '')}</p>
       ${safeArray(brief.recommendedHeadings).length > 0 ? `<h4>Recommended Headings</h4><ul>${brief.recommendedHeadings.map(h => `<li>${escapeHtml(h)}</li>`).join('')}</ul>` : ''}
       ${safeArray(brief.targetKeywords).length > 0 ? `<h4>Target Keywords</h4><div style="display:flex; flex-wrap:wrap; gap:6px;">${brief.targetKeywords.map(k => `<span class="badge badge-purple">${escapeHtml(k)}</span>`).join('')}</div>` : ''}
       ${safeArray(brief.recommendedSchemas).length > 0 ? `<h4>Recommended Schemas</h4><div style="display:flex; flex-wrap:wrap; gap:6px;">${brief.recommendedSchemas.map(s => `<span class="badge badge-info">${escapeHtml(s)}</span>`).join('')}</div>` : ''}

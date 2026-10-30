@@ -1,4 +1,34 @@
 /* Extend the existing vanilla interface and reuse its API/error/loading helpers. */
+let contentEvidenceLast = null;
+function reportText(key,params={}) { return window.ReportLanguage?.t(key,params) || key; }
+function setReportLanguage(value) { window.ReportLanguage?.set(value); }
+function renderContentIntelligence(report) {
+  contentEvidenceLast=report || null;
+  const card=document.getElementById('contentIntelligenceCard');
+  if(!card)return;
+  card.style.display=report?'block':'none';
+  if(!report)return;
+  const t=reportText, e=escapeHtml;
+  const quote=value=>`<blockquote dir="auto">${e(value)}</blockquote>`;
+  document.getElementById('contentIntelligenceHeading').textContent=t('context');
+  document.getElementById('contentIntelligenceResults').innerHTML=`
+    <p>${e(t('scope'))}</p><p>${e(t('legacy'))}</p>
+    <p>${e(t('languageNote'))}: <bdi>${e(report.locale.tag || t('unknown'))}</bdi> · ${e(t('noProvider'))}</p>
+    <p><bdi>${e(report.url)}</bdi></p>
+    <h4>${e(t('actions'))}</h4>
+    ${(report.findings||[]).map(x=>`<details open><summary>${e(t(x.priority.toLowerCase()))}: ${e(t(x.code,x.params))}</summary><p>${e(t('observed'))}</p>${quote(x.evidence.observed)}</details>`).join('')||`<p>${e(t('none'))}</p>`}
+    <h4>${e(t('drafts'))}</h4>
+    ${[['title',report.titleDraft],['description',report.descriptionDraft]].filter(([,x])=>x).map(([key,x])=>`<p>${e(t(key))}</p>${quote(x.text)}`).join('')||`<p>${e(t('unavailable'))}</p>`}
+    <h4>${e(t('answers'))}</h4>
+    ${(report.answers||[]).map(x=>`<details><summary><bdi>${e(x.heading)}</bdi> — ${e(t(x.answerObserved?'answerPresent':'answerAbsent'))}</summary>${quote(x.excerpt||t('unavailable'))}</details>`).join('')||`<p>${e(t('unavailable'))}</p>`}
+    <h4>${e(t('vocabulary'))}</h4><div class="table-scroll-wrap"><table><thead><tr><th>${e(t('vocabulary'))}</th><th>${e(t('count'))}</th></tr></thead><tbody>${(report.vocabulary?.terms||[]).map(x=>`<tr><td dir="auto">${e(x.term)}</td><td>${Number(x.count)}</td></tr>`).join('')}</tbody></table></div>
+    <p>${e(t('reviewTerms'))}</p><p dir="auto">${e((report.bodyOnlyTerms||[]).map(x=>`${x.term} (${x.count})`).join(', ')||t('unavailable'))}</p>
+    <h4>${e(t('links'))}</h4><p>${e(t('targetUnknown'))}</p>
+    ${(report.internalLinkOpportunities||[]).map(x=>`<p><bdi>${e(x.anchor)}</bdi> → <bdi>${e(x.url)}</bdi></p>`).join('')||`<p>${e(t('unavailable'))}</p>`}
+    <h4>${e(t('entities'))}</h4><p>${e(t('declared'))}</p>
+    ${(report.declaredEntities||[]).map(x=>`<p><bdi>${e(x.name)}</bdi>: ${e(t(x.mentionedInContent?'mentioned':'notMentioned'))}</p>`).join('')||`<p>${e(t('unavailable'))}</p>`}`;
+}
+window.addEventListener('report-language-change',()=>renderContentIntelligence(contentEvidenceLast));
 function toggleMoreCompetitors() {
   const grid = document.getElementById('extraCompetitorsGrid');
   grid.style.display = grid.style.display === 'none' ? 'grid' : 'none';
@@ -21,7 +51,7 @@ async function compareMultiSite() {
       <div class="table-scroll-wrap"><table><thead><tr><th>Metric</th>${data.labels.map(x => `<th>${escapeHtml(x)}</th>`).join('')}</tr></thead>
       <tbody>${data.dimensions.map(d => `<tr><th>${escapeHtml(d.label)}</th>${d.values.map(v => `<td>${escapeHtml(v.display)}${v.rank ? ` (#${v.rank})` : ''}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
       <h4>Prioritized improvements</h4><ul>${data.executiveSummary.topActionsToBeatLeader.map(a => `<li>${escapeHtml(a.priority)}: ${escapeHtml(a.action)}</li>`).join('') || '<li>No measured deficit against the overall leader.</li>'}</ul>
-      ${data.pairwiseGaps.map(g => `<details><summary>Observed gaps versus ${escapeHtml(g.url)}</summary>${['headingGaps','keywordGaps','entityGaps','schemaGaps'].map(k => `<p><strong>${escapeHtml(k)}</strong>: ${escapeHtml((g[k] || []).join(', ') || 'None observed')}</p>`).join('')}</details>`).join('')}
+      ${data.pairwiseGaps.map(g => `<details><summary>Observed differences versus ${escapeHtml(g.url)}</summary><p>${escapeHtml(g.contentComparison?.note || "Literal differences only; relevance requires review.")}</p>${['headingGaps','keywordGaps','entityGaps','schemaGaps'].map(k => `<p><strong>${escapeHtml(k)}</strong>: ${escapeHtml((g[k] || []).join(', ') || 'None observed')}</p>`).join('')}</details>`).join('')}
       ${data.executiveSummary.perSiteAnalysis.map(s => `<details><summary>${escapeHtml(s.label)}: strengths and weaknesses</summary><ul>${[...s.strengths, ...s.weaknesses].map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></details>`).join('')}`;
     const canvas = document.getElementById('comparisonChart');
     if (typeof Chart !== 'undefined') {
@@ -39,14 +69,18 @@ async function runContentOptimizer() {
   if (!url) { showToast('Enter a website URL.', 'error'); return; }
   showLoading('Analyzing content...', 'Reusing the existing page audit engine.');
   try {
-    const data = await apiFetch(`/content-optimizer?${new URLSearchParams({ url })}`);
+    const comparable=value=>{try{return new URL(/^https?:\/\//i.test(value)?value:`https://${value}`).href;}catch{return null;}};
+    const current=lastScanData?.contentOptimizer && [lastScanData.requestedUrl,lastScanData.resolvedUrl].some(x=>x&&comparable(x)===comparable(url));
+    const data = current ? {success:true,contentOptimizer:lastScanData.contentOptimizer} : await apiFetch(`/content-optimizer?${new URLSearchParams({ url })}`);
     if (!data.success) throw new Error(data.reason || 'Content analysis unavailable.');
     const optimizer = data.contentOptimizer;
+    renderContentIntelligence(optimizer.evidence);
+    if(current)showToast(reportText('reuse'),'success');
     document.getElementById('contentOptimizerCard').style.display = 'block';
     document.getElementById('contentOptimizerResults').innerHTML = `
       <p>Page-level heuristics. Readability uses English language syllable patterns. Suggestions require editorial review; no search volumes or rankings were measured.</p>
       <div class="grid-3">${Object.entries(optimizer.scores).map(([name,value]) => `<div class="metric-box"><div class="metric-value">${value ?? 'Unavailable'}</div><div class="metric-label">${escapeHtml(name)}</div></div>`).join('')}</div>
-      <h4>Prioritized actions</h4><ul>${optimizer.priorityRoadmap.map(r => `<li><strong>${escapeHtml(r.priority)}: ${escapeHtml(r.item)}</strong> — ${escapeHtml(r.evidence)}</li>`).join('') || '<li>No gaps detected by these checks.</li>'}</ul>
+      <h4>${escapeHtml(reportText('actions'))}</h4><ul>${optimizer.priorityRoadmap.map(r => `<li><strong>${escapeHtml(r.priority)}: ${escapeHtml(r.code ? reportText(r.code,r.params) : r.item)}</strong> — <bdi>${escapeHtml(r.evidence)}</bdi></li>`).join('') || '<li>No gaps detected by these checks.</li>'}</ul>
       ${Object.entries(optimizer.suggestions).filter(([,v]) => v.length).map(([name,values]) => `<details><summary>${escapeHtml(name)}</summary><ul>${values.map(v => `<li>${escapeHtml(v)}</li>`).join('')}</ul></details>`).join('')}`;
   } catch (error) { showToast(error.message, 'error'); }
   finally { hideLoading(); }
@@ -85,6 +119,8 @@ document.addEventListener('click', event => {
   const project = event.target.closest('[data-project-scan]');
   if (project) scanProject(project.dataset.projectScan, project.dataset.projectUrl);
 });
+
+window.ReportLanguage?.apply();
 
 function projectModal() {
   let overlay = document.getElementById('projectsModalOverlay');

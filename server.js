@@ -12,6 +12,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { parseRobots, robotsAllows } from "./lib/robots.js";
 import { analyzePageEvidence } from "./lib/evidence.js";
+import { analyzeContentEvidence, keywordEvidence, lexicalSignals, languageProfile, words, includesTerm } from "./lib/content-intelligence.js";
 import { installAccountRoutes, deletingAccountIds } from "./lib/accounts.js";
 
 dotenv.config();
@@ -865,26 +866,7 @@ export const cleanDomainBrand = (url) => {
   }
 };
 
-export const tokenizeKeywords = (text = "") => {
-  const clean = String(text)
-    .toLowerCase()
-    .normalize("NFKC")
-    .replace(/[^\p{L}\p{N}\p{M}\s]/gu, " ")
-    .split(/\s+/)
-    .filter(word => word && word.length > 3);
-
-  const freq = {};
-
-  clean.forEach(tok => {
-    if (!STOP_WORDS.includes(tok)) {
-      freq[tok] = (freq[tok] || 0) + 1;
-    }
-  });
-
-  const sorted = Object.keys(freq).sort((a, b) => freq[b] - freq[a]);
-  const finalKeywords = sorted.slice(0, 15);
-  return [...new Set(finalKeywords)];
-};
+export const tokenizeKeywords = (text = "", language = "") => keywordEvidence(text, language).terms.map(x => x.term);
 
 export const normalizeUrl = (value) => {
   try { const url = new URL(value); url.hash = ""; return url.href; }
@@ -3060,6 +3042,8 @@ export function extractPageData($, html, url) {
     return {
       src,
       alt: safeText($(el).attr("alt")),
+      role: safeText($(el).attr("role")),
+      ariaHidden: $(el).attr("aria-hidden") === "true",
       width: safeText($(el).attr("width")),
       height: safeText($(el).attr("height")),
       loading: safeText($(el).attr("loading")),
@@ -3071,7 +3055,7 @@ export function extractPageData($, html, url) {
   textRoot.find("script, style, noscript, template, [hidden], [aria-hidden='true']").remove();
   textRoot.find("br, p, li, h1, h2, h3, h4, td, div, section, article").prepend(" ").append(" ");
   const bodyText = safeText(textRoot.text()).replace(/\s+/g, " ");
-  const wordCount = bodyText.split(/\s+/).filter(Boolean).length || 0;
+  const wordCount = words(bodyText, language).length;
 
   const schemas = detectAllSchemas($, html);
   const entities = extractEntitiesV2($, html, title, h1s[0] || "", h2s, h3s, metaDescription, bodyText, url, schemas);
@@ -3079,7 +3063,7 @@ entities.totalEntityCount = entities.verifiedEntityCount + entities.candidateEnt
   const linkAnalysis = analyzeInternalLinks($, url, h2s);
   const dateInfo = extractDatesAndAuthor($, schemas);
 
-  return {
+  const page = {
     resolvedUrl: url,
     listItemsCount: $("li").length,
     tableRowsCount: $("tr").length,
@@ -3128,6 +3112,8 @@ entities.totalEntityCount = entities.verifiedEntityCount + entities.candidateEnt
     author: dateInfo.author,
     linkAnalysisDetail: linkAnalysis
   };
+  page.contentEvidence = analyzeContentEvidence($, page);
+  return page;
 }
 // =========================================================================
 // ========== SECTION 8: STRUCTURAL SCHEMA & METADATA ENGINE ===============
@@ -3716,7 +3702,7 @@ export async function calculateDynamicSeoScore(pageData, loadTimeMs, context = {
 
   // 19. Keyword Coverage (on-page self-consistency: do the page's own top
   // tokenized keywords actually appear in its title/H1?)
-  const topKeywords = tokenizeKeywords(pageData?.visibleText).slice(0, 8);
+  const topKeywords = tokenizeKeywords(pageData?.visibleText, pageData?.language).slice(0, 8);
   const titleH1Lower = `${title} ${h1s[0] || ""}`.toLowerCase();
   const keywordsInTitleOrH1 = topKeywords.filter(k => titleH1Lower.includes(k));
   const keywordRatio = topKeywords.length > 0 ? keywordsInTitleOrH1.length / topKeywords.length : 0;
@@ -3828,7 +3814,7 @@ export function calculateSemanticSeoScore(pageData, clusters, coveragePercent) {
   const metrics = [];
 
   metrics.push(buildMetric({
-    name: "Topic/Intent Coverage", raw: Math.round((coveragePercent / 100) * 30), max: 30, weight: 30,
+    name: "Topic/Intent Coverage", available: false, raw: Math.round((coveragePercent / 100) * 30), max: 30, weight: 30,
     reason: `Covers ${safeArray(clusters).filter(c => c.status === "Active").length} of ${safeArray(clusters).length} intent clusters.`,
     evidence: `Measured coverage: ${coveragePercent}%. Active clusters: ${safeArray(clusters).filter(c => c.status === "Active").map(c => c.name).join(", ") || "none"}.`,
     recommendation: "Add content addressing missing intent clusters (informational, commercial, transactional, trust, authority)."
@@ -3838,21 +3824,21 @@ export function calculateSemanticSeoScore(pageData, clusters, coveragePercent) {
   metrics.push(buildMetric({
     name: "Entity Coverage", raw: entityCount >= 15 ? 25 : entityCount >= 8 ? 15 : entityCount > 0 ? 5 : 0, max: 25, weight: 25,
     reason: entityCount >= 15 ? "Rich entity coverage supports semantic grounding." : entityCount >= 8 ? "Moderate entity coverage." : "Low entity coverage.",
-    evidence: `${entityCount} distinct entities detected (${safeNumber(pageData?.entityDetails?.verifiedEntityCount)} verified via structured data).`,
+    evidence: `${entityCount} distinct entities detected (${safeNumber(pageData?.entityDetails?.verifiedEntityCount)} declared in structured data; not independently verified).`,
     recommendation: "Reference more specific brands, products, people, and organizations relevant to the topic."
   }));
 
   const verifiedRatio = entityCount > 0 ? safeNumber(pageData?.entityDetails?.verifiedEntityCount) / entityCount : 0;
   metrics.push(buildMetric({
-    name: "Knowledge Graph Groundedness", raw: Math.round(verifiedRatio * 20), max: 20, weight: 20,
-    reason: verifiedRatio >= 0.5 ? "Most detected entities are verified via structured data." : "Most detected entities are unverified pattern matches rather than structured data.",
+    name: "Structured Entity Declarations", raw: Math.round(verifiedRatio * 20), max: 20, weight: 20,
+    reason: verifiedRatio >= 0.5 ? "Most detected entities are declared in structured data; not independently verified." : "Most detected entities are unverified pattern matches rather than structured data.",
     evidence: `${safeNumber(pageData?.entityDetails?.verifiedEntityCount)} verified / ${entityCount} total entities.`,
     recommendation: "Add JSON-LD declaring key entities (Organization, Person, Product) so they're machine-verifiable rather than inferred."
   }));
 
   const missingClusters = safeArray(clusters).filter(c => c.status === "Missing");
   metrics.push(buildMetric({
-    name: "Topical Cluster Completeness", raw: missingClusters.length === 0 ? 15 : clamp(15 - missingClusters.length * 4, 0, 15), max: 15, weight: 15,
+    name: "Topical Cluster Completeness", available: false, raw: missingClusters.length === 0 ? 15 : clamp(15 - missingClusters.length * 4, 0, 15), max: 15, weight: 15,
     reason: missingClusters.length === 0 ? "All tracked intent clusters have coverage." : `Missing coverage for: ${missingClusters.map(c => c.name).join(", ")}.`,
     evidence: `${missingClusters.length} of ${safeArray(clusters).length} tracked clusters show zero matched signals.`,
     recommendation: "Add subheadings or sections explicitly addressing the missing topical clusters."
@@ -3875,10 +3861,13 @@ export function calculateSemanticSeoScore(pageData, clusters, coveragePercent) {
 export function calculateDynamicAeoScore(pageData, docVisibleText) {
   const text = safeText(docVisibleText).toLowerCase();
   const metrics = [];
+  const lexical = lexicalSignals(pageData?.language, text);
+  const englishCalibration = languageProfile(pageData?.language, text).base === "en" && languageProfile(pageData?.language, text).latinShare >= 0.95;
+  const observedAnswers = safeArray(pageData?.contentEvidence?.answers);
 
   const hasFAQ = safeArray(pageData?.schema?.detectedTypes).some(t => String(t).toLowerCase() === "faqpage");
   metrics.push(buildMetric({
-    name: "FAQ Schema",
+    name: "FAQ Schema", available: hasFAQ,
     raw: hasFAQ ? 15 : 0,
     max: 15,
     weight: 15,
@@ -3887,34 +3876,32 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
     recommendation: "Add FAQPage JSON-LD with real question/answer pairs relevant to the page's topic."
   }));
 
-  const questionPatterns = ["what is", "how do i", "why does", "where can", "who is", "when should"];
-  const matchedQuestions = questionPatterns.filter(p => text.includes(p));
-  const hasQABlock = (text.includes("q:") && text.includes("a:")) || matchedQuestions.length > 0;
+  const matchedQuestions = lexical.questions;
+  const hasQABlock = observedAnswers.some(x => x.question && x.answerObserved);
   metrics.push(buildMetric({
-    name: "Question/Answer Blocks",
+    name: "Question/Answer Blocks", available: observedAnswers.some(x => x.question),
     raw: hasQABlock ? Math.min(12, 6 + matchedQuestions.length * 2) : 0,
     max: 12,
     weight: 12,
     reason: hasQABlock ? "Question-style phrasing detected in visible content." : "No question/answer phrasing patterns detected.",
-    evidence: matchedQuestions.length > 0 ? `Matched question patterns: ${matchedQuestions.join(", ")}.` : "No 'what is/how do i/why does' style phrasing found in body text.",
+    evidence: matchedQuestions.length > 0 ? `Matched question patterns: ${matchedQuestions.join(", ")}.` : "No question phrase matched in the supported language dictionary.",
     recommendation: "Phrase key sections as direct questions followed by concise answers, mirroring how users query AI assistants."
   }));
 
-  const definitionTerms = ["is defined as", "refers to", "means", "denotes", "is the process of", "is a term used to"];
-  const matchedDefinitions = definitionTerms.filter(term => text.includes(term));
+  const matchedDefinitions = lexical.definitions;
   metrics.push(buildMetric({
-    name: "Definitional Content",
+    name: "Definitional Content", available: matchedDefinitions.length > 0,
     raw: matchedDefinitions.length > 0 ? 10 : 0,
     max: 10,
     weight: 10,
     reason: matchedDefinitions.length > 0 ? "Definitional phrasing detected." : "No definitional phrasing detected.",
-    evidence: matchedDefinitions.length > 0 ? `Matched definitional phrases: ${matchedDefinitions.join(", ")}.` : "No 'refers to/is defined as/means' style phrasing found.",
+    evidence: matchedDefinitions.length > 0 ? `Matched definitional phrases: ${matchedDefinitions.join(", ")}.` : "No definition phrase matched in the supported language dictionary.",
     recommendation: "Open key sections with a clear one-sentence definition of the core concept being discussed."
   }));
 
   const listItemsCount = safeNumber(pageData?.listItemsCount);
   metrics.push(buildMetric({
-    name: "List Formatting",
+    name: "List Formatting", available: listItemsCount > 0,
     raw: listItemsCount > 5 ? 8 : listItemsCount > 0 ? 4 : 0,
     max: 8,
     weight: 8,
@@ -3925,7 +3912,7 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
 
   const tableRowsCount = safeNumber(pageData?.tableRowsCount);
   metrics.push(buildMetric({
-    name: "Table Formatting",
+    name: "Table Formatting", available: tableRowsCount > 0,
     raw: tableRowsCount > 0 ? 8 : 0,
     max: 8,
     weight: 8,
@@ -3936,7 +3923,7 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
 
   const hasHowTo = safeArray(pageData?.schema?.detectedTypes).some(t => String(t).toLowerCase() === "howto");
   metrics.push(buildMetric({
-    name: "HowTo Schema",
+    name: "HowTo Schema", available: hasHowTo,
     raw: hasHowTo ? 12 : 0,
     max: 12,
     weight: 12,
@@ -3971,22 +3958,22 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
     recommendation: "Pair a clear heading hierarchy with a substantive meta description so engines can frame a direct snippet."
   }));
 
-  const hasDirectAnswer = (text.includes("q:") && text.includes("a:")) || (matchedQuestions.length > 0 && text.length > 500);
+  const hasDirectAnswer = observedAnswers.some(x => x.question && x.answerObserved);
   metrics.push(buildMetric({
-    name: "Direct Answer Blocks",
+    name: "Direct Answer Blocks", available: observedAnswers.some(x => x.question),
     raw: hasDirectAnswer ? 10 : 0,
     max: 10,
     weight: 10,
-    reason: hasDirectAnswer ? "Direct-answer style content detected near question phrasing." : "No direct-answer block pattern detected.",
-    evidence: hasDirectAnswer ? "Question phrasing combined with sufficient surrounding content length." : "Insufficient combination of question phrasing and supporting content length.",
+    reason: hasDirectAnswer ? "Question heading immediately followed by an observed paragraph, list or table." : "No adjacent question/answer block observed.",
+    evidence: hasDirectAnswer ? observedAnswers.filter(x => x.question && x.answerObserved).slice(0,3).map(x => `${x.heading}: ${x.excerpt}`).join(" | ") : "Checked adjacent H2/H3 answer structures; wrapper-based answers may be missed.",
     recommendation: "Follow each question-style heading immediately with a 1-3 sentence direct answer before elaborating."
   }));
 
-  const sentenceCount = text.split(/[.!?]+/).filter(Boolean).length || 1;
+  const sentenceCount = text.split(/[.!?؟۔。！？]+/u).filter(Boolean).length || 1;
   const avgSentenceLength = words / sentenceCount;
   const answerLengthRaw = (avgSentenceLength >= 12 && avgSentenceLength <= 22) ? 5 : (avgSentenceLength < 12 || (avgSentenceLength > 22 && avgSentenceLength <= 35)) ? 3 : 0;
   metrics.push(buildMetric({
-    name: "Answer Length Calibration",
+    name: "Answer Length Calibration", available: englishCalibration,
     raw: answerLengthRaw,
     max: 5,
     weight: 5,
@@ -4007,7 +3994,7 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
   }));
 
   const result = aggregateMetrics(metrics);
-  const readabilityScore = avgSentenceLength >= 12 && avgSentenceLength <= 22 ? 100 : avgSentenceLength < 12 ? 80 : avgSentenceLength > 35 ? 30 : 60;
+  const readabilityScore = !englishCalibration ? null : avgSentenceLength >= 12 && avgSentenceLength <= 22 ? 100 : avgSentenceLength < 12 ? 80 : avgSentenceLength > 35 ? 30 : 60;
 
   // Per-engine simulation is now fully derived from the metrics above —
   // no independent static formula, so it can never drift from real evidence.
@@ -4016,10 +4003,10 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
   const tableWeight = metrics.find(m => m.metric === "Table Formatting")?.contribution || 0;
   const directAnswerWeight = metrics.find(m => m.metric === "Direct Answer Blocks")?.contribution || 0;
 
-  const chatGptCitationProbability = clamp(Math.round((result.score * 0.40) + (readabilityScore * 0.30) + (faqsWeight * 2)), 10, 99);
-  const geminiCitationProbability = clamp(Math.round((result.score * 0.35) + (tableWeight * 2) + (readabilityScore * 0.30)), 10, 99);
-  const perplexityCitationProbability = clamp(Math.round((result.score * 0.45) + (directAnswerWeight * 1.5) + (readabilityScore * 0.20)), 10, 99);
-  const claudeCitationProbability = clamp(Math.round((result.score * 0.30) + (readabilityScore * 0.50) + (howToWeight * 1.5)), 10, 99);
+  const chatGptCitationProbability = clamp(Math.round((result.score * 0.40) + ((readabilityScore ?? result.score) * 0.30) + (faqsWeight * 2)), 10, 99);
+  const geminiCitationProbability = clamp(Math.round((result.score * 0.35) + (tableWeight * 2) + ((readabilityScore ?? result.score) * 0.30)), 10, 99);
+  const perplexityCitationProbability = clamp(Math.round((result.score * 0.45) + (directAnswerWeight * 1.5) + ((readabilityScore ?? result.score) * 0.20)), 10, 99);
+  const claudeCitationProbability = clamp(Math.round((result.score * 0.30) + ((readabilityScore ?? result.score) * 0.50) + (howToWeight * 1.5)), 10, 99);
 
   return {
     aeoScore: result.score,
@@ -4034,6 +4021,7 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
       hasFAQ, hasHowTo, matchesDefinition: matchedDefinitions.length > 0, hasDirectAnswer,
       listItemsCount, tableRowsCount, jsonLdCount
     },
+    methodology: "Uncalibrated structural heuristics. Optional FAQ/HowTo, lists and tables are not failed when absent; English sentence calibration is excluded for other languages.",
     simulations: {
       chatgpt: { score: chatGptCitationProbability, reasoning: chatGptCitationProbability >= 80 ? "Strong Q&A structure and FAQ schema alignment." : "Add FAQ schema and direct-answer blocks to improve selection likelihood." },
       gemini: { score: geminiCitationProbability, reasoning: geminiCitationProbability >= 80 ? "Well-structured tables and readable sentence rhythm." : "Add tables and structured data to improve Gemini's rendering fit." },
@@ -4198,7 +4186,7 @@ export function calculateDynamicAuthority(pageData) {
   const coveredClusters = pageData?.topicalAuthority?.clusters?.filter(c => c.status === "Active") || [];
   const clusterCoveragePercent = safeNumber(pageData?.topicalAuthority?.coveragePercent);
   metrics.push(buildMetric({
-    name: "Topical Intent Coverage",
+    name: "Topical Intent Coverage", available: false,
     raw: Math.round((clusterCoveragePercent / 100) * 25), max: 25, weight: 25,
     reason: clusterCoveragePercent > 0 ? `Covers ${coveredClusters.length} of ${safeArray(pageData?.topicalAuthority?.clusters).length} intent clusters.` : "No intent clusters (informational/commercial/transactional/trust) covered.",
     evidence: `Measured intent cluster coverage: ${clusterCoveragePercent}%.`,
@@ -4210,7 +4198,7 @@ export function calculateDynamicAuthority(pageData) {
     name: "Entity Representation",
     raw: entityCount > 15 ? 15 : entityCount > 5 ? 8 : 0, max: 15, weight: 15,
     reason: entityCount > 15 ? "High named-entity representation." : entityCount > 5 ? "Moderate entity representation." : "Low entity representation.",
-    evidence: `${entityCount} distinct verified entities detected.`,
+    evidence: `${entityCount} distinct candidate/declared entities detected.`,
     recommendation: "Reference more specific brands, products, people, or locations relevant to the topic."
   }));
 
@@ -4354,7 +4342,7 @@ export function scanDynamicTrustSignals($, html, url, pageData) {
 
   return {
     trustScore: result.score,
-    status: result.score >= 80 ? "SaaS Enterprise Trusted" : result.score >= 50 ? "Verified Profile" : "Unverified Identity Framework",
+    status: result.score >= 80 ? "Strong observed trust signals" : result.score >= 50 ? "Some observed trust signals" : "Limited observed trust signals",
     metrics: result.metrics,
     passedMetrics: result.passedMetrics,
     failedMetrics: result.failedMetrics,
@@ -4481,7 +4469,7 @@ export function calculateGeoScore(pageData, semanticSeoAudit, authorityAudit, sc
   const metrics = [
     buildMetric({
       name: "Entity Coverage", raw: Math.round((clamp(entityCount, 0, 20) / 20) * 20), max: 20, weight: 20,
-      reason: `${entityCount} distinct entities detected (${(verifiedRatio * 100).toFixed(0)}% verified via structured data).`,
+      reason: `${entityCount} distinct entities detected (${(verifiedRatio * 100).toFixed(0)}% declared in structured data; not independently verified).`,
       evidence: `Verified: ${safeNumber(pageData?.entityDetails?.verifiedEntityCount)}. Total: ${entityCount}.`,
       recommendation: "Reference more specific, structured-data-backed entities relevant to the topic."
     }),
@@ -4751,54 +4739,26 @@ export function calculateContentOptimizer(ctx) {
     missingExternalReferences: { detected: safeNumber(eeatAudit?.auditMetrics?.externalRefLinksCount) === 0, evidence: `${safeNumber(eeatAudit?.auditMetrics?.externalRefLinksCount)} outbound external reference link(s) detected.` }
   };
 
-  // --- Suggestions: grounded strictly in the gap evidence above, or in
-  // existing citation-engine evidence already computed elsewhere. Never
-  // invents specific keyword phrases, fake entity names, or fabricated
-  // content that isn't traceable to a real measured signal. ---
+  const evidence = pageData?.contentEvidence || null;
+  const observed = evidence?.findings || [];
   const suggestions = {
-    newH2: missingClusters.map(c => `Add an H2 addressing the "${c.name}" intent cluster, which currently has no coverage on this page.`),
-    newH3: h2s.length > 0 ? h2s.slice(0, 3).map(h => `Consider breaking "${h}" into supporting H3 subsections for deeper coverage.`) : ["Add H2 sections first — H3 suggestions require existing H2 structure to subdivide."],
-    newFaqs: gaps.missingFaqs.detected ? ["Add an FAQ section with FAQPage schema addressing common questions about this page's topic."] : [],
-    newInternalLinks: gaps.missingInternalLinks.detected ? ["Add contextual internal links to related pages on this site — none were detected on this page."] : [],
-    newAnchorText: safeArray(seoAudit?.metrics)?.find(m => m.metric === "Keyword Coverage" && !m.passed) ? ["Diversify anchor text to better reflect the page's own dominant extracted keywords (see Keyword Coverage finding)."] : [],
-    newEntityAdditions: gaps.missingEntities.detected ? [`Reference more specific named entities (brands, products, people, locations) relevant to the topic — only ${safeNumber(pageData?.entityDetails?.totalEntityCount)} currently detected.`] : [],
-    paragraphImprovements: contentQualityAudit?.duplication?.duplicateBlockCount > 0 ? [`${contentQualityAudit.duplication.duplicateBlockCount} duplicated paragraph block(s) detected within this page — rewrite or remove repeated content.`] : [],
-    sentenceImprovements: readabilityMetric ? [`Average sentence length is ${readabilityMetric.avgWordsPerSentence} words (target 12-22 for optimal readability and AI extractability).`] : [],
-    featuredSnippetOpportunities: !aeoAudit?.structuralAeoMetrics?.hasDirectAnswer ? ["Add a concise 1-3 sentence direct-answer paragraph immediately after a question-style heading to target featured snippets."] : [],
-    googleAiOverviewOpportunities: safeArray(aiEngineCitations?.engines?.gemini?.missingSignals).map(s => `For Google AI Overviews (via Gemini-family signals): address "${s}".`),
-    chatgptCitationOpportunities: safeArray(aiEngineCitations?.engines?.chatgpt?.missingSignals).map(s => `For ChatGPT citation: address "${s}".`),
-    perplexityCitationOpportunities: safeArray(aiEngineCitations?.engines?.perplexity?.missingSignals).map(s => `For Perplexity citation: address "${s}".`),
-    geminiCitationOpportunities: safeArray(aiEngineCitations?.engines?.gemini?.missingSignals).map(s => `For Gemini citation: address "${s}".`)
+    newH2: [],
+    newH3: [],
+    newFaqs: observed.filter(x => x.code === "answerHeading").map(x => `Answer the observed question heading: ${x.params.heading}. No FAQ schema or search-demand claim is implied.`),
+    newInternalLinks: (evidence?.internalLinkOpportunities || []).map(x => `${x.anchor} → ${x.url}. Shared terms: ${x.matchedTerms.join(", ")}. Target is unverified.`),
+    newAnchorText: observed.filter(x => x.code === "linkAnchor").map(x => `${x.params.anchor} → ${x.params.target}: replace the generic anchor with an accurate destination description.`),
+    newEntityAdditions: [],
+    paragraphImprovements: contentQualityAudit?.duplication?.duplicateBlockCount > 0 ? [`${contentQualityAudit.duplication.duplicateBlockCount} duplicated paragraph blocks observed within this page.`] : [],
+    sentenceImprovements: readabilityMetric?.available ? [`English Flesch estimate ${readabilityMetric.fleschScore}; average ${readabilityMetric.avgWordsPerSentence} words per sentence. Review in context, not as a ranking threshold.`] : [],
+    featuredSnippetOpportunities: observed.filter(x => x.code === "answerHeading").map(x => `Place a useful answer directly below “${x.params.heading}”. No featured snippet is guaranteed.`),
+    googleAiOverviewOpportunities: [], chatgptCitationOpportunities: [], perplexityCitationOpportunities: [], geminiCitationOpportunities: []
   };
-
-  // --- Priority roadmap: every detected gap becomes one roadmap item,
-  // prioritized by how foundational/high-impact that gap category is. ---
-  const priorityMap = {
-    missingSchema: "Critical", missingFaqs: "Critical",
-    missingHeadings: "High", missingEntities: "High", missingAuthorSignals: "High", missingTrustSignals: "High",
-    missingNlpTerms: "Medium", missingTables: "Medium", missingLists: "Medium", missingInternalLinks: "Medium", missingAltText: "Medium",
-    missingImages: "Low", missingCta: "Low", missingExternalReferences: "Low"
-  };
-  const gapLabels = {
-    missingHeadings: "Add missing heading structure", missingEntities: "Increase named-entity coverage",
-    missingNlpTerms: "Cover missing topical/intent clusters", missingFaqs: "Add FAQ section with schema",
-    missingTables: "Add tabular data where relevant", missingLists: "Add list-formatted content",
-    missingInternalLinks: "Add internal links", missingImages: "Add relevant images",
-    missingAltText: "Add descriptive alt text to images", missingTrustSignals: "Strengthen trust signals",
-    missingSchema: "Deploy missing recommended schema types", missingAuthorSignals: "Add author attribution",
-    missingCta: "Add a clear call-to-action", missingExternalReferences: "Add outbound authoritative references"
-  };
-  const priorityRoadmap = Object.entries(gaps)
-    .filter(([, g]) => g.detected)
-    .map(([key, g]) => ({
-      item: gapLabels[key] || key,
-      priority: priorityMap[key] || "Medium",
-      evidence: g.evidence
-    }))
-    .sort((a, b) => {
-      const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-      return order[a.priority] - order[b.priority];
-    });
+  // Compatibility gap flags describe applicability honestly, not automatic failures.
+  gaps.missingFaqs = {detected: false, evidence: "FAQ content and FAQPage are optional; no universal requirement is inferred."};
+  gaps.missingNlpTerms = {detected: false, evidence: "A phrase dictionary cannot establish missing topics or search demand."};
+  gaps.missingEntities = {detected: false, evidence: "A fixed entity count is not a topic-specific completeness standard."};
+  gaps.missingCta = {detected: null, evidence: "CTA relevance requires business/page intent review; English phrase absence is not a failure."};
+  const priorityRoadmap = observed.map(x => ({item:x.code,priority:x.priority,evidence:x.evidence.observed,code:x.code,params:x.params,url:x.evidence.url}));
 
   return {
     scores: {
@@ -4811,6 +4771,7 @@ export function calculateContentOptimizer(ctx) {
       headingStructureScore,
       semanticCoverageScore
     },
+    evidence,
     gaps,
     suggestions,
     priorityRoadmap
@@ -4866,6 +4827,10 @@ export function compareTargetToCompetitor(targetData, competitorData) {
     buildComparison("AI Citation", targetData.citationScore, competitorData.citationScore)
   ];
 
+  const targetLanguage = targetData.contentEvidence?.locale?.base || null;
+  const competitorLanguage = competitorData.contentEvidence?.locale?.base || null;
+  const comparableContent = Boolean(targetLanguage && targetLanguage === competitorLanguage);
+  const contentComparison = {available:comparableContent,targetLanguage,competitorLanguage,note:comparableContent ? "Literal same-language differences; editorial relevance is unverified, not established topic gaps." : "Lexical gaps withheld: languages differ or are undeclared. Translation/semantic equivalence was not measured."};
   const targetHeadings = [...safeArray(targetData.h2s), ...safeArray(targetData.h3s)].map(h => String(h).toLowerCase());
   const compHeadings = [...safeArray(competitorData.h2s), ...safeArray(competitorData.h3s)];
   const headingGaps = compHeadings.filter(compH => {
@@ -4915,10 +4880,11 @@ export function compareTargetToCompetitor(targetData, competitorData) {
       authority: metricComparisons[4], trust: metricComparisons[5]
     },
     gaps: {
-      headingGaps: [...new Set(headingGaps)].slice(0, 10),
-      keywordGaps: [...new Set(keywordGaps)].slice(0, 15),
+      headingGaps: comparableContent ? [...new Set(headingGaps)].slice(0, 10) : [],
+      contentComparison,
+      keywordGaps: comparableContent ? [...new Set(keywordGaps)].slice(0, 15) : [],
       schemaGaps: [...new Set(schemaGaps)],
-      entityGaps: [...new Set(entityGaps)].slice(0, 10),
+      entityGaps: comparableContent ? [...new Set(entityGaps)].slice(0, 10) : [],
       contentLengthDiff: safeNumber(competitorData.wordCount) - safeNumber(targetData.wordCount),
       competitorHasMoreWords: safeNumber(competitorData.wordCount) > safeNumber(targetData.wordCount)
     }
@@ -5291,19 +5257,10 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
     const aeoAudit = calculateDynamicAeoScore(pageData, pageData.visibleText);
     const eeatAudit = analyzeEEATAdvanced($, pageData.visibleText, pageData);
 
-    const lowercaseText = String(pageData.visibleText).toLowerCase();
-    const clusters = TOPICAL_CLUSTERS.map(cluster => {
-      const activeQueries = cluster.queries.filter(q => lowercaseText.includes(q));
-      const hasCoverage = activeQueries.length > 0;
-      return {
-        name: cluster.name,
-        status: hasCoverage ? "Active" : "Missing",
-        coverageCount: activeQueries.length,
-        matchedQueries: activeQueries
-      };
-    });
-    const coveredClusters = clusters.filter(c => c.status === "Active").length;
-    const coveragePercent = Math.round((coveredClusters / TOPICAL_CLUSTERS.length) * 100);
+    const phraseEvidence = pageData.contentEvidence.lexical;
+    const clusters = phraseEvidence.clusters;
+    // Phrase dictionaries describe observed words, not measured topical authority.
+    const coveragePercent = null;
 
     const enrichedPageData = {
       ...pageData,
@@ -5359,88 +5316,11 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       )
     );
 
-    const roadmap = [];
-    const autopilotTasks = [];
-    let taskIdCounter = 1;
-
-    if (seoAudit.score < 85) {
-      roadmap.push("Improve title keywords length constraints and meta description elements.");
-      autopilotTasks.push({
-        id: `task_${taskIdCounter++}`,
-        priority: "HIGH",
-        impact: 12,
-        title: "Optimize Metadata Lengths",
-        description: "Align Title tags and Meta descriptions with target search and engine character constraints."
-      });
-    }
-    if (!schemasDetected.detectedTypes.includes("FAQPage")) {
-      roadmap.push("Generate FAQPage JSON-LD and configure dynamic Q&A structures on content root.");
-      autopilotTasks.push({
-        id: `task_${taskIdCounter++}`,
-        priority: "MEDIUM",
-        impact: 10,
-        title: "Add FAQ Schema Markup",
-        description: "Inject structured FAQ metadata to secure direct answer and generative snippet cards."
-      });
-    }
-    if (pageData.wordCount < 600) {
-      roadmap.push("Broaden technical word density and topical guides to over 1,500 words.");
-      autopilotTasks.push({
-        id: `task_${taskIdCounter++}`,
-        priority: "MEDIUM",
-        impact: 8,
-        title: "Deepen Technical Content density",
-        description: "Add clear procedural headings to expand informational coverage for LLMs."
-      });
-    }
-    if (!robotsData.found) {
-      roadmap.push("Publish a robots.txt file to explicitly declare crawl permissions and sitemap location.");
-      autopilotTasks.push({
-        id: `task_${taskIdCounter++}`,
-        priority: "LOW",
-        impact: 5,
-        title: "Publish robots.txt",
-        description: "Add a robots.txt file at the site root declaring crawl rules and sitemap URL."
-      });
-    }
-    if (!sitemapData.found) {
-      roadmap.push("Generate and submit an XML sitemap to improve discovery and indexation coverage.");
-      autopilotTasks.push({
-        id: `task_${taskIdCounter++}`,
-        priority: "LOW",
-        impact: 5,
-        title: "Generate XML Sitemap",
-        description: "Create a sitemap.xml and reference it from robots.txt for improved crawl efficiency."
-      });
-    }
-    if (schemasDetected.validation.invalidBlocks > 0) {
-      roadmap.push("Repair malformed JSON-LD schema blocks flagged during structural validation.");
-      autopilotTasks.push({
-        id: `task_${taskIdCounter++}`,
-        priority: "HIGH",
-        impact: 9,
-        title: "Fix Invalid JSON-LD Markup",
-        description: `${schemasDetected.validation.invalidBlocks} structured data block(s) failed validation and are likely ignored by search and AI crawlers.`
-      });
-    }
-
     // Collected last so it had the maximum possible time (up to the 12s
     // cap set when it was kicked off, near the top of this function) to
     // resolve in parallel with all the scoring work above.
     const psiData = await coreWebVitalsPromise;
     const coreWebVitalsAudit = calculateCoreWebVitalsScore(psiData);
-    if (!coreWebVitalsAudit.available) {
-      roadmap.push("Core Web Vitals data was unavailable for this scan — retry via the dedicated Core Web Vitals check.");
-    } else if (coreWebVitalsAudit.metrics.some(m => m.passed === false)) {
-      roadmap.push(`Improve Core Web Vitals: ${coreWebVitalsAudit.metrics.filter(m => m.passed === false).map(m => m.metric).join(", ")}.`);
-      autopilotTasks.push({
-        id: `task_${taskIdCounter++}`,
-        priority: "HIGH",
-        impact: Math.round(coreWebVitalsAudit.metrics.reduce((s, m) => s + m.expectedImprovement, 0)),
-        title: "Fix Core Web Vitals",
-        description: `${coreWebVitalsAudit.dataSource === "field" ? "Real user data" : "Lab simulation"} shows ${coreWebVitalsAudit.metrics.filter(m => m.passed === false).map(m => m.metric).join(", ")} not meeting Google's "good" threshold.`
-      });
-    }
 
     const brokenExternalLinkData = await sampleBrokenExternalLinks($, crawl.finalUrl);
     const technicalMonitor = generateTechnicalSeoMonitorReport({ pageData, resolvedUrl: crawl.finalUrl,
@@ -5448,11 +5328,16 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       mixedContent, brokenAssetData, brokenLinkData: seoAudit.brokenLinkSample, brokenExternalLinkData,
       httpStatus: crawl.status, technicalSeoAudit });
     technicalMonitor.scopeNote = "Single page and bounded HEAD samples only. Unreachable/protected/HEAD-unsupported resources are unknown, not verified broken. Hreflang and remote canonical targets are not yet verified.";
+    const evidenceTasks = contentOptimizer.priorityRoadmap.map((x,i) => ({id:`evidence_${i}`,title:x.code,description:x.evidence,priority:x.priority,code:x.code,params:x.params,url:x.url,automaticExecution:false}));
+    const technicalTasks = safeArray(technicalSeoAudit.metrics).filter(x => x.passed === false).map((x,i) => ({id:`technical_${i}`,title:x.metric,description:`${x.evidence} — ${x.recommendation}`,priority:"High",url:crawl.finalUrl,automaticExecution:false}));
+    const performanceTasks = safeArray(coreWebVitalsAudit.metrics).filter(x => x.passed === false).map((x,i) => ({id:`performance_${i}`,title:x.metric,description:`${coreWebVitalsAudit.dataSource}: ${x.reason} — ${x.recommendation}`,priority:"High",url:crawl.finalUrl,automaticExecution:false}));
+    const measuredTasks = [...evidenceTasks,...technicalTasks,...performanceTasks];
     const payload = {
       success: true,
       status: "SUCCESS",
       blocked: false,
       resolvedUrl: crawl.finalUrl,
+      requestedUrl: url,
       title: pageData.title,
       metaDescription: pageData.metaDescription,
       wordCount: pageData.wordCount,
@@ -5460,7 +5345,7 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       links: pageData.links,
       h2s: pageData.headings.h2s,
       h3s: pageData.headings.h3s,
-      keywords: tokenizeKeywords(pageData.visibleText),
+      keywords: tokenizeKeywords(pageData.visibleText, pageData.language),
       publishedDate: pageData.publishedDate,
       modifiedDate: pageData.modifiedDate,
       author: pageData.author,
@@ -5468,6 +5353,8 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       technicalSeo: technicalSeoAudit,
       technicalMonitor,
       pageEvidence: analyzePageEvidence($, pageData, robotsData),
+      contentEvidence: pageData.contentEvidence,
+      analysisVersion: "2026-10-30-evidence-v1",
       mixedContent,
       brokenAssets: brokenAssetData,
       securityHeaders,
@@ -5570,9 +5457,9 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       },
       recommendedSchemas: schemaBlock.missingSchemas,
       schemaRecommendationsBlock: schemaBlock.schemaGeneratorCode,
-      roadmap,
-      aiAutopilot: autopilotTasks,
-      autopilot: { tasks: autopilotTasks }
+      roadmap: measuredTasks.map(x => `${x.priority}: ${x.title} — ${x.description} (${x.url})`),
+      aiAutopilot: measuredTasks,
+      autopilot: { tasks: measuredTasks }
     };
 
     scanCache.set(cacheKey, { timestamp: Date.now(), data: payload });
@@ -6225,7 +6112,7 @@ app.get("/roadmap", authenticateAndRateLimit, asyncHandler(async (req, res) => {
     success: true,
     scores: {
       currentAIVisibility: data.overallAIVisibilityScore || 0,
-      potentialAIVisibility: data.potentialAIVisibility || 0
+      potentialAIVisibility: data.potentialAIVisibility ?? null
     },
     audit: data.audit || {},
     entities: data.entities || [],
@@ -6256,7 +6143,8 @@ app.get("/keyword-theft", authenticateAndRateLimit, asyncHandler(async (req, res
   const userKeywords = safeArray(userData.keywords).map(k => String(k).toLowerCase());
   const compKeywords = safeArray(compData.keywords);
 
-  const stolenKeywords = compKeywords
+  const contentComparison = compareTargetToCompetitor(userData, compData).gaps.contentComparison;
+  const stolenKeywords = (contentComparison.available ? compKeywords : [])
     .filter(k => !userKeywords.includes(String(k).toLowerCase()))
     .map(k => {
       const diff = getKeywordDifficulty(k);
@@ -6273,12 +6161,30 @@ app.get("/keyword-theft", authenticateAndRateLimit, asyncHandler(async (req, res
     status: "SUCCESS",
     success: true,
     stolenKeywords: stolenKeywords.slice(0, 10),
+    contentComparison,
     scores: {
       userScore: userData.overallAIVisibilityScore || 0,
       competitorScore: compData.overallAIVisibilityScore || 0
     }
   });
 }));
+
+export function buildObservedContentBrief(data) {
+  const evidence = data.contentEvidence;
+  return {
+    targetWordCount: null,
+    wordCountNote: "No target length can be established from one page without a relevant editorial/research brief.",
+    observedWordCount: data.wordCount ?? null,
+    title: evidence?.titleDraft?.text || data.title || evidence?.topic || null,
+    titleSource: evidence?.titleDraft ? "Observed H1 draft" : "Observed page title/topic",
+    recommendedHeadings: (evidence?.answers || []).filter(x => x.question && !x.answerObserved).map(x => x.heading),
+    targetKeywords: safeArraySlice(data.keywords, 0, 8),
+    keywordMethod: "Observed terms only; no search demand or ranking claims.",
+    recommendedSchemas: [],
+    schemaNote: "Only select schema after confirming page purpose and required visible facts; no universal FAQ/HowTo prescription.",
+    contentEvidence: evidence || null
+  };
+}
 
 app.get("/content-brief", authenticateAndRateLimit, asyncHandler(async (req, res) => {
   const { url } = req.query;
@@ -6294,12 +6200,8 @@ app.get("/content-brief", authenticateAndRateLimit, asyncHandler(async (req, res
   res.json({
     status: "SUCCESS",
     success: true,
-    brief: {
-      targetWordCount: Math.max(1500, safeNumber(data.wordCount) + 1000),
-      recommendedHeadings: safeArraySlice(data.h2s, 0, 5).map(h => `Expand Context: ${String(h)}`),
-      targetKeywords: safeArraySlice(data.keywords, 0, 8),
-      recommendedSchemas: data.recommendedSchemas || []
-    }
+    title: data.title,
+    brief: buildObservedContentBrief(data)
   });
 }));
 

@@ -4758,7 +4758,8 @@ export function calculateContentOptimizer(ctx) {
   gaps.missingNlpTerms = {detected: false, evidence: "A phrase dictionary cannot establish missing topics or search demand."};
   gaps.missingEntities = {detected: false, evidence: "A fixed entity count is not a topic-specific completeness standard."};
   gaps.missingCta = {detected: null, evidence: "CTA relevance requires business/page intent review; English phrase absence is not a failure."};
-  const priorityRoadmap = observed.map(x => ({item:x.code,priority:x.priority,evidence:x.evidence.observed,code:x.code,params:x.params,url:x.evidence.url}));
+  const actionLabels = {missingH1:"Add a descriptive page heading",multipleH1:"Review the heading hierarchy",missingTitle:"Write a page title",missingDescription:"Write a page-specific description",missingLanguage:"Declare the document language",answerHeading:"Answer the observed question heading",linkAnchor:"Improve the observed link label",imageAlt:"Review the observed image alternative text"};
+  const priorityRoadmap = observed.map(x => ({item:actionLabels[x.code] || "Review the observed page evidence",priority:x.priority,evidence:x.evidence.observed,code:x.code,params:x.params,url:x.evidence.url}));
 
   return {
     scores: {
@@ -5328,7 +5329,7 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       mixedContent, brokenAssetData, brokenLinkData: seoAudit.brokenLinkSample, brokenExternalLinkData,
       httpStatus: crawl.status, technicalSeoAudit });
     technicalMonitor.scopeNote = "Single page and bounded HEAD samples only. Unreachable/protected/HEAD-unsupported resources are unknown, not verified broken. Hreflang and remote canonical targets are not yet verified.";
-    const evidenceTasks = contentOptimizer.priorityRoadmap.map((x,i) => ({id:`evidence_${i}`,title:x.code,description:x.evidence,priority:x.priority,code:x.code,params:x.params,url:x.url,automaticExecution:false}));
+    const evidenceTasks = contentOptimizer.priorityRoadmap.map((x,i) => ({id:`evidence_${i}`,title:x.item,description:x.evidence,priority:x.priority,code:x.code,params:x.params,url:x.url,automaticExecution:false}));
     const technicalTasks = safeArray(technicalSeoAudit.metrics).filter(x => x.passed === false).map((x,i) => ({id:`technical_${i}`,title:x.metric,description:`${x.evidence} — ${x.recommendation}`,priority:"High",url:crawl.finalUrl,automaticExecution:false}));
     const performanceTasks = safeArray(coreWebVitalsAudit.metrics).filter(x => x.passed === false).map((x,i) => ({id:`performance_${i}`,title:x.metric,description:`${coreWebVitalsAudit.dataSource}: ${x.reason} — ${x.recommendation}`,priority:"High",url:crawl.finalUrl,automaticExecution:false}));
     const measuredTasks = [...evidenceTasks,...technicalTasks,...performanceTasks];

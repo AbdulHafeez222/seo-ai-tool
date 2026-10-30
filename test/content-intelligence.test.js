@@ -103,6 +103,17 @@ test('translated evidence report is safe, persists language, and changing langua
     window.document.getElementById('url').value='example.com';
     await window.runContentOptimizer();
     assert.equal(requests,baseline);
-    window.setReportLanguage('not-supported');assert.equal(window.document.documentElement.lang,'en');
+    window.setReportLanguage('ur');
+    window.openAuthModal('register');
+    window.document.getElementById('authEmail').value='retained@example.com';
+    assert.equal(window.document.getElementById('authModalTitle').textContent,window.ReportLanguage.t('createAccount'));
+    window.setReportLanguage('ps');
+    assert.equal(window.document.getElementById('authModalTitle').textContent,window.ReportLanguage.t('createAccount'));
+    assert.equal(window.document.getElementById('authEmail').value,'retained@example.com');
+    window.switchAuthMode('login');
+    assert.equal(window.document.getElementById('authSubmitLabel').textContent,window.ReportLanguage.t('login'));
+    assert.equal(window.document.querySelector('label[for="authPassword"]').textContent,window.ReportLanguage.t('password'));
+    assert.equal(window.document.getElementById('changePasswordAction').textContent,window.ReportLanguage.t('changePassword'));
+    window.setReportLanguage('not-supported');assert.equal(window.document.documentElement.lang,'ps');
   }finally{window.close();}
 });

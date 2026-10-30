@@ -1,5 +1,8 @@
 /* Extend the existing vanilla interface and reuse its API/error/loading helpers. */
 let contentEvidenceLast = null;
+let pageEvidenceLast = null;
+let technicalMonitorLast = null;
+let contentOptimizerLast = null;
 function reportText(key,params={}) { return window.ReportLanguage?.t(key,params) || key; }
 function setReportLanguage(value) { window.ReportLanguage?.set(value); }
 function renderContentIntelligence(report) {
@@ -30,6 +33,9 @@ function renderContentIntelligence(report) {
 }
 window.addEventListener('report-language-change',()=>{
   renderContentIntelligence(contentEvidenceLast);
+  renderPageEvidence(pageEvidenceLast);
+  renderTechnicalMonitor(technicalMonitorLast);
+  renderContentOptimizer(contentOptimizerLast);
   if(document.getElementById('authModalOverlay')?.classList.contains('open'))applyAuthModalMode(true);
   if(document.getElementById('profileModalOverlay')?.classList.contains('open'))openProfileModal();
   if(lastScanData?.localSEO)renderLocalSeo(lastScanData);
@@ -81,41 +87,49 @@ async function runContentOptimizer() {
     const optimizer = data.contentOptimizer;
     renderContentIntelligence(optimizer.evidence);
     if(current)showToast(reportText('reuse'),'success');
-    document.getElementById('contentOptimizerCard').style.display = 'block';
-    document.getElementById('contentOptimizerResults').innerHTML = `
-      <p>Page-level heuristics. Readability uses English language syllable patterns. Suggestions require editorial review; no search volumes or rankings were measured.</p>
-      <div class="grid-3">${Object.entries(optimizer.scores).map(([name,value]) => `<div class="metric-box"><div class="metric-value">${value ?? 'Unavailable'}</div><div class="metric-label">${escapeHtml(name)}</div></div>`).join('')}</div>
-      <h4>${escapeHtml(reportText('actions'))}</h4><ul>${optimizer.priorityRoadmap.map(r => `<li><strong>${escapeHtml(r.priority)}: ${escapeHtml(r.code ? reportText(r.code,r.params) : r.item)}</strong> — <bdi>${escapeHtml(r.evidence)}</bdi></li>`).join('') || '<li>No gaps detected by these checks.</li>'}</ul>
-      ${Object.entries(optimizer.suggestions).filter(([,v]) => v.length).map(([name,values]) => `<details><summary>${escapeHtml(name)}</summary><ul>${values.map(v => `<li>${escapeHtml(v)}</li>`).join('')}</ul></details>`).join('')}`;
+    renderContentOptimizer(optimizer);
   } catch (error) { showToast(error.message, 'error'); }
   finally { hideLoading(); }
 }
 
+function renderContentOptimizer(optimizer) {
+  contentOptimizerLast=optimizer || null;
+  document.getElementById('contentOptimizerCard').style.display=optimizer?'block':'none';
+  if(!optimizer)return;
+  document.getElementById('contentOptimizerResults').innerHTML = `
+      <p>${escapeHtml(reportText('optimizerScope'))}</p><p>${escapeHtml(reportText('reportDetailsNote'))}</p>
+      <div class="grid-3">${Object.entries(optimizer.scores).map(([name,value]) => `<div class="metric-box"><div class="metric-value">${escapeHtml(value ?? reportText('unavailable'))}</div><div class="metric-label">${escapeHtml(reportText(name))}</div></div>`).join('')}</div>
+      <h4>${escapeHtml(reportText('actions'))}</h4><ul>${optimizer.priorityRoadmap.map(r => `<li><strong>${escapeHtml(reportText(r.priority.toLowerCase()))}: ${escapeHtml(r.code ? reportText(r.code,r.params) : r.item)}</strong> — <bdi>${escapeHtml(r.evidence)}</bdi></li>`).join('') || `<li>${escapeHtml(reportText('none'))}</li>`}</ul>
+      ${Object.entries(optimizer.suggestions).filter(([,v]) => v.length).map(([name,values]) => `<details><summary>${escapeHtml(name)}</summary><ul>${values.map(v => `<li>${escapeHtml(v)}</li>`).join('')}</ul></details>`).join('')}`;
+}
+
 function renderTechnicalMonitor(report) {
+  technicalMonitorLast=report || null;
+  document.getElementById('technicalMonitorCard').style.display = report?'block':'none';
   if (!report) return;
-  document.getElementById('technicalMonitorCard').style.display = 'block';
   document.getElementById('technicalMonitorResults').innerHTML = `<p>${escapeHtml(report.scopeNote)}</p>
-    <p>Technical score: ${report.technicalSeoScore ?? 'Unavailable'}/100; ${report.criticalIssueCount} critical, ${report.warningCount} warnings.</p>
-    ${report.issues.map(issue => `<details><summary>${escapeHtml(issue.severity)}: ${escapeHtml(issue.issueName)}</summary><p>${escapeHtml(issue.technicalExplanation)}</p><p>${escapeHtml(issue.recommendedFix)}</p></details>`).join('') || '<p>No issues found by the available checks.</p>'}`;
+    <p>${escapeHtml(reportText('technicalSummary',{score:report.technicalSeoScore == null ? reportText('unavailable') : `${report.technicalSeoScore}/100`,critical:report.criticalIssueCount,warnings:report.warningCount}))}</p><p>${escapeHtml(reportText('reportDetailsNote'))}</p>
+    ${report.issues.map(issue => `<details><summary>${escapeHtml(reportText(issue.severity.toLowerCase()))}: ${escapeHtml(issue.issueName)}</summary><p>${escapeHtml(issue.technicalExplanation)}</p><p>${escapeHtml(issue.recommendedFix)}</p></details>`).join('') || `<p>${escapeHtml(reportText('none'))}</p>`}`;
 }
 
 function renderPageEvidence(report) {
+  pageEvidenceLast=report || null;
   const card = document.getElementById('pageEvidenceCard');
   card.style.display = report ? 'block' : 'none';
   if (!report) return;
   const locale = report.locale;
   document.getElementById('pageEvidenceResults').innerHTML = `
     <p>${escapeHtml(report.scope)}</p>
-    <p>Declared language: ${escapeHtml(locale.language || 'Missing')}; document direction: ${escapeHtml(locale.direction || 'Missing')}. Script does not identify a language.</p>
-    <h4>AI access policy</h4><p>${escapeHtml(report.crawlerPolicies.scope)}</p>
-    <div style="overflow-x:auto"><table><thead><tr><th>Agent / token</th><th>Purpose</th><th>Declared policy</th></tr></thead><tbody>
+    <p>${escapeHtml(reportText('declaredLanguage'))}: <bdi>${escapeHtml(locale.language || reportText('missingValue'))}</bdi>; ${escapeHtml(reportText('directionLabel'))}: <bdi>${escapeHtml(locale.direction || reportText('missingValue'))}</bdi>. ${escapeHtml(reportText('scriptNote'))}</p><p>${escapeHtml(reportText('reportDetailsNote'))}</p>
+    <h4>${escapeHtml(reportText('policyTitle'))}</h4><p>${escapeHtml(report.crawlerPolicies.scope)}</p>
+    <div style="overflow-x:auto"><table><thead><tr><th>${escapeHtml(reportText('agentLabel'))}</th><th>${escapeHtml(reportText('purposeLabel'))}</th><th>${escapeHtml(reportText('policyLabel'))}</th></tr></thead><tbody>
       ${report.crawlerPolicies.bots.map(bot => `<tr><td>${escapeHtml(bot.agent)}</td><td>${escapeHtml(bot.purpose)}${bot.note ? `<br>${escapeHtml(bot.note)}` : ''}</td><td>${escapeHtml(bot.policy)}</td></tr>`).join('')}
     </tbody></table></div>
-    <h4>Prioritized evidence</h4>
-    ${report.findings.map(item => `<details><summary>${escapeHtml(item.priority)}: ${escapeHtml(item.check)}</summary><p>${escapeHtml(item.evidence)}</p><p>${escapeHtml(item.action)}</p></details>`).join('') || '<p>No issues found by these checks.</p>'}
-    <h4>Extractable answer samples</h4><p>Observed heading/answer pairs, not measured AI citations.</p>
-    ${report.answerBlocks.map(block => `<details><summary>${escapeHtml(block.heading)}</summary><p>${escapeHtml(block.excerpt)}</p><small>${escapeHtml(block.format)}</small></details>`).join('') || '<p>No adjacent answer blocks observed.</p>'}
-    <h4>Language alternatives</h4><ul>${report.alternates.map(item => `<li>${escapeHtml(item.language)}: ${escapeHtml(item.url || 'Invalid URL')} (${item.valid ? 'syntax valid; target unverified' : 'invalid'})</li>`).join('') || '<li>No hreflang declarations observed. A single-language page may not need them.</li>'}</ul>`;
+    <h4>${escapeHtml(reportText('actions'))}</h4>
+    ${report.findings.map(item => `<details><summary>${escapeHtml(reportText(item.priority.toLowerCase()))}: ${escapeHtml(item.check)}</summary><p>${escapeHtml(item.evidence)}</p><p>${escapeHtml(item.action)}</p></details>`).join('') || `<p>${escapeHtml(reportText('none'))}</p>`}
+    <h4>${escapeHtml(reportText('answerSamples'))}</h4><p>${escapeHtml(reportText('answerSamplesNote'))}</p>
+    ${report.answerBlocks.map(block => `<details><summary><bdi>${escapeHtml(block.heading)}</bdi></summary><p dir="auto">${escapeHtml(block.excerpt)}</p><small>${escapeHtml(block.format)}</small></details>`).join('') || `<p>${escapeHtml(reportText('noAnswerSamples'))}</p>`}
+    <h4>${escapeHtml(reportText('alternatesTitle'))}</h4><ul>${report.alternates.map(item => `<li>${escapeHtml(item.language)}: ${escapeHtml(item.url || reportText('invalid'))} (${escapeHtml(reportText(item.valid ? 'alternateValid' : 'invalid'))})</li>`).join('') || `<li>${escapeHtml(reportText('noAlternates'))}</li>`}</ul>`;
 }
 
 document.addEventListener('click', event => {

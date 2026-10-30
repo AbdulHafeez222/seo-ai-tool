@@ -210,8 +210,136 @@
   }
 };
   for(const locale of Object.keys(accountCopy))Object.assign(dictionaries[locale],accountCopy[locale]);
+  const reportCopy = {
+  "en": {
+    "pageEvidenceTitle": "AI access and multilingual evidence",
+    "technicalTitle": "Technical SEO monitor",
+    "optimizerTitle": "Content optimizer",
+    "reportDetailsNote": "Detailed diagnostic explanations below may remain in English. Original website excerpts are preserved.",
+    "declaredLanguage": "Declared language",
+    "directionLabel": "Document direction",
+    "scriptNote": "Script alone does not identify a language.",
+    "policyTitle": "AI access policy",
+    "agentLabel": "Agent / token",
+    "purposeLabel": "Purpose",
+    "policyLabel": "Declared policy",
+    "answerSamples": "Extractable answer samples",
+    "answerSamplesNote": "Observed heading and answer pairs; these are not measured AI citations.",
+    "noAnswerSamples": "No adjacent answer blocks observed.",
+    "alternatesTitle": "Language alternatives",
+    "alternateValid": "Syntax valid; target unverified",
+    "invalid": "Invalid",
+    "noAlternates": "No hreflang declarations observed. A single-language page may not need them.",
+    "technicalSummary": "Technical score: {score}; critical issues: {critical}; warnings: {warnings}.",
+    "optimizerScope": "Page-level heuristics. Readability is calibrated for English only. Suggestions require editorial review; search volumes and rankings were not measured.",
+    "overallContentScore": "Overall content",
+    "contentQualityScore": "Content quality",
+    "topicalAuthorityScore": "Topical authority",
+    "readabilityScore": "English readability",
+    "aiReadinessScore": "AI readiness signals",
+    "entityCoverageScore": "Entity coverage",
+    "headingStructureScore": "Heading structure",
+    "semanticCoverageScore": "Semantic coverage",
+    "missingValue": "Missing"
+  },
+  "ur": {
+    "pageEvidenceTitle": "AI رسائی اور کثیر لسانی شواہد",
+    "technicalTitle": "تکنیکی SEO نگرانی",
+    "optimizerTitle": "مواد کی بہتری",
+    "reportDetailsNote": "نیچے تفصیلی تشخیصی وضاحتیں انگریزی میں ہو سکتی ہیں۔ ویب سائٹ کے اصل اقتباسات برقرار ہیں۔",
+    "declaredLanguage": "اعلان کردہ زبان",
+    "directionLabel": "دستاویز کی سمت",
+    "scriptNote": "صرف رسم الخط سے زبان کی شناخت نہیں ہوتی۔",
+    "policyTitle": "AI رسائی کی پالیسی",
+    "agentLabel": "ایجنٹ / ٹوکن",
+    "purposeLabel": "مقصد",
+    "policyLabel": "اعلان کردہ پالیسی",
+    "answerSamples": "قابلِ استخراج جوابات",
+    "answerSamplesNote": "مشاہدہ شدہ سرخی اور جواب کے جوڑے؛ یہ ناپے گئے AI حوالہ جات نہیں ہیں۔",
+    "noAnswerSamples": "سرخی کے ساتھ جواب نہیں ملا۔",
+    "alternatesTitle": "متبادل زبانیں",
+    "alternateValid": "ساخت درست؛ ہدف غیر تصدیق شدہ",
+    "invalid": "غلط",
+    "noAlternates": "hreflang اعلانات نہیں ملے۔ ایک زبان کے صفحے کو ان کی ضرورت نہیں بھی ہو سکتی۔",
+    "technicalSummary": "تکنیکی اسکور: {score}؛ سنگین مسائل: {critical}؛ تنبیہات: {warnings}۔",
+    "optimizerScope": "صفحے کی سطح کے تخمینے۔ پڑھنے کی آسانی کا پیمانہ صرف انگریزی کے لیے ہے۔ تجاویز کا اداراتی جائزہ ضروری ہے؛ تلاش کا حجم اور رینکنگ نہیں ناپی گئی۔",
+    "overallContentScore": "مواد کا مجموعی اسکور",
+    "contentQualityScore": "مواد کا معیار",
+    "topicalAuthorityScore": "موضوعاتی اتھارٹی",
+    "readabilityScore": "انگریزی پڑھنے کی آسانی",
+    "aiReadinessScore": "AI تیاری کے اشارے",
+    "entityCoverageScore": "ناموں کی کوریج",
+    "headingStructureScore": "سرخیوں کی ساخت",
+    "semanticCoverageScore": "معنوی کوریج",
+    "missingValue": "موجود نہیں"
+  },
+  "ps": {
+    "pageEvidenceTitle": "د AI لاسرسی او څو ژبني شواهد",
+    "technicalTitle": "د تخنیکي SEO څارنه",
+    "optimizerTitle": "د منځپانګې ښه کول",
+    "reportDetailsNote": "لاندې تفصیلي تشریحات ښايي په انګلیسي وي. د وېبپاڼې اصلي اقتباسونه ساتل کېږي.",
+    "declaredLanguage": "اعلان شوې ژبه",
+    "directionLabel": "د سند لوری",
+    "scriptNote": "یوازې لیکدود ژبه نه پېژني.",
+    "policyTitle": "د AI لاسرسي تګلاره",
+    "agentLabel": "اجنټ / ټوکن",
+    "purposeLabel": "موخه",
+    "policyLabel": "اعلان شوې تګلاره",
+    "answerSamples": "د راایستلو وړ ځوابونه",
+    "answerSamplesNote": "لیدل شوي سرلیکونه او ځوابونه؛ دا د AI اندازه شوي حوالې نه دي.",
+    "noAnswerSamples": "له سرلیک سره نږدې ځواب ونه لیدل شو.",
+    "alternatesTitle": "بدیلې ژبې",
+    "alternateValid": "جوړښت سم دی؛ موخه نه ده تایید شوې",
+    "invalid": "ناسم",
+    "noAlternates": "د hreflang اعلانونه ونه لیدل شول. په یوه ژبه پاڼه ښايي ورته اړتیا ونه لري.",
+    "technicalSummary": "تخنیکي نمره: {score}؛ جدي ستونزې: {critical}؛ خبرداري: {warnings}.",
+    "optimizerScope": "د یوې پاڼې اټکلونه. د لوستلو اسانتیا یوازې د انګلیسي لپاره سنجول کېږي. وړاندیزونه سمونیزې کتنې ته اړتیا لري؛ د لټون حجم او درجې نه دي اندازه شوي.",
+    "overallContentScore": "د منځپانګې ټولیزه نمره",
+    "contentQualityScore": "د منځپانګې کیفیت",
+    "topicalAuthorityScore": "موضوعي اعتبار",
+    "readabilityScore": "د انګلیسي لوستلو اسانتیا",
+    "aiReadinessScore": "د AI چمتووالي نښې",
+    "entityCoverageScore": "د نومونو پوښښ",
+    "headingStructureScore": "د سرلیکونو جوړښت",
+    "semanticCoverageScore": "معنايي پوښښ",
+    "missingValue": "نشته"
+  },
+  "ar": {
+    "pageEvidenceTitle": "أدلة الوصول بالذكاء الاصطناعي وتعدد اللغات",
+    "technicalTitle": "مراقبة SEO التقني",
+    "optimizerTitle": "تحسين المحتوى",
+    "reportDetailsNote": "قد تبقى التفسيرات التشخيصية التفصيلية أدناه بالإنجليزية. تُحفظ مقتطفات الموقع الأصلية.",
+    "declaredLanguage": "اللغة المعلنة",
+    "directionLabel": "اتجاه المستند",
+    "scriptNote": "نوع الكتابة وحده لا يحدد اللغة.",
+    "policyTitle": "سياسة وصول الذكاء الاصطناعي",
+    "agentLabel": "الوكيل / الرمز",
+    "purposeLabel": "الغرض",
+    "policyLabel": "السياسة المعلنة",
+    "answerSamples": "عينات أجوبة قابلة للاستخراج",
+    "answerSamplesNote": "أزواج عناوين وأجوبة مرصودة؛ ليست استشهادات مقاسة للذكاء الاصطناعي.",
+    "noAnswerSamples": "لم تُرصد أجوبة مجاورة للعناوين.",
+    "alternatesTitle": "بدائل اللغة",
+    "alternateValid": "الصياغة صحيحة؛ الوجهة غير متحقق منها",
+    "invalid": "غير صالح",
+    "noAlternates": "لم تُرصد إعلانات hreflang. قد لا تحتاجها صفحة بلغة واحدة.",
+    "technicalSummary": "النتيجة التقنية: {score}؛ مشكلات حرجة: {critical}؛ تحذيرات: {warnings}.",
+    "optimizerScope": "تقديرات على مستوى الصفحة. قياس سهولة القراءة معاير للإنجليزية فقط. تتطلب الاقتراحات مراجعة تحريرية؛ لم يُقَس حجم البحث أو الترتيب.",
+    "overallContentScore": "المحتوى الإجمالي",
+    "contentQualityScore": "جودة المحتوى",
+    "topicalAuthorityScore": "السلطة الموضوعية",
+    "readabilityScore": "سهولة قراءة الإنجليزية",
+    "aiReadinessScore": "إشارات الاستعداد للذكاء الاصطناعي",
+    "entityCoverageScore": "تغطية الأسماء",
+    "headingStructureScore": "بنية العناوين",
+    "semanticCoverageScore": "التغطية الدلالية",
+    "missingValue": "مفقود"
+  }
+};
+  for (const locale of Object.keys(reportCopy)) Object.assign(dictionaries[locale],reportCopy[locale]);
+  const supported=value=>typeof value==='string' && Object.hasOwn(dictionaries,value);
   let selected='en';
-  try {const saved=localStorage.getItem('aegis-report-language');if(dictionaries[saved])selected=saved;}catch{}
+  try {const saved=localStorage.getItem('aegis-report-language');if(supported(saved))selected=saved;}catch{}
   function t(key,params={}) {return String(dictionaries[selected][key] || dictionaries.en[key] || key).replace(/\{(\w+)\}/g,(_,k)=>String(params[k]??''));}
   function apply() {
     document.documentElement.lang=selected;
@@ -221,5 +349,5 @@
     const selector=document.getElementById('reportLanguage');if(selector)selector.value=selected;
     window.dispatchEvent(new Event('report-language-change'));
   }
-  window.ReportLanguage={t,apply,get:()=>selected,set(value){if(!dictionaries[value])return;selected=value;try{localStorage.setItem('aegis-report-language',value);}catch{}apply();}};
+  window.ReportLanguage={t,apply,get:()=>selected,set(value){if(!supported(value))return;selected=value;try{localStorage.setItem('aegis-report-language',value);}catch{}apply();}};
 })();

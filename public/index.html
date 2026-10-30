@@ -986,7 +986,7 @@ li { margin: 6px 0; color: var(--text-secondary); }
 
 .report-language-control {display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;max-width:100%;}
 .report-language-control select {width:auto;min-width:100px;padding:7px;border-radius:8px;background:var(--bg-card,#fff);color:var(--text-primary,#111);}
-#contentIntelligenceResults {overflow-wrap:anywhere;}
+#contentIntelligenceResults,#pageEvidenceResults,#technicalMonitorResults,#contentOptimizerResults {overflow-wrap:anywhere;min-width:0;}
 #contentIntelligenceResults blockquote {margin:10px 0;padding:10px;border-inline-start:3px solid var(--accent-primary);white-space:pre-wrap;}
 #contentIntelligenceResults table {width:100%;}
 html[dir="rtl"] body {font-family:Tahoma,Arial,sans-serif;}
@@ -1500,11 +1500,11 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
     <h3 id="contentIntelligenceHeading" data-i18n="context">Page-specific Content Intelligence</h3>
     <div id="contentIntelligenceResults"></div>
   </section>
-  <section id="pageEvidenceCard" class="card" style="display:none;"><h3>AI Access &amp; Multilingual Evidence</h3><div id="pageEvidenceResults"></div></section>
-  <section id="technicalMonitorCard" class="card" style="display:none;"><h3>Technical SEO Monitor</h3><div id="technicalMonitorResults"></div></section>
+  <section id="pageEvidenceCard" class="card" style="display:none;"><h3 data-i18n="pageEvidenceTitle">AI Access &amp; Multilingual Evidence</h3><div id="pageEvidenceResults"></div></section>
+  <section id="technicalMonitorCard" class="card" style="display:none;"><h3 data-i18n="technicalTitle">Technical SEO Monitor</h3><div id="technicalMonitorResults"></div></section>
 
   <section id="contentOptimizerCard" class="card" style="display:none;" aria-labelledby="contentOptimizerHeading">
-    <h3 id="contentOptimizerHeading"><span class="card-title-group"><span aria-hidden="true">🧠</span> AI Content Optimizer Pro</span></h3>
+    <h3 id="contentOptimizerHeading"><span class="card-title-group"><span aria-hidden="true">🧠</span> <span data-i18n="optimizerTitle">Content Optimizer</span></span></h3>
     <div id="contentOptimizerResults"></div>
   </section>
 
@@ -2789,6 +2789,9 @@ function resetReportState() {
 
   lastScanData = null;
   if (typeof renderContentIntelligence === "function") renderContentIntelligence(null);
+  if (typeof renderPageEvidence === "function") renderPageEvidence(null);
+  if (typeof renderTechnicalMonitor === "function") renderTechnicalMonitor(null);
+  if (typeof renderContentOptimizer === "function") renderContentOptimizer(null);
 }
 
 // =========================================================================

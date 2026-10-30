@@ -31,6 +31,7 @@ test('frontend renders real payload shapes, comparison and optimizer controls wi
   };
   try {
     const inline = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join('\n');
+    window.eval(readFileSync(new URL('../public/languages.js',import.meta.url),'utf8'));
     window.eval(inline + '\n' + readFileSync(new URL('../public/features.js',import.meta.url),'utf8'));
     await new Promise(r=>setTimeout(r,0));
     assert.equal(window.getStoredToken(),null);
@@ -48,7 +49,7 @@ test('frontend renders real payload shapes, comparison and optimizer controls wi
     window.renderPageEvidence(null);
     assert.equal(window.document.getElementById('pageEvidenceCard').style.display,'none');
     await window.runContentOptimizer();
-    assert.match(window.document.getElementById('contentOptimizerResults').textContent,/Unavailable/);
+    assert.ok(window.document.getElementById('contentOptimizerResults').textContent.includes(window.ReportLanguage.t('unavailable')));
     window.document.getElementById('competitorUrl').value='https://competitor.example';
     await window.compareMultiSite();
     assert.match(window.document.getElementById('comparisonDetails').textContent,/Tied/);

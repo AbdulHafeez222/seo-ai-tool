@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as cheerio from 'cheerio';
 import {JSDOM} from 'jsdom';
 import {readFileSync} from 'node:fs';
+import {analyzePageEvidence} from '../lib/evidence.js';
 import {analyzeContentEvidence,keywordEvidence,languageProfile,lexicalSignals,includesTerm} from '../lib/content-intelligence.js';
 process.env.JWT_SECRET='test-only-secret-with-more-than-32-characters';
 delete process.env.MONGODB_URI;
@@ -98,11 +99,29 @@ test('translated evidence report is safe, persists language, and changing langua
     }
     assert.equal(requests,baseline);
     // A matching completed scan already contains the optimizer; do not charge again.
-    const optimizer={scores:{overallContentScore:55},priorityRoadmap:[],suggestions:{newFaqs:[]},evidence:page.contentEvidence};
+    const optimizer={scores:{overallContentScore:55,readabilityScore:null,headingStructureScore:0},priorityRoadmap:[],suggestions:{newFaqs:[]},evidence:page.contentEvidence};
     window.setScanForTest({resolvedUrl:'https://example.com/',contentOptimizer:optimizer});
     window.document.getElementById('url').value='example.com';
     await window.runContentOptimizer();
     assert.equal(requests,baseline);
+    const pageReport=analyzePageEvidence(cheerio.load('<html lang="ur"><body><h2>سوال؟</h2><p>اصل جواب۔</p></body></html>'),{resolvedUrl:'https://example.com/',language:'ur',visibleText:'اصل جواب۔'}, {available:true,found:false,status:404});
+    pageReport.answerBlocks[0].excerpt='<img src=x onerror=alert(1)> اصل جواب۔';
+    window.renderPageEvidence(pageReport);
+    window.renderTechnicalMonitor({scopeNote:'One page only',technicalSeoScore:null,criticalIssueCount:0,warningCount:1,issues:[]});
+    for(const locale of ['ur','ps','ar','en']) {
+      window.setReportLanguage(locale);
+      const t=window.ReportLanguage.t;
+      assert.equal(window.document.querySelector('#technicalMonitorCard h3').textContent,t('technicalTitle'));
+      assert.equal(window.document.querySelector('#pageEvidenceCard h3').textContent,t('pageEvidenceTitle'));
+      assert.match(window.document.getElementById('technicalMonitorResults').textContent,new RegExp(t('unavailable')));
+      assert.ok(!window.document.getElementById('technicalMonitorResults').textContent.includes('/100'));
+      assert.match(window.document.getElementById('pageEvidenceResults').textContent,/اصل جواب/);
+      assert.equal(window.document.querySelector('#pageEvidenceResults img'),null);
+      const values=[...window.document.querySelectorAll('#contentOptimizerResults .metric-value')].map(el=>el.textContent);
+      assert.deepEqual(values,['55',t('unavailable'),'0']);
+      assert.equal(window.document.querySelector('#contentOptimizerResults .metric-label').textContent,t('overallContentScore'));
+      assert.equal(requests,baseline);
+    }
     window.setReportLanguage('ur');
     window.openAuthModal('register');
     window.document.getElementById('authEmail').value='retained@example.com';
@@ -114,6 +133,26 @@ test('translated evidence report is safe, persists language, and changing langua
     assert.equal(window.document.getElementById('authSubmitLabel').textContent,window.ReportLanguage.t('login'));
     assert.equal(window.document.querySelector('label[for="authPassword"]').textContent,window.ReportLanguage.t('password'));
     assert.equal(window.document.getElementById('changePasswordAction').textContent,window.ReportLanguage.t('changePassword'));
-    window.setReportLanguage('not-supported');assert.equal(window.document.documentElement.lang,'ps');
+    for(const invalid of ['not-supported','__proto__','constructor','toString',null,{}]) {
+      window.setReportLanguage(invalid);assert.equal(window.document.documentElement.lang,'ps');
+    }
+    window.resetReportState();
+    window.setReportLanguage('ar');
+    for(const id of ['contentIntelligenceCard','contentOptimizerCard','technicalMonitorCard','pageEvidenceCard'])assert.equal(window.document.getElementById(id).style.display,'none');
+    assert.equal(requests,baseline);
+
   }finally{window.close();}
+});
+
+test('inherited property names in a saved locale fall back to English',()=>{
+  for(const saved of ['__proto__','constructor','toString']) {
+    const dom=new JSDOM('<html><body></body></html>',{url:'https://app.example',runScripts:'outside-only'});
+    try {
+      dom.window.localStorage.setItem('aegis-report-language',saved);
+      dom.window.eval(readFileSync(new URL('../public/languages.js',import.meta.url),'utf8'));
+      assert.equal(dom.window.ReportLanguage.get(),'en');
+      dom.window.ReportLanguage.apply();
+      assert.equal(dom.window.document.documentElement.lang,'en');
+    }finally{dom.window.close();}
+  }
 });

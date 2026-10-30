@@ -12,6 +12,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { parseRobots, robotsAllows } from "./lib/robots.js";
 import { analyzePageEvidence } from "./lib/evidence.js";
+import { observeTrustEvidence } from "./lib/trust-evidence.js";
 import { analyzeContentEvidence, keywordEvidence, lexicalSignals, languageProfile, words, includesTerm } from "./lib/content-intelligence.js";
 import { installAccountRoutes, deletingAccountIds } from "./lib/accounts.js";
 
@@ -2749,11 +2750,6 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
     services: [], locations: []
   };
 
-  const brandName = getBrandNameEnhanced(url, $, title, schemas);
-  if (brandName && brandName !== "Brand Authority") {
-    // Domain/title-derived brand remains a legacy display hint, not verified structured data.
-  }
-
   // Verified entities: only from structured data the page itself declares.
   try {
     $('script[type="application/ld+json"]').each((_, el) => {
@@ -2866,14 +2862,14 @@ export function extractEntitiesV2($, html, title, h1, h2s, h3s, metaDescription,
     // New verified/candidate structure — the source of truth going forward.
     verified: finalVerified,
     candidates: finalCandidates,
-    verifiedEntityCount: verifiedCount,
+    verifiedEntityCount: verifiedCount, // compatibility key: declarations, not independent verification
+    schemaDeclaredEntityCount: verifiedCount,
+    independentlyVerified: false,
     candidateEntityCount: candidateCount,
 
     // Legacy flat fields preserved for existing payload/frontend compatibility.
-    // Only "Brand Authority" remains as a fallback since other scoring logic
-    // (e.g. isGenericTitle checks) already recognizes it as a deliberate
-    // "brand undetermined" marker, not a fabricated entity name.
-    brands: namesOnly(finalVerified.brands, [brandName || "Brand Authority"]),
+    // Unknown brands remain empty; domain-derived guesses are not entity evidence.
+    brands: namesOnly(finalVerified.brands, []),
     organizations: namesOnly(finalVerified.organizations, []),
     locations: namesOnly([...finalVerified.locations], namesOnly(finalCandidates.locations, [])),
     services: namesOnly(finalCandidates.services, []),
@@ -3112,6 +3108,8 @@ entities.totalEntityCount = entities.verifiedEntityCount + entities.candidateEnt
     author: dateInfo.author,
     linkAnalysisDetail: linkAnalysis
   };
+  page.trustEvidence = observeTrustEvidence($, page);
+  page.mapDetected = page.trustEvidence.mapLinks.length > 0;
   page.contentEvidence = analyzeContentEvidence($, page);
   return page;
 }
@@ -4038,78 +4036,66 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
 export function analyzeEEATAdvanced($, bodyText, pageData) {
   const text = safeText(bodyText).toLowerCase();
   const metrics = [];
+  const evidence = pageData.trustEvidence || observeTrustEvidence($, pageData);
 
-  const hasAuthor = $('meta[name="author"]').length > 0 || $('[rel="author"]').length > 0 || $('[itemprop="author"]').length > 0 || Boolean(pageData?.author);
+  const hasAuthor = Boolean(evidence.namedAuthor);
   metrics.push(buildMetric({
-    name: "Author Attribution",
+    name: "Author Attribution", available: evidence.authored || hasAuthor,
     raw: hasAuthor ? 15 : 0, max: 15, weight: 15,
     reason: hasAuthor ? "Author metadata or byline detected." : "No author attribution found.",
     evidence: hasAuthor ? `Author: ${safeText(pageData?.author, "detected via meta/rel/itemprop attribute")}.` : "No <meta name=\"author\">, [rel=author], or [itemprop=author] element found.",
     recommendation: "Add a named author with a byline and, ideally, a linked author bio page."
   }));
 
-  let hasAbout = false, hasContact = false, hasPrivacy = false, hasTerms = false;
-  $("a").each((_, el) => {
-    const href = safeText($(el).attr("href")).toLowerCase();
-    const textContext = safeText($(el).text()).toLowerCase();
-    if (href.includes("about") || textContext.includes("about us") || textContext.includes("our story")) hasAbout = true;
-    if (href.includes("contact") || textContext.includes("contact us") || textContext.includes("support")) hasContact = true;
-    if (href.includes("privacy") || textContext.includes("privacy policy")) hasPrivacy = true;
-    if (href.includes("terms") || textContext.includes("terms of service") || textContext.includes("terms and conditions")) hasTerms = true;
-  });
+  const hasAbout = evidence.roleLinks.about.length > 0;
+  const hasContact = evidence.roleLinks.contact.length > 0;
+  const hasPrivacy = evidence.roleLinks.privacy.length > 0;
+  const hasTerms = evidence.roleLinks.terms.length > 0;
 
   metrics.push(buildMetric({
-    name: "About Page",
+    name: "About Page", available: evidence.organization || hasAbout,
     raw: hasAbout ? 10 : 0, max: 10, weight: 10,
     reason: hasAbout ? "About/organizational profile link detected." : "No About Us section linked from this page.",
-    evidence: `Anchor scan for 'about'/'about us'/'our story': ${hasAbout ? "match found" : "no match"}.`,
+    evidence: `Supported multilingual about-link label/path scan: ${hasAbout ? "match found" : "no match"}.`,
     recommendation: "Link a dedicated About Us page describing the organization, its people, and its mission."
   }));
 
   metrics.push(buildMetric({
-    name: "Contact Page",
+    name: "Contact Page", available: evidence.organization || hasContact,
     raw: hasContact ? 10 : 0, max: 10, weight: 10,
     reason: hasContact ? "Contact/support link detected." : "No Contact Us path found.",
-    evidence: `Anchor scan for 'contact'/'contact us'/'support': ${hasContact ? "match found" : "no match"}.`,
+    evidence: `Supported multilingual contact-link label/path scan: ${hasContact ? "match found" : "no match"}.`,
     recommendation: "Link a Contact page with a real business email, phone number, or support channel."
   }));
 
   metrics.push(buildMetric({
-    name: "Privacy Policy",
+    name: "Privacy Policy", available: hasPrivacy,
     raw: hasPrivacy ? 10 : 0, max: 10, weight: 10,
     reason: hasPrivacy ? "Privacy Policy link detected." : "No Privacy Policy found.",
-    evidence: `Anchor scan for 'privacy'/'privacy policy': ${hasPrivacy ? "match found" : "no match"}.`,
-    recommendation: "Publish and link a Privacy Policy page — required for compliance and expected for trust signals."
+    evidence: `Supported multilingual privacy-link label/path scan: ${hasPrivacy ? "match found" : "no match"}.`,
+    recommendation: "Publish and link a Privacy Policy page — describing actual data handling; legal applicability requires a separate review."
   }));
 
   metrics.push(buildMetric({
-    name: "Terms of Service",
+    name: "Terms of Service", available: hasTerms,
     raw: hasTerms ? 10 : 0, max: 10, weight: 10,
     reason: hasTerms ? "Terms of Service link detected." : "No Terms of Service found.",
-    evidence: `Anchor scan for 'terms'/'terms of service'/'terms and conditions': ${hasTerms ? "match found" : "no match"}.`,
+    evidence: `Supported multilingual terms-link label/path scan: ${hasTerms ? "match found" : "no match"}.`,
     recommendation: "Publish and link a Terms of Service page defining usage rules and liability."
   }));
 
-  const organizationDetected = safeArray(pageData?.schema?.detectedTypes).some(t => String(t).toLowerCase() === "organization");
+  const organizationDetected = evidence.organization;
   metrics.push(buildMetric({
-    name: "Organization Schema",
+    name: "Organization Schema", available: organizationDetected,
     raw: organizationDetected ? 10 : 0, max: 10, weight: 10,
     reason: organizationDetected ? "Organization structured data detected." : "No Organization JSON-LD schema detected.",
     evidence: organizationDetected ? "Organization type present in detected schema types." : "No Organization entry in detected schema types.",
     recommendation: "Add Organization JSON-LD with name, logo, url, and sameAs social profile links."
   }));
 
-  let externalRefLinksCount = 0;
-  $("a[href^='http']").each((_, el) => {
-    const href = safeText($(el).attr("href"));
-    if (href && pageData?.resolvedUrl) {
-      try {
-        if (!href.includes(new URL(pageData.resolvedUrl).hostname)) externalRefLinksCount++;
-      } catch {}
-    }
-  });
+  const externalRefLinksCount = evidence.externalLinks.length;
   metrics.push(buildMetric({
-    name: "Outbound Authority Citations",
+    name: "External Link Observations", available: externalRefLinksCount > 0,
     raw: clamp(externalRefLinksCount, 0, 3) * 3.33,
     max: 10, weight: 10,
     reason: externalRefLinksCount > 2 ? "Outbound references to external platforms present." : "Low outbound citation volume.",
@@ -4118,21 +4104,21 @@ export function analyzeEEATAdvanced($, bodyText, pageData) {
   }));
 
   const credentialTerms = ["certified", "certificate", "ph.d", "doctor", "bachelor", "master of", "diploma", "accredited"];
-  const matchedCredentials = credentialTerms.filter(term => text.includes(term));
+  const matchedCredentials = credentialTerms.filter(term => includesTerm(text,term));
   metrics.push(buildMetric({
-    name: "Credentials & Expertise Signals",
+    name: "Credentials & Expertise Signals", available: matchedCredentials.length > 0,
     raw: matchedCredentials.length > 0 ? 10 : 0, max: 10, weight: 10,
-    reason: matchedCredentials.length > 0 ? "Professional/academic credential terms detected." : "No credential terms detected in visible text.",
+    reason: matchedCredentials.length > 0 ? "Credential wording observed; qualifications are unverified." : "No credential terms detected in visible text.",
     evidence: matchedCredentials.length > 0 ? `Matched terms: ${matchedCredentials.join(", ")}.` : "No 'certified/accredited/Ph.D.' style terms found.",
     recommendation: "State relevant certifications, degrees, or professional experience where applicable."
   }));
 
   const yearsInBusinessTerms = ["founded in", "established in", "years in business", "est. 19", "est. 20", "years of experience", "celebrating our"];
-  const matchedYears = yearsInBusinessTerms.filter(term => text.includes(term));
+  const matchedYears = yearsInBusinessTerms.filter(term => includesTerm(text,term));
   metrics.push(buildMetric({
-    name: "Business Longevity Signals",
+    name: "Business Longevity Signals", available: matchedYears.length > 0,
     raw: matchedYears.length > 0 ? 5 : 0, max: 5, weight: 5,
-    reason: matchedYears.length > 0 ? "Business founding/tenure language detected." : "No business tenure signals detected.",
+    reason: matchedYears.length > 0 ? "Business tenure wording observed; claim is unverified." : "No business tenure signals detected.",
     evidence: matchedYears.length > 0 ? `Matched phrases: ${matchedYears.join(", ")}.` : "No 'founded in/established in/years in business' phrasing found.",
     recommendation: "Mention founding year or years of operating experience to reinforce established credibility."
   }));
@@ -4141,13 +4127,13 @@ export function analyzeEEATAdvanced($, bodyText, pageData) {
   metrics.push(buildMetric({
     name: "HTTPS Security",
     raw: isHttps ? 5 : 0, max: 5, weight: 5,
-    reason: isHttps ? "Secure HTTPS connection verified." : "Page served over insecure HTTP.",
+    reason: isHttps ? "HTTPS URL observed; certificate validity is not inferred from markup." : "Page served over insecure HTTP.",
     evidence: `Resolved URL scheme: ${safeText(pageData?.resolvedUrl).split("://")[0] || "unknown"}.`,
     recommendation: "Serve the page over HTTPS with a valid TLS certificate."
   }));
 
   metrics.push(buildMetric({
-    name: "Content Freshness Timestamp",
+    name: "Content Freshness Timestamp", available: evidence.authored || Boolean(pageData?.modifiedDate),
     raw: pageData?.modifiedDate ? 5 : 0, max: 5, weight: 5,
     reason: pageData?.modifiedDate ? "Last-modified timestamp detected." : "No last-modified timestamp detected.",
     evidence: pageData?.modifiedDate ? `Last modified: ${pageData.modifiedDate}.` : "No article:modified_time meta tag or dateModified schema property found.",
@@ -4158,7 +4144,10 @@ export function analyzeEEATAdvanced($, bodyText, pageData) {
 
   return {
     score: result.score,
-    status: result.score >= 80 ? "High Trust (Enterprise Ready)" : result.score >= 50 ? "Verified Authority" : "Shallow Authority Profile",
+    status: result.score === null ? "Insufficient applicable evidence" : "On-page signals only; authority not independently verified",
+    scope: evidence.scope,
+    independentlyVerified: false,
+    evidenceCoverage: {assessedMetrics:result.metrics.filter(m => m.weight > 0).length,totalMetrics:result.metrics.length},
     metrics: result.metrics,
     passedMetrics: result.passedMetrics,
     failedMetrics: result.failedMetrics,
@@ -4256,35 +4245,30 @@ export function calculateDynamicAuthority(pageData) {
 export function scanDynamicTrustSignals($, html, url, pageData) {
   const text = $('body').text().toLowerCase();
   const metrics = [];
+  const evidence = pageData.trustEvidence || observeTrustEvidence($, pageData);
 
   const isHttps = url.startsWith("https://");
   metrics.push(buildMetric({
     name: "HTTPS Security",
     raw: isHttps ? 20 : 0, max: 20, weight: 20,
-    reason: isHttps ? "SSL/HTTPS validated." : "Page served over insecure HTTP.",
+    reason: isHttps ? "HTTPS URL observed; markup alone does not validate a certificate." : "Page served over insecure HTTP.",
     evidence: `URL scheme: ${url.split("://")[0] || "unknown"}.`,
     recommendation: "Serve the page over HTTPS with a valid TLS certificate."
   }));
 
-  const hasContact = pageData?.entityDetails?.emails?.length > 0 || pageData?.entityDetails?.phones?.length > 0;
+  const hasContact = evidence.contact.emails.length > 0 || evidence.contact.phones.length > 0;
   metrics.push(buildMetric({
-    name: "Direct Contact Methods",
+    name: "Direct Contact Methods", available: evidence.organization || hasContact,
     raw: hasContact ? 15 : 0, max: 15, weight: 15,
     reason: hasContact ? "Email or phone contact detected in page content." : "No email or phone contact detected.",
-    evidence: `Emails detected: ${safeArray(pageData?.entityDetails?.emails).length}. Phones detected: ${safeArray(pageData?.entityDetails?.phones).length}.`,
+    evidence: `mailto links: ${evidence.contact.emails.length}. tel links: ${evidence.contact.phones.length}.`,
     recommendation: "Publish a visible email address and/or phone number on the page."
   }));
 
-  let hasPrivacy = false, hasTerms = false;
-  $("a").each((_, el) => {
-    const href = safeText($(el).attr("href")).toLowerCase();
-    const textCtx = safeText($(el).text()).toLowerCase();
-    if (href.includes("privacy") || textCtx.includes("privacy")) hasPrivacy = true;
-    if (href.includes("terms") || textCtx.includes("terms") || href.includes("tos")) hasTerms = true;
-  });
+  const hasPrivacy = evidence.roleLinks.privacy.length > 0, hasTerms = evidence.roleLinks.terms.length > 0;
 
   metrics.push(buildMetric({
-    name: "Privacy Policy Disclosure",
+    name: "Privacy Policy Disclosure", available: hasPrivacy,
     raw: hasPrivacy ? 15 : 0, max: 15, weight: 15,
     reason: hasPrivacy ? "Privacy Policy link detected." : "No Privacy Policy disclosure found.",
     evidence: `Anchor scan for 'privacy': ${hasPrivacy ? "match found" : "no match"}.`,
@@ -4292,46 +4276,47 @@ export function scanDynamicTrustSignals($, html, url, pageData) {
   }));
 
   metrics.push(buildMetric({
-    name: "Terms of Service Disclosure",
+    name: "Terms of Service Disclosure", available: hasTerms,
     raw: hasTerms ? 10 : 0, max: 10, weight: 10,
     reason: hasTerms ? "Terms of Service found." : "No formal Terms of Service found.",
     evidence: `Anchor scan for 'terms'/'tos': ${hasTerms ? "match found" : "no match"}.`,
     recommendation: "Publish a Terms of Service page defining usage rules."
   }));
 
-  const hasLocalBusinessSchema = safeArray(pageData?.schema?.detectedTypes).some(t => String(t).toLowerCase() === "localbusiness");
-  const matchesAddressText = text.includes("address") || text.includes("suite") || text.includes("postal") || /\b\d{5}\b/.test(text);
-  const hasNAP = hasLocalBusinessSchema || (hasContact && matchesAddressText);
+  const hasLocalBusinessSchema = evidence.localApplicable;
+  const matchesAddressText = evidence.localBusinesses.some(x => x.address);
+  const hasNAP = evidence.localBusinesses.some(x => x.completeContactTuple);
+
   metrics.push(buildMetric({
-    name: "NAP Consistency",
+    name: "Declared Business Contact Tuple", available: evidence.localApplicable && evidence.napAssessed,
     raw: hasNAP ? 15 : 0, max: 15, weight: 15,
-    reason: hasNAP ? "Name/Address/Phone signals verified." : "Incomplete physical address (NAP) parameters.",
+    reason: hasNAP ? "Name, address and phone declared together on one business object; consistency is unverified." : "No complete name/address/phone tuple on one declared business object.",
     evidence: `LocalBusiness schema: ${hasLocalBusinessSchema}. Address pattern in text: ${matchesAddressText}.`,
     recommendation: "Publish a consistent Name, Address, and Phone number, ideally backed by LocalBusiness schema."
   }));
 
   const reviewsTerms = ["review", "testimonial", "star rating", "happy clients", "verified buyer", "rated"];
-  const matchesReviews = reviewsTerms.some(term => text.includes(term)) || $('.review, .testimonial').length > 0;
+  const matchesReviews = evidence.structuredReview;
   metrics.push(buildMetric({
-    name: "Social Proof Signals",
+    name: "Social Proof Signals", available: matchesReviews,
     raw: matchesReviews ? 15 : 0, max: 15, weight: 15,
     reason: matchesReviews ? "Review or testimonial content detected." : "No review or testimonial content detected.",
     evidence: `Review-related keyword or .review/.testimonial element match: ${matchesReviews}.`,
     recommendation: "Display customer reviews or testimonials, ideally backed by Review/AggregateRating schema."
   }));
 
-  const socialProfilesCount = safeNumber(pageData?.entityDetails?.socialProfiles?.length);
+  const socialProfilesCount = evidence.socialLinks.length;
   metrics.push(buildMetric({
-    name: "Verified Social Presence",
+    name: "Observed Social Links", available: socialProfilesCount > 0,
     raw: clamp(socialProfilesCount, 0, 3) / 3 * 10, max: 10, weight: 10,
     reason: socialProfilesCount > 0 ? `${socialProfilesCount} social profile link(s) detected.` : "No social profile links detected.",
-    evidence: `Social platforms detected: ${safeArray(pageData?.entityDetails?.socialProfiles).join(", ") || "none"}.`,
+    evidence: `Social platforms detected: ${evidence.socialLinks.join(", ") || "none"}.`,
     recommendation: "Link verified social media profiles (LinkedIn, Twitter/X, Facebook, Instagram)."
   }));
 
   const securityHeaderScore = safeNumber(pageData?.securityHeaders?.score);
   metrics.push(buildMetric({
-    name: "Security Headers",
+    name: "Security Headers", available: Boolean(pageData?.securityHeaders),
     raw: securityHeaderScore, max: 10, weight: 10,
     reason: securityHeaderScore >= 8 ? "Strong security header configuration." : securityHeaderScore > 0 ? "Partial security header configuration." : "No modern security headers detected on the response.",
     evidence: pageData?.securityHeaders?.present?.length > 0 ? `Present headers: ${pageData.securityHeaders.present.join(", ")}.` : "No CSP, HSTS, X-Frame-Options, or X-Content-Type-Options headers detected.",
@@ -4342,6 +4327,8 @@ export function scanDynamicTrustSignals($, html, url, pageData) {
 
   return {
     trustScore: result.score,
+    scope: evidence.scope,
+    independentlyVerified: false,
     status: result.score >= 80 ? "Strong observed trust signals" : result.score >= 50 ? "Some observed trust signals" : "Limited observed trust signals",
     metrics: result.metrics,
     passedMetrics: result.passedMetrics,
@@ -4434,22 +4421,24 @@ export function calculateInternalLinkScoreDetailed(linkAnalysisDetail, brokenLin
   return aggregateMetrics(metrics);
 }
 export function calculateLocalSeoScore(pageData, schemaAudit) {
-  const hasLocalBusinessSchema = safeArray(schemaAudit?.detectedTypes).some(t => String(t).toLowerCase() === "localbusiness");
-  const hasPhone = safeArray(pageData?.entityDetails?.phones).length > 0;
-  const hasAddress = /\b\d{5}\b/.test(safeText(pageData?.visibleText)) || /address|suite|street|avenue/i.test(safeText(pageData?.visibleText));
+  const evidence = pageData?.trustEvidence;
+  const applicable = Boolean(evidence?.localApplicable);
+  const hasLocalBusinessSchema = applicable;
+  const hasPhone = Boolean(evidence?.localBusinesses.some(x => x.telephone));
+  const hasAddress = Boolean(evidence?.localBusinesses.some(x => x.address));
   const hasMapEmbed = Boolean(pageData?.mapDetected);
-  const hasHoursText = /(open|hours)[^.]{0,40}(mon|tue|wed|thu|fri|sat|sun|\d{1,2}\s*(am|pm))/i.test(safeText(pageData?.visibleText).toLowerCase());
-  const hasReviewsText = /review|testimonial|star rating|rated \d/i.test(safeText(pageData?.visibleText).toLowerCase());
+  const hasHoursText = Boolean(evidence?.localBusinesses.some(x => x.hours || x.hoursSpecification));
+  const hasReviewsText = Boolean(evidence?.structuredReview);
 
   const metrics = [
-    buildMetric({ name: "NAP Consistency (Name/Address/Phone)", raw: (hasPhone ? 10 : 0) + (hasAddress ? 10 : 0), max: 20, weight: 20, reason: hasPhone && hasAddress ? "Both phone and address signals detected in content." : "Incomplete NAP signals detected.", evidence: `Phone detected: ${hasPhone}. Address pattern detected: ${hasAddress}.`, recommendation: "Ensure Name, Address, and Phone are clearly and consistently listed on the page." }),
-    buildMetric({ name: "LocalBusiness Schema", raw: hasLocalBusinessSchema ? 25 : 0, max: 25, weight: 25, reason: hasLocalBusinessSchema ? "LocalBusiness structured data detected." : "No LocalBusiness schema detected.", evidence: hasLocalBusinessSchema ? "LocalBusiness JSON-LD present." : "No LocalBusiness entry in detected schema types.", recommendation: "Add LocalBusiness JSON-LD with name, address, phone, and geo coordinates." }),
-    buildMetric({ name: "Google Maps Linkage", raw: hasMapEmbed ? 20 : 0, max: 20, weight: 20, reason: hasMapEmbed ? "Google Maps reference detected." : "No Google Maps embed or link detected.", evidence: `Google Maps URL pattern detected in page content: ${hasMapEmbed}.`, recommendation: "Embed a Google Maps widget or link to your Google Business Profile listing." }),
-    buildMetric({ name: "Opening Hours", raw: hasHoursText ? 15 : 0, max: 15, weight: 15, reason: hasHoursText ? "Opening hours text pattern detected." : "No opening hours text detected.", evidence: `Day-of-week / time pattern detected: ${hasHoursText}.`, recommendation: "List business hours clearly in visible text or structured data (openingHoursSpecification)." }),
-    buildMetric({ name: "Review/Testimonial Signals", raw: hasReviewsText ? 20 : 0, max: 20, weight: 20, reason: hasReviewsText ? "Review or testimonial language detected." : "No review or testimonial content detected.", evidence: `Review-related keyword pattern detected: ${hasReviewsText}.`, recommendation: "Display customer reviews or testimonials, ideally with Review/AggregateRating schema." })
+    buildMetric({ name: "Declared Name/Address/Phone", available: applicable && evidence?.napAssessed, raw: evidence?.localBusinesses.some(x => x.completeContactTuple) ? 20 : 0, max: 20, weight: 20, reason: evidence?.localBusinesses.some(x => x.completeContactTuple) ? "Name/address/phone declared on one business object; real-world consistency is unverified." : "No complete name/address/phone tuple on a single business object.", evidence: `Phone detected: ${hasPhone}. Address pattern detected: ${hasAddress}.`, recommendation: "Ensure Name, Address, and Phone are clearly and consistently listed on the page." }),
+    buildMetric({ name: "LocalBusiness Schema", available: applicable, raw: applicable ? 25 : 0, max: 25, weight: 25, reason: hasLocalBusinessSchema ? "LocalBusiness structured data detected." : "No LocalBusiness schema detected.", evidence: hasLocalBusinessSchema ? "LocalBusiness JSON-LD present." : "No LocalBusiness entry in detected schema types.", recommendation: "Add LocalBusiness JSON-LD with name, address, phone, and geo coordinates." }),
+    buildMetric({ name: "Google Maps Linkage", available: applicable && hasMapEmbed, raw: hasMapEmbed ? 20 : 0, max: 20, weight: 20, reason: hasMapEmbed ? "Google Maps reference detected." : "No Google Maps embed or link detected.", evidence: `Google Maps URL pattern detected in page content: ${hasMapEmbed}.`, recommendation: "Embed a Google Maps widget or link to your Google Business Profile listing." }),
+    buildMetric({ name: "Opening Hours", available: applicable && hasHoursText, raw: hasHoursText ? 15 : 0, max: 15, weight: 15, reason: hasHoursText ? "Opening hours declared in the business structured data; unverified." : "No opening hours text detected.", evidence: `Structured opening-hours declaration observed: ${hasHoursText}.`, recommendation: "List business hours clearly in visible text or structured data (openingHoursSpecification)." }),
+    buildMetric({ name: "Review/Testimonial Signals", available: applicable && hasReviewsText, raw: hasReviewsText ? 20 : 0, max: 20, weight: 20, reason: hasReviewsText ? "Review/rating markup declared; authenticity unverified." : "No review or testimonial content detected.", evidence: `Review/rating structured declaration observed: ${hasReviewsText}.`, recommendation: "Display customer reviews or testimonials, ideally with Review/AggregateRating schema." })
   ];
 
-  return aggregateMetrics(metrics);
+  return {...aggregateMetrics(metrics),applicable,scope:evidence?.localApplicability || "Local-business applicability is unknown; no local score inferred.",observations:evidence?.localBusinesses || [],consistencyVerified:false};
 }
 
 // =========================================================================
@@ -4470,7 +4459,7 @@ export function calculateGeoScore(pageData, semanticSeoAudit, authorityAudit, sc
     buildMetric({
       name: "Entity Coverage", raw: Math.round((clamp(entityCount, 0, 20) / 20) * 20), max: 20, weight: 20,
       reason: `${entityCount} distinct entities detected (${(verifiedRatio * 100).toFixed(0)}% declared in structured data; not independently verified).`,
-      evidence: `Verified: ${safeNumber(pageData?.entityDetails?.verifiedEntityCount)}. Total: ${entityCount}.`,
+      evidence: `Schema-declared (not independently verified): ${safeNumber(pageData?.entityDetails?.verifiedEntityCount)}. Total: ${entityCount}.`,
       recommendation: "Reference more specific, structured-data-backed entities relevant to the topic."
     }),
     buildMetric({
@@ -5307,15 +5296,9 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       aiEngineCitations, clusters, coveragePercent, recommendedSchemas: schemaBlock.missingSchemas
     });
 
-    const finalAIVisibilityScore = clamp(
-      Math.round(
-        (seoAudit.score * 0.20) +
-        (aeoAudit.aeoScore * 0.30) +
-        (eeatAudit.score * 0.25) +
-        (authorityAudit.authorityScore * 0.15) +
-        (trustAudit.trustScore * 0.10)
-      )
-    );
+    const assessedScores = [[seoAudit.score,.20],[aeoAudit.aeoScore,.30],[eeatAudit.score,.25],[authorityAudit.authorityScore,.15],[trustAudit.trustScore,.10]].filter(([score]) => typeof score === "number" && Number.isFinite(score));
+    const assessedWeight = assessedScores.reduce((sum,[,weight]) => sum+weight,0);
+    const finalAIVisibilityScore = assessedWeight ? clamp(Math.round(assessedScores.reduce((sum,[score,weight]) => sum+score*weight,0)/assessedWeight)) : null;
 
     // Collected last so it had the maximum possible time (up to the 12s
     // cap set when it was kicked off, near the top of this function) to
@@ -5355,6 +5338,7 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       technicalMonitor,
       pageEvidence: analyzePageEvidence($, pageData, robotsData),
       contentEvidence: pageData.contentEvidence,
+      trustEvidence: pageData.trustEvidence,
       analysisVersion: "2026-10-30-evidence-v1",
       mixedContent,
       brokenAssets: brokenAssetData,
@@ -5451,7 +5435,11 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       semanticSeoDetail: semanticSeoAudit,
       localSEO: {
         localScore: localSeoAudit.score,
-        napConsistency: localSeoAudit.metrics.find(m => m.metric.includes("NAP"))?.reason,
+        applicable: localSeoAudit.applicable,
+        scope: localSeoAudit.scope,
+        observations: localSeoAudit.observations,
+        consistencyVerified: false,
+        napConsistency: localSeoAudit.metrics.find(m => m.metric.includes("Name/Address/Phone"))?.reason,
         mapDetected: localSeoAudit.metrics.find(m => m.metric.includes("Maps"))?.passed || false,
         localBusinessSchemaDetected: localSeoAudit.metrics.find(m => m.metric.includes("LocalBusiness"))?.passed || false,
         metrics: localSeoAudit.metrics
@@ -5745,7 +5733,8 @@ app.get("/api/status", (req, res) => {
   res.json({
     status: "running",
     tool: "AI Visibility SaaS Platform",
-    version: "10.1-enterprise-hardened",
+    version: "10.2-beta-local-only",
+    ai: {mode:"local-only",externalModelCalls:false,paidFallbacks:false},
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.round(process.uptime())
   });

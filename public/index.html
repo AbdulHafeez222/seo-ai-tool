@@ -1064,10 +1064,10 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
         </button>
         <div class="user-dropdown-menu" id="userDropdownMenu" role="menu">
           <div class="dropdown-email" id="userDropdownEmail">—</div>
-          <button type="button" role="menuitem" onclick="openProfileModal()"><span aria-hidden="true">👤</span>&nbsp; Profile</button>
-          <button type="button" role="menuitem" onclick="openSettingsModal()"><span aria-hidden="true">⚙️</span>&nbsp; Settings</button>
+          <button type="button" role="menuitem" onclick="openProfileModal()"><span aria-hidden="true">👤</span>&nbsp; <span data-i18n="profile">Profile</span></button>
+          <button type="button" role="menuitem" onclick="openSettingsModal()"><span aria-hidden="true">⚙️</span>&nbsp; <span data-i18n="settings">Settings</span></button>
           <div class="dropdown-divider"></div>
-          <button type="button" role="menuitem" onclick="logoutUser()"><span aria-hidden="true">🚪</span>&nbsp; Logout</button>
+          <button type="button" role="menuitem" onclick="logoutUser()"><span aria-hidden="true">🚪</span>&nbsp; <span data-i18n="logout">Logout</span></button>
         </div>
       </div>
     </div>
@@ -1079,7 +1079,7 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
   <div class="modal-panel">
     <div class="modal-header">
       <h2 id="authModalTitle">Log In</h2>
-      <button type="button" class="modal-close-btn" onclick="closeAuthModal()" aria-label="Close">✕</button>
+      <button type="button" class="modal-close-btn" onclick="closeAuthModal()" aria-label="Close" data-i18n-aria="close">✕</button>
     </div>
     <p class="modal-subtext" id="authModalSubtext">Welcome back. Log in to access your account.</p>
 
@@ -1087,18 +1087,18 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
 
     <form id="authForm" onsubmit="return false;" novalidate>
       <div class="auth-form-group">
-        <label for="authEmail">Email</label>
+        <label for="authEmail" data-i18n="email">Email</label>
         <input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com" required>
       </div>
       <div class="auth-form-group">
-        <label for="authPassword">Password</label>
+        <label for="authPassword" data-i18n="password">Password</label>
         <input type="password" id="authPassword" autocomplete="current-password" placeholder="••••••••" required>
       </div>
       <button type="button" class="auth-submit-btn" id="authSubmitBtn" onclick="submitAuthForm()">
         <span class="btn-spinner" aria-hidden="true"></span>
         <span class="btn-label-text" id="authSubmitLabel">Log In</span>
       </button>
-      <button type="button" onclick="requestPasswordReset()">Forgot password?</button>
+      <button type="button" onclick="requestPasswordReset()" data-i18n="forgotPassword">Forgot password?</button>
     </form>
 
     <p class="auth-switch-text" id="authSwitchText">
@@ -1111,8 +1111,8 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
 <div class="modal-overlay" id="profileModalOverlay" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
   <div class="modal-panel modal-panel-wide">
     <div class="modal-header">
-      <h2 id="profileModalTitle"><span aria-hidden="true">👤</span> Profile</h2>
-      <button type="button" class="modal-close-btn" onclick="closeProfileModal()" aria-label="Close">✕</button>
+      <h2 id="profileModalTitle"><span aria-hidden="true">👤</span> <span data-i18n="profile">Profile</span></h2>
+      <button type="button" class="modal-close-btn" onclick="closeProfileModal()" aria-label="Close" data-i18n-aria="close">✕</button>
     </div>
     <div id="profileModalContent">
       <p class="modal-subtext">Loading account details…</p>
@@ -1124,20 +1124,20 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
 <div class="modal-overlay" id="settingsModalOverlay" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
   <div class="modal-panel modal-panel-wide">
     <div class="modal-header">
-      <h2 id="settingsModalTitle"><span aria-hidden="true">⚙️</span> Settings</h2>
-      <button type="button" class="modal-close-btn" onclick="closeSettingsModal()" aria-label="Close">✕</button>
+      <h2 id="settingsModalTitle"><span aria-hidden="true">⚙️</span> <span data-i18n="settings">Settings</span></h2>
+      <button type="button" class="modal-close-btn" onclick="closeSettingsModal()" aria-label="Close" data-i18n-aria="close">✕</button>
     </div>
 
     <div class="settings-row">
       <div>
-        <div class="settings-row-label">Appearance</div>
-        <div class="settings-row-desc">Choose how Aegis AI Visibility looks on this device.</div>
+        <div class="settings-row-label" data-i18n="appearance">Appearance</div>
+        <div class="settings-row-desc" data-i18n="appearanceDesc">Choose how Aegis AI Visibility looks on this device.</div>
         <div class="theme-choice-grid">
           <button type="button" class="theme-choice-btn" id="themeChoiceDark" onclick="setThemeChoice('dark')">
-            <span aria-hidden="true">🌙</span> Dark
+            <span aria-hidden="true">🌙</span> <span data-i18n="dark">Dark</span>
           </button>
           <button type="button" class="theme-choice-btn" id="themeChoiceLight" onclick="setThemeChoice('light')">
-            <span aria-hidden="true">☀️</span> Light
+            <span aria-hidden="true">☀️</span> <span data-i18n="light">Light</span>
           </button>
         </div>
       </div>
@@ -1145,8 +1145,8 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
 
     <div class="settings-row">
       <div>
-        <div class="settings-row-label">Toast Notifications</div>
-        <div class="settings-row-desc">Show pop-up confirmations for scans, errors, and account actions.</div>
+        <div class="settings-row-label" data-i18n="notifications">Toast Notifications</div>
+        <div class="settings-row-desc" data-i18n="notificationsDesc">Show pop-up confirmations for scans, errors, and account actions.</div>
       </div>
       <label class="toggle-switch">
         <input type="checkbox" id="notificationsToggle" checked onchange="onNotificationsToggleChange()">
@@ -1161,7 +1161,7 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
   <div class="modal-panel modal-panel-xl">
     <div class="modal-header">
       <h2 id="dashboardModalTitle"><span aria-hidden="true">📊</span> Dashboard</h2>
-      <button type="button" class="modal-close-btn" onclick="closeDashboardModal()" aria-label="Close">✕</button>
+      <button type="button" class="modal-close-btn" onclick="closeDashboardModal()" aria-label="Close" data-i18n-aria="close">✕</button>
     </div>
     <div id="dashboardModalContent">
       <p class="modal-subtext">Loading your dashboard…</p>
@@ -1174,7 +1174,7 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
   <div class="modal-panel modal-panel-xl">
     <div class="modal-header">
       <h2 id="reportsModalTitle"><span aria-hidden="true">🗂️</span> My Reports</h2>
-      <button type="button" class="modal-close-btn" onclick="closeReportsModal()" aria-label="Close">✕</button>
+      <button type="button" class="modal-close-btn" onclick="closeReportsModal()" aria-label="Close" data-i18n-aria="close">✕</button>
     </div>
     <div id="reportsModalContent">
       <p class="modal-subtext">Loading your saved reports…</p>
@@ -1187,7 +1187,7 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
   <div class="modal-panel modal-panel-wide">
     <div class="modal-header">
       <h2 id="reportDetailModalTitle"><span aria-hidden="true">📄</span> Report Detail</h2>
-      <button type="button" class="modal-close-btn" onclick="closeReportDetailModal()" aria-label="Close">✕</button>
+      <button type="button" class="modal-close-btn" onclick="closeReportDetailModal()" aria-label="Close" data-i18n-aria="close">✕</button>
     </div>
     <div id="reportDetailModalContent">
       <p class="modal-subtext">Loading report…</p>
@@ -1200,7 +1200,7 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
   <div class="modal-panel modal-panel-xl">
     <div class="modal-header">
       <h2 id="siteCrawlModalTitle"><span aria-hidden="true">🕸️</span> Site-Wide Crawl</h2>
-      <button type="button" class="modal-close-btn" onclick="closeSiteCrawlModal()" aria-label="Close">✕</button>
+      <button type="button" class="modal-close-btn" onclick="closeSiteCrawlModal()" aria-label="Close" data-i18n-aria="close">✕</button>
     </div>
     <div id="siteCrawlModalContent">
       <p class="modal-subtext">Loading…</p>
@@ -1477,7 +1477,7 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
     </section>
 
     <section id="localSeoCard" class="card" style="display:none; margin-top:0;" aria-labelledby="localSeoHeading">
-      <h3 id="localSeoHeading"><span class="card-title-group"><span aria-hidden="true">📍</span> Local SEO Signals</span></h3>
+      <h3 id="localSeoHeading"><span class="card-title-group"><span aria-hidden="true">📍</span> <span data-i18n="localTitle">Local SEO Signals</span></span></h3>
       <div id="localSEOContent"></div>
     </section>
   </div>
@@ -1729,24 +1729,26 @@ function switchAuthMode(mode) {
   applyAuthModalMode();
 }
 
-function applyAuthModalMode() {
+function uiLabel(key, fallback, params={}) { return window.ReportLanguage?.t(key,params) || fallback; }
+
+function applyAuthModalMode(preserveError = false) {
   const title = document.getElementById("authModalTitle");
   const subtext = document.getElementById("authModalSubtext");
   const submitLabel = document.getElementById("authSubmitLabel");
   const switchText = document.getElementById("authSwitchText");
   const errEl = document.getElementById("authErrorBanner");
-  if (errEl) { errEl.textContent = ""; errEl.classList.remove("visible"); }
+  if (errEl && !preserveError) { errEl.textContent = ""; errEl.classList.remove("visible"); }
 
   if (authMode === "register") {
-    if (title) title.textContent = "Create Account";
-    if (subtext) subtext.textContent = "Sign up to save scan history and unlock higher daily limits.";
-    if (submitLabel) submitLabel.textContent = "Sign Up";
-    if (switchText) switchText.innerHTML = `Already have an account? <button type="button" onclick="switchAuthMode('login')">Log in</button>`;
+    if (title) title.textContent = uiLabel("createAccount", "Create Account");
+    if (subtext) subtext.textContent = uiLabel("registerIntro", "Sign up to save scan history and unlock higher daily limits.");
+    if (submitLabel) submitLabel.textContent = uiLabel("signup", "Sign Up");
+    if (switchText) switchText.innerHTML = `${escapeHtml(uiLabel("alreadyAccount","Already have an account?"))} <button type="button" onclick="switchAuthMode('login')">${escapeHtml(uiLabel("login","Log In"))}</button>`;
   } else {
-    if (title) title.textContent = "Log In";
-    if (subtext) subtext.textContent = "Welcome back. Log in to access your account.";
-    if (submitLabel) submitLabel.textContent = "Log In";
-    if (switchText) switchText.innerHTML = `Don't have an account? <button type="button" onclick="switchAuthMode('register')">Sign up</button>`;
+    if (title) title.textContent = uiLabel("login", "Log In");
+    if (subtext) subtext.textContent = uiLabel("loginIntro", "Welcome back. Log in to access your account.");
+    if (submitLabel) submitLabel.textContent = uiLabel("login", "Log In");
+    if (switchText) switchText.innerHTML = `${escapeHtml(uiLabel("noAccount","Don't have an account?"))} <button type="button" onclick="switchAuthMode('register')">${escapeHtml(uiLabel("signup","Sign Up"))}</button>`;
   }
 }
 
@@ -1845,7 +1847,7 @@ function openProfileModal() {
   if (!overlay || !content) return;
 
   if (!currentUser) {
-    content.innerHTML = emptyStateHtml("👤", "Not Logged In", "Log in to view your profile.");
+    content.innerHTML = emptyStateHtml("👤", uiLabel("notLoggedIn","Not Logged In"), uiLabel("loginProfile","Log in to view your profile."));
     overlay.classList.add("open");
     return;
   }
@@ -1857,30 +1859,30 @@ function openProfileModal() {
 
   content.innerHTML = `
     <div class="profile-field-row">
-      <span class="profile-field-label">Email</span>
+      <span class="profile-field-label">${escapeHtml(uiLabel("email","Email"))}</span>
       <span class="profile-field-value">${escapeHtml(currentUser.email)}</span>
     </div>
     <div class="profile-field-row">
-      <span class="profile-field-label">Plan</span>
+      <span class="profile-field-label">${escapeHtml(uiLabel("plan","Plan"))}</span>
       <span class="profile-field-value"><span class="plan-badge-pill">${escapeHtml(plan.toUpperCase())}</span></span>
     </div>
     ${currentUser.createdAt ? `
     <div class="profile-field-row">
-      <span class="profile-field-label">Member Since</span>
+      <span class="profile-field-label">${escapeHtml(uiLabel("memberSince","Member Since"))}</span>
       <span class="profile-field-value">${new Date(currentUser.createdAt).toLocaleDateString()}</span>
     </div>` : ''}
     <div class="profile-field-row" style="flex-direction:column; align-items:stretch;">
-      <span class="profile-field-label" style="margin-bottom:8px;">API Key</span>
+      <span class="profile-field-label" style="margin-bottom:8px;">${escapeHtml(uiLabel("apiKey","API Key"))}</span>
       <div class="api-key-display">
         <code id="profileApiKeyText">${escapeHtml(currentUser.apiKey)}</code>
-        <button type="button" onclick="copyApiKey()">📋 Copy</button>
+        <button type="button" onclick="copyApiKey()">📋 ${escapeHtml(uiLabel("copy","Copy"))}</button>
       </div>
     </div>
     <div class="profile-field-row" style="flex-direction:column; align-items:stretch;">
-      <span class="profile-field-label" style="margin-bottom:8px;">Today's Usage</span>
+      <span class="profile-field-label" style="margin-bottom:8px;">${escapeHtml(uiLabel("usage","Today's Usage"))}</span>
       <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--text-secondary);">
-        <span>${scansToday} scan(s) used today</span>
-        <span>${limit != null ? `Limit: ${limit}/day` : 'Limit: N/A'}</span>
+        <span>${escapeHtml(uiLabel("usedToday",`${scansToday} scan(s) used today`,{count:scansToday}))}</span>
+        <span>${limit != null ? uiLabel("limitPerDay",`Limit: ${limit}/day`,{count:limit}) : 'Limit: N/A'}</span>
       </div>
       <div class="usage-meter-track"><div class="usage-meter-fill" style="width:${usagePct}%;"></div></div>
     </div>
@@ -3617,22 +3619,17 @@ function renderTrustSignals(data) {
 }
 
 function renderLocalSeo(data) {
-  const lCard = document.getElementById("localSeoCard");
-  if (!lCard) return;
-
-  const locations = safeArray(safeGet(data, "entityDetails.locations"));
-  const hasLocalBusinessSchema = safeArray(safeGet(data, "schema.detectedTypes")).includes("LocalBusiness");
-  const napFactor = safeArray(safeGet(data, "trust.factors")).find(f => f.toLowerCase().includes("nap"));
-  const napIssue = safeArray(safeGet(data, "trust.issues")).find(i => i.toLowerCase().includes("nap"));
-
-  if (locations.length === 0 && !hasLocalBusinessSchema && !napFactor && !napIssue) { lCard.style.display = "none"; return; }
-  lCard.style.display = "block";
-
+  const card = document.getElementById("localSeoCard");
+  if (!card) return;
+  const local = data.localSEO;
+  if (!local) {card.style.display="none";return;}
+  card.style.display="block";
+  const t=(key,fallback)=>escapeHtml(uiLabel(key,fallback));
   document.getElementById("localSEOContent").innerHTML = `
-    <p><strong>Detected Locations:</strong> ${locations.length > 0 ? escapeHtml(locations.join(', ')) : 'None detected'}</p>
-    <p><strong>LocalBusiness JSON-LD:</strong> ${hasLocalBusinessSchema ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Missing</span>'}</p>
-    <p><strong>NAP Consistency:</strong> ${napFactor ? `<span class="badge badge-green">Observed</span> ${escapeHtml(napFactor)}` : napIssue ? `<span class="badge badge-red">Incomplete</span> ${escapeHtml(napIssue)}` : 'Data unavailable'}</p>
-  `;
+    <p>${t(local.applicable ? "localDeclared" : "localUnknown",local.scope || "Local applicability unavailable.")}</p>
+    <p>${t("unverified","Real-world consistency has not been independently verified.")}</p>
+    <p>${local.localScore == null ? t("unavailable","Not available") : `${Number(local.localScore)}/100`}</p>
+    ${(local.observations || []).map(x=>`<details><summary><bdi>${escapeHtml(x.name || uiLabel("unavailable","Not available"))}</bdi></summary><p>${t("localTuple","Declared name, address and phone")}</p><p dir="auto">${escapeHtml([x.name,x.address,x.telephone].filter(Boolean).join(" | "))}</p></details>`).join("")}`;
 }
 
 // =========================================================================

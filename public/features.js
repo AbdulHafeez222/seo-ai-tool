@@ -28,7 +28,12 @@ function renderContentIntelligence(report) {
     <h4>${e(t('entities'))}</h4><p>${e(t('declared'))}</p>
     ${(report.declaredEntities||[]).map(x=>`<p><bdi>${e(x.name)}</bdi>: ${e(t(x.mentionedInContent?'mentioned':'notMentioned'))}</p>`).join('')||`<p>${e(t('unavailable'))}</p>`}`;
 }
-window.addEventListener('report-language-change',()=>renderContentIntelligence(contentEvidenceLast));
+window.addEventListener('report-language-change',()=>{
+  renderContentIntelligence(contentEvidenceLast);
+  if(document.getElementById('authModalOverlay')?.classList.contains('open'))applyAuthModalMode(true);
+  if(document.getElementById('profileModalOverlay')?.classList.contains('open'))openProfileModal();
+  if(lastScanData?.localSEO)renderLocalSeo(lastScanData);
+});
 function toggleMoreCompetitors() {
   const grid = document.getElementById('extraCompetitorsGrid');
   grid.style.display = grid.style.display === 'none' ? 'grid' : 'none';
@@ -227,8 +232,8 @@ function securityForm(title, fields) {
       input.autocomplete = key === 'newPassword' ? 'new-password' : type === 'password' ? 'current-password' : 'off';
       wrapper.append(input); panel.append(wrapper); inputs[key] = input;
     }
-    const submit = document.createElement('button'); submit.type = 'submit'; submit.textContent = 'Continue';
-    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel';
+    const submit = document.createElement('button'); submit.type = 'submit'; submit.textContent = uiLabel('continue','Continue');
+    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = uiLabel('cancel','Cancel');
     const finish = value => { overlay.remove(); resolve(value); };
     cancel.onclick = () => finish(null);
     panel.onsubmit = event => { event.preventDefault(); finish(Object.fromEntries(Object.entries(inputs).map(([k,v]) => [k,v.value]))); };
@@ -239,7 +244,7 @@ function securityForm(title, fields) {
 
 async function changeAccountPassword() {
   if (!requireLoginOrPrompt()) return;
-  const values = await securityForm('Change password', [['currentPassword','Current password','password'], ['newPassword','New password (8–72 UTF-8 bytes)','password']]);
+  const values = await securityForm(uiLabel('changePassword','Change password'), [['currentPassword',uiLabel('currentPassword','Current password'),'password'], ['newPassword',uiLabel('newPassword','New password (8–72 UTF-8 bytes)'),'password']]);
   if (!values) return;
   const {currentPassword,newPassword} = values;
   try { const result = await accountRequest('/auth/change-password', 'POST', {currentPassword,newPassword}); logoutUser(true); showToast(result.message, 'success'); }
@@ -248,7 +253,7 @@ async function changeAccountPassword() {
 
 async function deleteAccount() {
   if (!requireLoginOrPrompt()) return;
-  const values = await securityForm('Permanently delete account and associated data', [['confirmation','Type DELETE to confirm','text'],['password','Current password','password']]);
+  const values = await securityForm(uiLabel('permanentDelete','Permanently delete account and associated data'), [['confirmation',uiLabel('deleteConfirmation','Type DELETE to confirm'),'text'],['password',uiLabel('currentPassword','Current password'),'password']]);
   if (!values || values.confirmation !== 'DELETE') return;
   const {confirmation,password} = values;
   try {
@@ -260,10 +265,11 @@ async function deleteAccount() {
 const settings = document.getElementById('settingsModalOverlay')?.querySelector('.modal-body') || document.getElementById('settingsModalOverlay')?.querySelector('.modal-panel');
 if (settings) {
   const actions = document.createElement('div');
-  actions.innerHTML = '<h4>Account Security</h4><button type="button" id="changePasswordAction">Change Password</button><button type="button" id="deleteAccountAction">Delete Account</button><p>Billing is disabled for this beta. Password recovery requires service-owner SMTP configuration.</p>';
+  actions.innerHTML = '<h4 data-i18n="accountSecurity">Account Security</h4><button type="button" id="changePasswordAction" data-i18n="changePassword">Change Password</button><button type="button" id="deleteAccountAction" data-i18n="deleteAccount">Delete Account</button><p data-i18n="securityNotice">Payments and password recovery are unavailable in this beta.</p>';
   settings.append(actions);
   document.getElementById('changePasswordAction').onclick = changeAccountPassword;
   document.getElementById('deleteAccountAction').onclick = deleteAccount;
+  window.ReportLanguage?.apply();
 }
 
 // Recovery secrets are in the URL fragment, which is not sent to the server.

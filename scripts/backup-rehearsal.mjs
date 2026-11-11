@@ -13,7 +13,7 @@ import { createSearchSnapshot } from '../lib/search-performance.js';
 
 const execute = promisify(execFile);
 const uri = process.env.TEST_MONGODB_URI;
-assert.match(uri || '', /^mongodb:\/\/127\.0\.0\.1:27019\/seo_beta_acceptance(?:\?replicaSet=beta-test)?$/,
+assert.ok(/^mongodb:\/\/127\.0\.0\.1:27019\/seo_beta_acceptance(?:\?replicaSet=beta-test)?$/.test(uri || ''),
   'Rehearsal only accepts the isolated loopback replica set, never production.');
 const { MongoClient, BSON } = mongoose.mongo;
 // One serial fixture rehearsal needs at most two pooled connections. Loopback

@@ -6,6 +6,8 @@ Latest live release: [free workflow improvements](docs/FREE_WORKFLOWS_2026-11-11
 
 ## Local development
 
+New candidate: [read-only Google connection and encrypted backup/restore rehearsal](docs/GOOGLE_AND_BACKUPS_2026-11-11.md). Google access remains disabled until owner-managed OAuth credentials, consent configuration and an independent encryption key are entered securely. The backup rehearsal uses isolated synthetic databases only, not production data.
+
 Use Node 22. Copy `.env.example` to `.env`, generate a random JWT secret of at least 32 bytes, and configure an isolated MongoDB test database. Do not paste secrets into GitHub or chat.
 
 ```sh

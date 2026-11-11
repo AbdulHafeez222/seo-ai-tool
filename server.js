@@ -18,6 +18,7 @@ import { installAccountRoutes, deletingAccountIds } from "./lib/accounts.js";
 import { createDatabaseLifecycle, databaseFailureCategory } from "./lib/database.js";
 import { createReportSnapshot, restoreReportSnapshot } from "./lib/report-storage.js";
 import { installFreeWorkflows } from "./lib/free-workflows.js";
+import { installSearchConsoleRoutes } from "./lib/google-search-console.js";
 
 dotenv.config();
 
@@ -509,7 +510,9 @@ const userSchema = new mongoose.Schema(
     plan: { type: String, enum: Object.keys(PLAN_LIMITS), default: "free" },
     scansToday: { type: Number, default: 0 },
     lastScanReset: { type: Date, default: Date.now },
-    sessionVersion: { type: Number, default: 0 }
+    sessionVersion: { type: Number, default: 0 },
+    gscGrant: { type: String, select: false },
+    gscPending: { type: String, select: false }
   },
   { timestamps: true }
 );
@@ -5767,7 +5770,7 @@ app.get("/api/status", (req, res) => {
   res.json({
     status: "running",
     tool: "AI Visibility SaaS Platform",
-    version: "10.3-beta-free-workflows",
+    version: "10.4-beta-google-ready",
     ai: {mode:"local-only",externalModelCalls:false,paidFallbacks:false},
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.round(process.uptime())
@@ -5878,7 +5881,8 @@ app.post("/auth/logout", requireAuth, asyncHandler(async (req, res) => {
 installAccountRoutes(app, { User, Report, Project, SiteCrawlJob, requireAuth, asyncHandler,
   hashPassword, verifyPasswordHash, generateApiKey, activeSiteCrawlJobIds, scanCache, logger, hasActiveAnalyses: () => runningAnalyses > 0 || pendingSiteCrawlReservations > 0 });
 
-installFreeWorkflows(app, { Project, Report, requireAuth, asyncHandler });
+const { limit: freeWorkflowLimit } = installFreeWorkflows(app, { Project, Report, requireAuth, asyncHandler });
+installSearchConsoleRoutes(app, { User, Project, requireAuth, asyncHandler, authStamp, limit: freeWorkflowLimit });
 
 app.get("/auth/me", asyncHandler(async (req, res) => {
   const token = requestToken(req);

@@ -1,7 +1,8 @@
 (function () {
   const state = { projects: [], projectId: '', performance: null, reports: [], reportsLoaded: false,
     comparison: null, tab: 'performance', busy: false, error: '', status: '', epoch: 0, projectRequest: 0,
-    exportCursor: null, exportCount: null, exportMore: false, exportResource: 'projects' };
+    exportCursor: null, exportCount: null, exportMore: false, exportResource: 'projects', sourceMode: 'csv',
+    googleStatus: null, googleProperties: [] };
   let previousFocus = null;
   const byId = id => document.getElementById(id);
   const e = value => escapeHtml(String(value ?? ''));
@@ -22,6 +23,7 @@
     state.busy = value;
     byId('growthModalOverlay')?.querySelectorAll('input,select,button:not(.modal-close-btn)').forEach(el => { el.disabled = value; });
     if (!value && byId('growthNextExport')) byId('growthNextExport').disabled = !state.exportCursor;
+    renderGoogle();
     if (byId('growthStatus')) byId('growthStatus').textContent = value ? t('working') : state.status ? t(state.status) : '';
   }
   async function request(path, method = 'GET', body) {
@@ -30,7 +32,7 @@
     try {
       response = await fetch(`${window.API_BASE}${path}`, { method, headers: {
         ...(body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {})
-      }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) });
+      }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(path.includes('/integrations/gsc') || path.endsWith('/search-performance/google') ? 60000 : 30000) });
       data = await response.json();
     } catch { throw { code: 'featureRequestFailed' }; }
     if (!response.ok || data?.success !== true) throw { code: data?.code || 'featureRequestFailed' };
@@ -51,6 +53,21 @@
       <section id="growthPane-performance" role="tabpanel" aria-labelledby="growthTab-performance">
         <label class="workflow-project">${label('project')}<select id="growthProject"></select></label>
         <p id="growthNoProjects" hidden>${label('noProjects')} <button type="button" id="growthCreateProject">${label('createProject')}</button></p>
+        <div class="workflow-source" role="group" aria-label="${e(t('gscDataSource'))}">
+          <label><input type="radio" name="growthSource" value="csv" checked>${label('gscCsvMode')}</label>
+          <label><input type="radio" name="growthSource" value="google">Google Search Console</label>
+        </div>
+        <section id="growthGoogle" class="workflow-section" hidden>
+          <h3>Google Search Console</h3><p id="growthGoogleStatus" role="status"></p>
+          <div class="workflow-toolbar"><button type="button" id="growthGoogleConnect">${label('gscConnect')}</button>
+          <button type="button" id="growthGoogleProperties" class="workflow-secondary">${label('gscLoadProperties')}</button>
+          <button type="button" id="growthGoogleDisconnect" class="workflow-secondary">${label('gscDisconnect')}</button></div>
+          <p class="workflow-note">${label('gscReadOnly')}</p>
+          <div id="growthGoogleSelection" class="workflow-form-grid" hidden>
+            <label>${label('gscProperty')}<select id="growthGoogleProperty"></select></label>
+            <label>${label('gscDimension')}<select id="growthGoogleKind"><option value="queries" data-workflow-i18n="gscQueries">${e(t('gscQueries'))}</option><option value="pages" data-workflow-i18n="gscPages">${e(t('gscPages'))}</option></select></label>
+          </div><p class="workflow-note">${label('gscDatesNotice')}</p>
+        </section>
         <form id="growthImportForm" class="workflow-form">
           <div class="workflow-form-grid">
             <label>${label('slot')}<select id="growthSlot"><option value="current" data-workflow-i18n="current">${e(t('current'))}</option><option value="baseline" data-workflow-i18n="baseline">${e(t('baseline'))}</option></select></label>
@@ -59,7 +76,7 @@
             <label>${label('device')}<select id="growthDevice">${['all', 'mobile', 'desktop', 'tablet'].map(value => `<option value="${value}" data-workflow-i18n="${value}">${e(t(value))}</option>`).join('')}</select></label>
             <label>${label('country')}<input id="growthCountry" maxlength="3" value="all" dir="ltr"></label>
           </div>
-          <label class="workflow-file">${label('csv')}<input id="growthCsv" type="file" accept=".csv,text/csv" required></label>
+          <label class="workflow-file" id="growthCsvLabel">${label('csv')}<input id="growthCsv" type="file" accept=".csv,text/csv" required></label>
           <div class="workflow-toolbar"><button type="submit" id="growthImportButton">${label('importCsv')}</button><button type="button" id="growthClearButton" class="workflow-secondary">${label('clearImports')}</button></div>
         </form>
         <div id="growthPerformanceResults"></div>
@@ -100,6 +117,10 @@
     byId('growthImportForm').onsubmit = importCsv;
     byId('growthClearButton').onclick = clearImports;
     byId('growthCompare').onclick = compare;
+    overlay.querySelectorAll('[name="growthSource"]').forEach(input => { input.onchange = () => { state.sourceMode = input.value; renderGoogle(); }; });
+    byId('growthGoogleConnect').onclick = connectGoogle;
+    byId('growthGoogleProperties').onclick = loadGoogleProperties;
+    byId('growthGoogleDisconnect').onclick = disconnectGoogle;
     for (const id of ['growthBefore', 'growthAfter']) byId(id).onchange = () => { state.comparison = null; renderComparison(); };
     byId('growthExportType').onchange = () => { state.exportCursor = null; state.exportCount = null; state.exportResource = byId('growthExportType').value; byId('growthNextExport').disabled = true; localize(); };
     byId('growthExportButton').onclick = () => downloadExport(null);
@@ -127,6 +148,8 @@
       byId('growthImportForm').hidden = !state.projects.length;
       if (state.tab === 'performance') await loadPerformance();
       else if (state.tab === 'comparison') await loadReports();
+      if (epoch !== state.epoch) return;
+      await loadGoogleStatus();
       localize();
     } catch (error) { if (epoch === state.epoch) showError(error); }
     finally { if (epoch === state.epoch) setBusy(false); }
@@ -159,6 +182,7 @@
   async function importCsv(event) {
     event.preventDefault();
     if (state.busy) return;
+    if (state.sourceMode === 'google') return pullGoogle();
     if (!state.projectId) return showError({ code: 'selectProject' });
     const file = byId('growthCsv').files[0];
     if (!file) return showError({ code: 'selectFile' });
@@ -192,9 +216,10 @@
     const data = state.performance;
     if (!data || !data.current && !data.baseline) { output.innerHTML = `<p>${e(t('noImports'))}</p>`; return; }
     const summary = (key, snapshot) => !snapshot ? '' : `<section class="workflow-section"><h3>${e(t(key))}: <bdi>${e(snapshot.period.start)} – ${e(snapshot.period.end)}</bdi></h3>
+      <p class="workflow-note">${e(t(snapshot.source === 'google-search-console-api' ? 'gscSourceNotice' : 'sourceNotice'))}${snapshot.scope.property ? ` <bdi>${e(snapshot.scope.property)}</bdi>` : ''}</p>
       <p>${e(t('rows'))}: ${number(snapshot.rowCount)} · ${e(t(snapshot.scope.device))} · <bdi>${e(snapshot.scope.country)}</bdi></p>
       <dl class="workflow-metrics">${metric('clicks', snapshot.totals.clicks)}${metric('impressions', snapshot.totals.impressions)}${metric('ctr', snapshot.totals.ctr, true)}${metric('position', snapshot.totals.position)}</dl></section>`;
-    output.innerHTML = `<p class="workflow-note">${e(t('sourceNotice'))}</p><p class="workflow-note">${e(t('coverageNotice'))}</p>
+    output.innerHTML = `<p class="workflow-note">${e(t('coverageNotice'))}</p>
       ${summary('baseline', data.baseline)}${summary('current', data.current)}
       ${data.comparisonReason ? `<p role="status">${e(t(data.comparisonReason))}</p>` : ''}
       ${data.comparison ? `<section class="workflow-section"><h3>${e(t('delta'))}</h3><dl class="workflow-metrics">${metric('clicksChange', data.comparison.clicksPerDayDelta, false, true)}${metric('impressionsPerDay', data.comparison.impressionsPerDayDelta, false, true)}${metric('ctrChange', data.comparison.ctrDelta, true, true)}${metric('positionChange', data.comparison.positionDelta, false, true)}</dl><p>${e(t('unmatched', data.unmatched))}</p></section>` : ''}
@@ -267,13 +292,110 @@
     byId('growthError').textContent = state.error ? t(state.error) : '';
     byId('growthStatus').textContent = state.busy ? t('working') : state.status ? t(state.status) : '';
     byId('growthExportStatus').textContent = state.exportCount === null ? '' : t(state.exportMore ? 'exportMore' : 'exportDone', { count: state.exportCount });
-    renderPerformance(); renderComparison(); renderReportOptions();
+    renderPerformance(); renderComparison(); renderReportOptions(); renderGoogle();
+  }
+  function renderGoogle() {
+    if (!byId('growthGoogle')) return;
+    const google = state.sourceMode === 'google', connected = state.googleStatus?.connected === true;
+    const configured = state.googleStatus?.configured === true;
+    byId('growthGoogle').hidden = !google;
+    byId('growthCsvLabel').hidden = google; byId('growthCsv').required = !google;
+    byId('growthImportButton').textContent = t(google ? 'gscPull' : 'importCsv');
+    byId('growthImportButton').disabled = state.busy || google && (!connected || !configured);
+    byId('growthGoogleStatus').textContent = t(!configured ? 'gscNotConfigured' : connected ? 'gscConnected' : 'gscDisconnected');
+    byId('growthGoogleConnect').disabled = state.busy || !configured;
+    byId('growthGoogleProperties').disabled = state.busy || !configured || !connected;
+    byId('growthGoogleDisconnect').disabled = state.busy || !connected;
+    byId('growthGoogleSelection').hidden = !connected || !configured;
+    const select = byId('growthGoogleProperty'), selected = select.value;
+    select.innerHTML = `<option value="">${e(t(state.googleProperties.length ? 'gscChooseProperty' : 'gscNoProperties'))}</option>`
+      + state.googleProperties.map(site => `<option value="${e(site.siteUrl)}">${e(site.siteUrl)}</option>`).join('');
+    select.value = selected;
+    byId('growthGoogle').closest('[role="tabpanel"]')?.querySelector('[role="group"]')?.setAttribute('aria-label', t('gscDataSource'));
+  }
+  async function loadGoogleStatus() {
+    const epoch = state.epoch;
+    try {
+      const data = await request('/integrations/gsc/status');
+      if (epoch !== state.epoch) return;
+      state.googleStatus = { configured: data.configured === true, connected: data.connected === true };
+      if (!data.connected) state.googleProperties = [];
+      renderGoogle();
+    } catch (error) { if (epoch === state.epoch) showError(error); }
+  }
+  async function connectGoogle() {
+    if (state.busy) return;
+    const epoch = state.epoch; state.error = ''; setBusy(true);
+    try {
+      const data = await request('/integrations/gsc/start', 'POST', {});
+      if (epoch !== state.epoch) return;
+      const url = new URL(data.authorizationUrl);
+      if (url.origin !== 'https://accounts.google.com') throw { code: 'gscAuthorizationFailed' };
+      window.location.assign(url.href);
+    } catch (error) { if (epoch === state.epoch) showError(error); }
+    finally { if (epoch === state.epoch) setBusy(false); }
+  }
+  async function loadGoogleProperties() {
+    if (state.busy) return;
+    const epoch = state.epoch; state.error = ''; setBusy(true);
+    try {
+      const data = await request('/integrations/gsc/properties');
+      if (epoch === state.epoch) { state.googleProperties = data.properties; renderGoogle(); }
+    } catch (error) { if (epoch === state.epoch) showError(error); }
+    finally { if (epoch === state.epoch) setBusy(false); }
+  }
+  async function disconnectGoogle() {
+    if (state.busy || !confirm(t('gscDisconnectConfirm'))) return;
+    const epoch = state.epoch; state.error = ''; setBusy(true);
+    try {
+      const data = await request('/integrations/gsc', 'DELETE');
+      if (epoch === state.epoch) {
+        state.googleStatus = { ...state.googleStatus, connected: false }; state.googleProperties = [];
+        state.status = data.revoked ? 'gscDisconnected' : 'gscRevocationPending';
+      }
+    } catch (error) { if (epoch === state.epoch) showError(error); }
+    finally { if (epoch === state.epoch) setBusy(false); }
+  }
+  async function pullGoogle() {
+    if (!state.projectId) return showError({ code: 'selectProject' });
+    const epoch = state.epoch, projectId = state.projectId;
+    state.error = ''; state.status = ''; setBusy(true);
+    try {
+      await request(`/projects/${encodeURIComponent(projectId)}/search-performance/google`, 'POST', {
+        slot: byId('growthSlot').value, property: byId('growthGoogleProperty').value, kind: byId('growthGoogleKind').value,
+        start: byId('growthStart').value, end: byId('growthEnd').value, device: byId('growthDevice').value,
+        country: byId('growthCountry').value.trim().toLowerCase() || 'all' });
+      if (epoch !== state.epoch) return;
+      await loadPerformance(); if (epoch === state.epoch) state.status = 'gscLoaded';
+    } catch (error) { if (epoch === state.epoch) showError(error); }
+    finally { if (epoch === state.epoch) setBusy(false); }
+  }
+  const callback = new URLSearchParams(window.location.hash.slice(1));
+  if (callback.has('gscCode') || callback.has('gscError')) {
+    const code = callback.get('gscCode'), oauthState = callback.get('gscState');
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+    Promise.resolve(window.authReady).then(async () => {
+      if (!currentUser) { showToast(t('gscLoginAgain'), 'error'); return; }
+      const epoch = state.epoch;
+      let failure = null;
+      try {
+        if (!code || !oauthState) throw { code: 'gscAuthorizationFailed' };
+        await request('/integrations/gsc/complete', 'POST', { code, state: oauthState });
+      } catch (error) { failure = error; }
+      if (epoch !== state.epoch) return;
+      await window.openGrowthModal();
+      if (epoch !== state.epoch) return;
+      state.sourceMode = 'google';
+      byId('growthModalOverlay')?.querySelector('[name="growthSource"][value="google"]')?.click();
+      if (failure) showError(failure); else { state.status = 'gscConnected'; localize(); }
+    }).catch(() => showToast(t('gscAuthorizationFailed'), 'error'));
   }
   window.addEventListener('report-language-change', localize);
   window.addEventListener('account-session-cleared', () => {
     state.epoch++; state.projectRequest++; state.projects = []; state.projectId = ''; state.performance = null;
     state.reports = []; state.reportsLoaded = false; state.comparison = null; state.error = ''; state.status = '';
     state.exportCursor = null; state.exportCount = null; state.busy = false;
+    state.googleStatus = null; state.googleProperties = []; state.sourceMode = 'csv';
     byId('growthModalOverlay')?.remove(); previousFocus = null;
   });
 })();

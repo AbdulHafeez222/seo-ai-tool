@@ -176,3 +176,75 @@ window.FreeWorkflowCopy = {
     invalidExportSelection:'اختيار التصدير غير صالح.', featureBusy:'هذه الميزة مشغولة. حاول لاحقاً.', featureRateLimit:'طلبات كثيرة جداً. حاول بعد دقيقة.'
   }
 };
+Object.assign(window.FreeWorkflowCopy.en, {
+  gscDataSource:'Data source', gscCsvMode:'CSV upload', gscConnect:'Connect Google', gscLoadProperties:'Load properties', gscDisconnect:'Disconnect',
+  gscConnected:'Google connection active.', gscDisconnected:'Google is not connected.', gscProperty:'Search Console property', gscChooseProperty:'Choose a property',
+  gscDimension:'Dimension', gscQueries:'Queries', gscPages:'Pages', gscPull:'Fetch Google data', gscLoaded:'Google data saved.', gscNoProperties:'No properties loaded.',
+  gscReadOnly:'Read-only Search Console access. Tokens stay encrypted on the server; saved search data remains after disconnecting.',
+  gscDatesNotice:'Finalized web-search data in Pacific Time. End date must be at least three days ago; country is all or a three-letter code.',
+  gscSourceNotice:'Fetched directly from Google Search Console using granted property access. Totals cover returned rows, not the whole property.',
+  gscNotConfigured:'Google connection is not configured by the service owner. CSV import remains available.',
+  gscDisconnectConfirm:'Remove this account’s Google credentials and request revocation? Saved search data will remain.',
+  gscRevocationPending:'Local Google credentials removed. Remote revocation could not be confirmed; review Google Account permissions.',
+  gscAuthorizationFailed:'Google authorization was cancelled or could not be completed.', gscLoginAgain:'Log in and start Google connection again.',
+  gscInvalidState:'Google connection expired or belongs to another session. Start again.', gscReconnectRequired:'Google authorization expired or was revoked. Connect again.',
+  gscCredentialsUnavailable:'Stored Google credentials cannot be decrypted. Disconnect and connect again.', gscConnectionChanged:'Google connection or account changed during the request. Reload this view.',
+  gscNotConnected:'Connect Google first.', gscPermissionDenied:'Google did not grant access to this property.', gscProviderBusy:'Google’s request limit was reached. Try again later.',
+  gscProviderUnavailable:'Google could not complete the request. No search data was overwritten.', gscPropertyMismatch:'Choose a property that covers every URL in this project.',
+  gscDatesNotSettled:'Choose an end date at least three days ago.', gscInvalidCountry:'Use a valid device and all or a three-letter country code (for example usa).',
+  gscProjectChanged:'The project changed during this request. Reload it before fetching again.'
+});
+Object.assign(window.FreeWorkflowCopy.ur, {
+  gscDataSource:'ڈیٹا کا ماخذ', gscCsvMode:'CSV اپ لوڈ', gscConnect:'Google سے جوڑیں', gscLoadProperties:'پراپرٹیز لوڈ کریں', gscDisconnect:'رابطہ ختم کریں',
+  gscConnected:'Google کا رابطہ فعال ہے۔', gscDisconnected:'Google سے رابطہ نہیں ہے۔', gscProperty:'Search Console پراپرٹی', gscChooseProperty:'پراپرٹی منتخب کریں',
+  gscDimension:'ڈیٹا کی قسم', gscQueries:'سوالات', gscPages:'صفحات', gscPull:'Google کا ڈیٹا حاصل کریں', gscLoaded:'Google کا ڈیٹا محفوظ ہو گیا۔', gscNoProperties:'کوئی پراپرٹی لوڈ نہیں ہوئی۔',
+  gscReadOnly:'Search Console تک صرف پڑھنے کی رسائی۔ ٹوکن سرور پر خفیہ رہتے ہیں؛ رابطہ ختم کرنے سے محفوظ تلاش کا ڈیٹا نہیں مٹتا۔',
+  gscDatesNotice:'پیسیفک وقت کے مطابق حتمی ویب سرچ ڈیٹا۔ اختتامی تاریخ کم از کم تین دن پہلے کی ہو؛ ملک کے لیے all یا تین حرفی کوڈ دیں۔',
+  gscSourceNotice:'اجازت یافتہ پراپرٹی سے براہ راست Google Search Console کا ڈیٹا۔ مجموعے صرف واپس آنے والی قطاروں کے ہیں، پوری پراپرٹی کے نہیں۔',
+  gscNotConfigured:'سروس کے مالک نے Google کا رابطہ ترتیب نہیں دیا۔ CSV درآمد دستیاب ہے۔',
+  gscDisconnectConfirm:'اس اکاؤنٹ کے Google ٹوکن ہٹا کر اجازت منسوخ کرنے کی درخواست دیں؟ محفوظ تلاش کا ڈیٹا برقرار رہے گا۔',
+  gscRevocationPending:'مقامی Google ٹوکن ہٹا دیے گئے۔ Google پر منسوخی کی تصدیق نہیں ہوئی؛ اپنے Google اکاؤنٹ کی اجازتیں دیکھیں۔',
+  gscAuthorizationFailed:'Google کی اجازت منسوخ ہوئی یا مکمل نہ ہو سکی۔', gscLoginAgain:'لاگ ان کر کے Google کا رابطہ دوبارہ شروع کریں۔',
+  gscInvalidState:'Google کا رابطہ ختم ہو گیا یا دوسرے سیشن کا ہے۔ دوبارہ شروع کریں۔', gscReconnectRequired:'Google کی اجازت ختم یا منسوخ ہو گئی۔ دوبارہ جوڑیں۔',
+  gscCredentialsUnavailable:'محفوظ Google ٹوکن کھولے نہیں جا سکتے۔ رابطہ ختم کر کے دوبارہ جوڑیں۔', gscConnectionChanged:'درخواست کے دوران رابطہ یا اکاؤنٹ بدل گیا۔ یہ منظر دوبارہ لوڈ کریں۔',
+  gscNotConnected:'پہلے Google سے جوڑیں۔', gscPermissionDenied:'Google نے اس پراپرٹی تک رسائی نہیں دی۔', gscProviderBusy:'Google کی درخواستوں کی حد آ گئی۔ بعد میں کوشش کریں۔',
+  gscProviderUnavailable:'Google درخواست مکمل نہ کر سکا۔ تلاش کا محفوظ ڈیٹا نہیں بدلا۔', gscPropertyMismatch:'ایسی پراپرٹی منتخب کریں جو اس منصوبے کے تمام URLs کا احاطہ کرے۔',
+  gscDatesNotSettled:'کم از کم تین دن پہلے کی اختتامی تاریخ چنیں۔', gscInvalidCountry:'درست ڈیوائس اور all یا تین حرفی ملک کوڈ دیں، مثلاً usa۔',
+  gscProjectChanged:'درخواست کے دوران منصوبہ بدل گیا۔ دوبارہ ڈیٹا لینے سے پہلے اسے لوڈ کریں۔'
+});
+Object.assign(window.FreeWorkflowCopy.ps, {
+  gscDataSource:'د معلوماتو سرچینه', gscCsvMode:'CSV پورته کول', gscConnect:'Google سره ونښلوئ', gscLoadProperties:'ملکیتونه راوړئ', gscDisconnect:'اړیکه پرې کړئ',
+  gscConnected:'د Google اړیکه فعاله ده.', gscDisconnected:'Google نه دی نښلول شوی.', gscProperty:'د Search Console ملکیت', gscChooseProperty:'ملکیت وټاکئ',
+  gscDimension:'د معلوماتو ډول', gscQueries:'پوښتنې', gscPages:'پاڼې', gscPull:'د Google معلومات راوړئ', gscLoaded:'د Google معلومات خوندي شول.', gscNoProperties:'ملکیتونه نه دي راوړل شوي.',
+  gscReadOnly:'Search Console ته یوازې د لوستلو لاسرسی. ټوکنونه په سرور کې کوډ شوي پاتې کېږي؛ د اړیکې پرې کول خوندي معلومات نه ړنګوي.',
+  gscDatesNotice:'د پاسیفیک وخت له مخې وروستي ویب لټون معلومات. د پای نېټه لږ تر لږه درې ورځې مخکې وټاکئ؛ هېواد all یا درې توري کوډ دی.',
+  gscSourceNotice:'د اجازه لرونکي ملکیت معلومات مستقیم له Google Search Console څخه راوړل شوي. شمېرې یوازې د راوړل شویو قطارونو دي، نه د ټول ملکیت.',
+  gscNotConfigured:'د خدمت مالک د Google اړیکه نه ده برابره کړې. د CSV واردول شته.',
+  gscDisconnectConfirm:'د دې حساب Google ټوکنونه لرې او د اجازې لغوه کولو غوښتنه وکړئ؟ خوندي معلومات به پاتې وي.',
+  gscRevocationPending:'ځايي Google ټوکنونه لرې شول. د Google د اجازې لغوه کېدل تایید نه شول؛ د Google حساب اجازې وګورئ.',
+  gscAuthorizationFailed:'د Google اجازه لغوه شوه یا بشپړه نه شوه.', gscLoginAgain:'ننوځئ او د Google اړیکه بیا پیل کړئ.',
+  gscInvalidState:'د Google اړیکه پای ته رسېدلې یا د بلې ناستې ده. بیا پیل کړئ.', gscReconnectRequired:'د Google اجازه پای ته رسېدلې یا لغوه شوې. بیا ونښلوئ.',
+  gscCredentialsUnavailable:'خوندي Google ټوکنونه نه شي لوستل کېدای. اړیکه پرې او بیا ونښلوئ.', gscConnectionChanged:'د غوښتنې پر مهال اړیکه یا حساب بدل شو. دا لید بیا راوړئ.',
+  gscNotConnected:'لومړی Google ونښلوئ.', gscPermissionDenied:'Google دې ملکیت ته لاسرسی نه دی ورکړی.', gscProviderBusy:'د Google د غوښتنو حد پوره شو. وروسته هڅه وکړئ.',
+  gscProviderUnavailable:'Google غوښتنه بشپړه نه کړه. خوندي لټون معلومات نه دي بدل شوي.', gscPropertyMismatch:'هغه ملکیت وټاکئ چې د دې پروژې ټول URLs پکې وي.',
+  gscDatesNotSettled:'د پای نېټه لږ تر لږه درې ورځې مخکې وټاکئ.', gscInvalidCountry:'سمه وسیله او all یا د هېواد درې توري کوډ وکاروئ، لکه usa.',
+  gscProjectChanged:'د غوښتنې پر مهال پروژه بدله شوه. د معلوماتو له بیا راوړلو مخکې یې تازه کړئ.'
+});
+Object.assign(window.FreeWorkflowCopy.ar, {
+  gscDataSource:'مصدر البيانات', gscCsvMode:'رفع CSV', gscConnect:'ربط Google', gscLoadProperties:'تحميل المواقع', gscDisconnect:'قطع الاتصال',
+  gscConnected:'اتصال Google نشط.', gscDisconnected:'Google غير متصل.', gscProperty:'موقع Search Console', gscChooseProperty:'اختر موقعًا',
+  gscDimension:'نوع البيانات', gscQueries:'طلبات البحث', gscPages:'الصفحات', gscPull:'جلب بيانات Google', gscLoaded:'تم حفظ بيانات Google.', gscNoProperties:'لم يتم تحميل مواقع.',
+  gscReadOnly:'وصول للقراءة فقط إلى Search Console. تبقى الرموز مشفرة على الخادم؛ تبقى بيانات البحث المحفوظة بعد قطع الاتصال.',
+  gscDatesNotice:'بيانات بحث الويب النهائية بتوقيت المحيط الهادئ. يجب أن يسبق تاريخ النهاية اليوم بثلاثة أيام على الأقل؛ البلد all أو رمز من ثلاثة أحرف.',
+  gscSourceNotice:'بيانات جُلبت مباشرة من Google Search Console بصلاحية الموقع الممنوحة. المجاميع للصفوف المسترجعة فقط، وليست للموقع بأكمله.',
+  gscNotConfigured:'لم يُعد مالك الخدمة اتصال Google. استيراد CSV متاح.',
+  gscDisconnectConfirm:'حذف رموز Google لهذا الحساب وطلب إلغاء الإذن؟ ستبقى بيانات البحث المحفوظة.',
+  gscRevocationPending:'حُذفت رموز Google المحلية. تعذر تأكيد إلغاء الإذن لدى Google؛ راجع أذونات حساب Google.',
+  gscAuthorizationFailed:'أُلغي تفويض Google أو تعذر إكماله.', gscLoginAgain:'سجّل الدخول وابدأ ربط Google مجددًا.',
+  gscInvalidState:'انتهت صلاحية ربط Google أو يخص جلسة أخرى. ابدأ مجددًا.', gscReconnectRequired:'انتهت صلاحية تفويض Google أو أُلغي. أعد الربط.',
+  gscCredentialsUnavailable:'تعذر فك تشفير رموز Google المحفوظة. اقطع الاتصال ثم أعد الربط.', gscConnectionChanged:'تغير اتصال Google أو الحساب أثناء الطلب. أعد تحميل هذا العرض.',
+  gscNotConnected:'اربط Google أولًا.', gscPermissionDenied:'لم يمنح Google وصولًا إلى هذا الموقع.', gscProviderBusy:'تم بلوغ حد طلبات Google. حاول لاحقًا.',
+  gscProviderUnavailable:'تعذر على Google إكمال الطلب. لم تتغير بيانات البحث المحفوظة.', gscPropertyMismatch:'اختر موقعًا يغطي كل عناوين URL في هذا المشروع.',
+  gscDatesNotSettled:'اختر تاريخ نهاية يسبق اليوم بثلاثة أيام على الأقل.', gscInvalidCountry:'اختر جهازًا صحيحًا واستخدم all أو رمز بلد من ثلاثة أحرف مثل usa.',
+  gscProjectChanged:'تغير المشروع أثناء الطلب. أعد تحميله قبل جلب البيانات مجددًا.'
+});

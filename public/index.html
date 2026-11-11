@@ -1015,6 +1015,9 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
 .workflow-tabs button { background: transparent; color: var(--text-secondary); border-radius: 0; padding: 10px 12px; border-bottom: 2px solid transparent; }
 .workflow-tabs button[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--accent-success); }
 .workflow-project { max-width: 440px; margin-bottom: 14px; }
+.workflow-source { display: flex; flex-wrap: wrap; gap: 18px; margin-block: 16px; }
+.workflow-source label { display: flex; align-items: center; gap: 7px; }
+.workflow-source input[type="radio"] { width: 16px; height: 16px; padding: 0; accent-color: var(--accent-success); }
 .workflow-form { margin: 18px 0; }
 .workflow-form-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
 .workflow-file { margin: 12px 0; }
@@ -4208,7 +4211,7 @@ async function downloadPDF() {
 // PHASE 13 — PAGE LOAD INITIALIZATION
 // =========================================================================
 syncThemeChoiceButtons();
-initAuthState();
+window.authReady = initAuthState();
 </script>
 <script src="/features.js"></script>
 <script src="/free-workflows-language.js"></script>

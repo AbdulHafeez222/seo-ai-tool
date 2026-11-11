@@ -2,6 +2,8 @@
 
 ## 11 November additive repair
 
+The Google follow-up adds optional hidden `users.gscGrant` and `users.gscPending` encrypted strings. There is no new collection, index or bulk migration. Keep `GSC_ENABLED=false` until the independent encryption key and Google OAuth configuration are ready. Back up that key separately; losing it requires reconnecting accounts. See `GOOGLE_AND_BACKUPS_2026-11-11.md` for the fixture-only backup rehearsal, production restore boundaries and session/consent invalidation requirements.
+
 The free-workflow follow-up adds optional project fields `performanceBaseline` and `performanceCurrent`, hidden from ordinary queries and bounded to 384 KiB each. Only explicit owner CSV imports write them; clearing imports unsets them. No new collection/index, backfill or bulk migration is required. See `FREE_WORKFLOWS_2026-11-11.md` for input limits, export boundaries and verification. Full-report JSON exports are not a replacement for a consistent database backup or tested restore.
 
 The candidate adds optional `reports.snapshotJSON` and `reports.snapshotStatus` fields in the existing collection. Only new scans write them; no historical backfill or index is required. Snapshot strings are capped at 2 MiB and excluded from ordinary queries. Existing summary documents remain supported. Back up and rehearse restore before production release; no production schema or data migration was run here.

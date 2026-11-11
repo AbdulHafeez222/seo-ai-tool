@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import axios from 'axios';
 import { chromium } from 'playwright';
 import { safeHttp } from '../lib/outbound.js';
+import { googleHttp, GSC_SCOPE } from '../lib/google-search-console.js';
 
 const uri = process.env.TEST_MONGODB_URI;
 assert.match(uri || '', /^mongodb:\/\/127\.0\.0\.1:27019\/seo_beta_acceptance(?:\?|$)/);
@@ -31,7 +32,7 @@ const copy = {
   ps: ['د وېبپاڼې د ازموینې لارښود', 'وېبپاڼه څنګه ازمویل کېږي؟', 'دا لارښود د وېبپاڼې د ازموینې لپاره روښانه بېلګې او عملي ګامونه وړاندې کوي. راپور د لیدل شوي اصلي متن پر بنسټ جوړېږي.'],
   ar: ['دليل اختبار الموقع', 'كيف يتم اختبار الموقع؟', 'يشرح هذا الدليل كيفية اختبار الموقع باستخدام الأدلة المرصودة. يتضمن أمثلة واضحة وخطوات عملية للقارئ ويعتمد على محتوى الصفحة الفعلي.']
 };
-const original = { get: safeHttp.get, head: safeHttp.head, psi: axios.get, lookup: dns.lookup };
+const original = { get: safeHttp.get, head: safeHttp.head, psi: axios.get, lookup: dns.lookup, googleRequest: googleHttp.request };
 dns.lookup = async (host, options, ...rest) => {
   if (host === 'example.com') return options?.all ? [{ address: '8.8.8.8', family: 4 }] : { address: '8.8.8.8', family: 4 };
   return original.lookup(host, options, ...rest);
@@ -186,11 +187,61 @@ try {
   assert.equal(await page.locator('#reportDetailModalOverlay').evaluate(el => el.classList.contains('open')), false);
   assert.equal((await api.User.findById(account._id)).scansToday, 5, 'One explicit fresh scan charges exactly one unit');
   assert.equal(await api.Report.countDocuments({ userId: account._id }), 7);
+  Object.assign(process.env, { GSC_ENABLED: 'true', APP_ORIGIN: base, GSC_CLIENT_ID: 'browser-fixture-client', GSC_CLIENT_SECRET: 'browser-fixture-secret',
+    GSC_TOKEN_ENCRYPTION_KEY: crypto.randomBytes(32).toString('base64') });
+  const googleRequests = [];
+  googleHttp.request = async config => {
+    googleRequests.push(config.url);
+    if (config.url.endsWith('/token')) return { data: { access_token: 'fixture-private-access', refresh_token: 'fixture-private-refresh', token_type: 'Bearer', expires_in: 3600, scope: GSC_SCOPE } };
+    if (config.url.endsWith('/revoke')) return { data: {} };
+    if (config.url.endsWith('/sites')) return { data: { siteEntry: [{ siteUrl: 'sc-domain:example.com', permissionLevel: 'siteOwner' }] } };
+    return { data: { rows: [{ keys: ['Google fixture query'], clicks: 3, impressions: 1000, position: 9 }] } };
+  };
+  await page.route('https://accounts.google.com/**', route => {
+    const url = new URL(route.request().url());
+    return route.fulfill({ status: 302, headers: { location: `${base}/integrations/gsc/callback?state=${url.searchParams.get('state')}&code=fixture-code` }, body: '' });
+  });
+  await page.evaluate(() => openGrowthModal());
+  await page.locator('#growthTab-performance').click();
+  await page.locator('[name="growthSource"][value="google"]').check();
+  await page.locator('#growthGoogleConnect').click();
+  await page.waitForURL(url => url.origin === base && !url.hash, { timeout: 30000 });
+  await page.waitForFunction(() => document.getElementById('growthGoogleProperties') && !document.getElementById('growthGoogleProperties').disabled);
+  assert.equal(await page.evaluate(() => location.hash), '', 'OAuth code and state must be removed from browser history');
+  await page.locator('#growthGoogleProperties').click();
+  await page.locator('#growthGoogleProperty option[value="sc-domain:example.com"]').waitFor({ state: 'attached' });
+  await page.selectOption('#growthGoogleProperty', 'sc-domain:example.com');
+  await page.locator('#growthStart').fill('2026-02-01'); await page.locator('#growthEnd').fill('2026-02-28');
+  const pulled = page.waitForResponse(response => response.url().endsWith('/search-performance/google'));
+  await page.locator('#growthImportButton').click(); assert.equal((await pulled).status(), 200);
+  await page.waitForFunction(() => document.getElementById('growthPerformanceResults').textContent.includes('Google fixture query'));
+  const googleChecks = [];
+  for (const locale of Object.keys(copy)) {
+    const before = requests.length;
+    await page.selectOption('#growthLanguage', locale); assert.equal(requests.length, before);
+    assert.equal(await page.locator('#growthGoogleProperty').inputValue(), 'sc-domain:example.com');
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.locator('#growthModalOverlay .modal-panel').evaluate(el => { el.scrollTop = 0; });
+      assert.ok(await page.locator('#growthModalOverlay .modal-panel').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+      await page.screenshot({ path: path.join(output, `google-${locale}-${width}.png`) });
+      googleChecks.push({ locale, width, passed: true });
+    }
+  }
+  assert.equal((await api.User.findById(account._id)).scansToday, 5);
+  assert.equal(googleRequests.filter(url => url.endsWith('/token')).length, 1);
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#growthGoogleDisconnect').click();
+  await page.waitForFunction(() => document.getElementById('growthGoogleDisconnect').disabled);
+  assert.equal((await api.User.findById(account._id).select('+gscGrant')).gscGrant, undefined);
+  assert.ok((await api.Project.findById(project._id).select('+performanceCurrent')).performanceCurrent.includes('google-search-console-api'));
+  assert.deepEqual(errors, []);
   await page.evaluate(() => logoutUser(false));
   assert.equal(await page.locator('#growthModalOverlay').count(), 0);
   const summary = { passed: true, checks, pdfLocales: Object.keys(copy), scans: 5, freshRescanVerified: true, rescanProjectPreserved: true, consoleErrors: errors,
-    workflowChecks, imports: 2, comparedReports: true, exportedBatches: 2, workflowQuotaCharged: 0,
-    boundary: 'Real Chromium, HTTP APIs and isolated MongoDB. Website/PSI responses are controlled fixtures; no live crawling is implied.' };
+    workflowChecks, googleChecks, googleOAuthRoundTrip: true, googlePull: true, googleDisconnected: true,
+    imports: 2, comparedReports: true, exportedBatches: 2, workflowQuotaCharged: 0,
+    boundary: 'Real Chromium, HTTP APIs and isolated MongoDB. Website/PSI and Google authorization/API responses are controlled fixtures; no live provider verification is implied.' };
   await writeFile(path.join(output, 'results.json'), JSON.stringify(summary, null, 2));
   console.log(JSON.stringify(summary));
 } catch (error) {
@@ -203,6 +254,7 @@ try {
   safeHttp.head = original.head;
   axios.get = original.psi;
   dns.lookup = original.lookup;
+  googleHttp.request = original.googleRequest;
   api.scanCache.clear();
   await api.Report.deleteMany({ userId: account._id });
   await api.Project.deleteMany({ userId: account._id });

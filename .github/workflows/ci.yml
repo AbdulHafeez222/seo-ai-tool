@@ -1,0 +1,54 @@
+name: Beta checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Start isolated MongoDB replica set
+        run: docker run --detach --name acceptance-mongo --publish 127.0.0.1:27019:27019 mongo:8.0.16 --port 27019 --replSet beta-test --bind_ip_all
+      - run: node scripts/init-test-database.mjs
+        env:
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27019/seo_beta_acceptance?replicaSet=beta-test
+      - name: Database acceptance
+        run: node --test test/database-acceptance.test.js test/free-workflows-acceptance.test.js test/google-search-console-acceptance.test.js
+        env:
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27019/seo_beta_acceptance?replicaSet=beta-test
+      - name: Chromium desktop, mobile and PDF acceptance
+        run: node scripts/browser-acceptance.mjs
+        env:
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27019/seo_beta_acceptance?replicaSet=beta-test
+          CHROMIUM_PATH: /usr/bin/google-chrome
+          BROWSER_OUTPUT_DIR: work/browser-acceptance
+      - name: Install verified MongoDB Database Tools
+        run: |
+          curl --fail --location --retry 2 --output "$RUNNER_TEMP/mongodb-tools.tgz" https://fastdl.mongodb.org/tools/db/mongodb-database-tools-debian12-x86_64-100.20.1.tgz
+          printf '8f25dcd1d769560fae1b5e724dc0c5eba54f2410dd293a9bab62be055507e521  %s\n' "$RUNNER_TEMP/mongodb-tools.tgz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/mongodb-tools.tgz" -C "$RUNNER_TEMP"
+          echo "MONGODB_TOOLS_BIN=$RUNNER_TEMP/mongodb-database-tools-debian12-x86_64-100.20.1/bin" >> "$GITHUB_ENV"
+      - name: Encrypted backup and isolated restore rehearsal
+        run: node scripts/backup-rehearsal.mjs
+        env:
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27019/seo_beta_acceptance?replicaSet=beta-test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-acceptance
+          path: work/browser-acceptance
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backup-rehearsal-evidence
+          path: work/backup-rehearsal/results.json
+          retention-days: 7

@@ -2,11 +2,9 @@
 
 Existing Express/Mongoose/vanilla-JavaScript application, hardened on a development branch for beta review. **Not cleared for production launch**: see [release readiness](docs/RELEASE_READINESS.md), [baseline audit](docs/AUDIT.md), and [migration plan](docs/MIGRATIONS.md).
 
-Latest live release: [free workflow improvements](docs/FREE_WORKFLOWS_2026-11-11.md), application commit `ad284d8`, adding Search Console CSV opportunities, saved-report comparisons and private data export without paid services or additional scan quota. CI and live account/browser acceptance passed. Earlier deployment evidence is in [11 November public beta deployment](docs/PUBLIC_BETA_2026-11-11.md); remaining beta limitations still apply.
+Latest live release: [Google connection and encrypted restore rehearsal](docs/GOOGLE_AND_BACKUPS_2026-11-11.md), application commit `2b78d58`. CI and live account/browser acceptance passed. Google access stays disabled pending secure owner OAuth setup; the backup rehearsal uses isolated synthetic databases, not production data. The earlier [free workflows](docs/FREE_WORKFLOWS_2026-11-11.md) and [public beta deployment](docs/PUBLIC_BETA_2026-11-11.md) remain included; beta limitations still apply.
 
 ## Local development
-
-New candidate: [read-only Google connection and encrypted backup/restore rehearsal](docs/GOOGLE_AND_BACKUPS_2026-11-11.md). Google access remains disabled until owner-managed OAuth credentials, consent configuration and an independent encryption key are entered securely. The backup rehearsal uses isolated synthetic databases only, not production data.
 
 Use Node 22. Copy `.env.example` to `.env`, generate a random JWT secret of at least 32 bytes, and configure an isolated MongoDB test database. Do not paste secrets into GitHub or chat.
 

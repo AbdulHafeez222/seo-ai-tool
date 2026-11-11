@@ -39,6 +39,8 @@ Live acceptance completed at approximately 06:45 UTC using two controlled accoun
 
 ## Remaining work and cost boundary
 
+Follow-up: the direct Google connection and an isolated encrypted backup/restore rehearsal are now implemented in `GOOGLE_AND_BACKUPS_2026-11-11.md`. Google still requires owner OAuth configuration and live-provider acceptance; the fixture rehearsal is not a production backup. The paragraph below records the earlier release's remaining work.
+
 Still possible without a paid API: native-speaker translation review, more usability/accessibility work, manual backup-and-restore rehearsal, and optional direct Google Search Console integration using the free API. Direct integration still needs implementation, owner-managed Google Cloud OAuth credentials/consent configuration, and any applicable verification. Credentials must be entered in hosting settings, never committed or pasted into chat. Recovery also remains disabled pending suitable SMTP configuration, index review and delivery tests; a paid provider is not inherently required.
 
 Potential paid choices, not enabled here: additional hosting/storage beyond free limits, dedicated isolated crawling workers, commercial search datasets, paid AI citation collection/model calls, and production email capacity. Costs depend on actual usage and provider terms. They are optional future decisions, not prerequisites for these three workflows.

@@ -1,6 +1,8 @@
 # Google Search Console and backup rehearsal
 
-Candidate `10.4-beta-google-ready` adds a free, read-only Google connection and an automated encrypted backup/restore rehearsal. No paid model/search provider, SMTP provider, billing activation or infrastructure upgrade is included. Existing hosting and API quotas still apply.
+Live application release `10.4-beta-google-ready`, commit `2b78d58a441faf8ae52589787dca4b0c46cdecc5`, adds a free, read-only Google connection and an automated encrypted backup/restore rehearsal. No paid model/search provider, SMTP provider, billing activation or infrastructure upgrade is included. Existing hosting and API quotas still apply. Google access remains disabled until owner credentials and consent configuration are supplied securely.
+
+Public app: https://seo-ai-tool-production-ab4f.up.railway.app/
 
 ## Google workflow
 
@@ -58,3 +60,9 @@ For a real free-tier backup, the owner must approve a maintenance window and a s
 ## Verification boundary
 
 Local real-MongoDB tests cover state replay/expiry, wrong accounts, session changes, superseding consent, token refresh, missing keys, project filters, provider failures, oversized results, and disconnect races. Chromium exercises a complete cross-site OAuth round trip, API fetch, provenance, disconnect, four locales at desktop/mobile widths and zero additional scan units. Google authorization/API responses in those tests are controlled fixtures, not a live Google grant. Native-language editorial review remains separate.
+
+65 tests passed with the isolated replica set, followed by focused safety regressions. [GitHub CI run 42982144576](https://github.com/AbdulHafeez222/seo-ai-tool/actions/runs/42982144576) passed for the exact application commit, including all database suites, Chromium/PDF acceptance, encrypted dump/restore, and a zero-vulnerability production dependency audit.
+
+Railway deployment `f4e68d78-d344-4e11-bdc7-83b26b7f85be` reached terminal `SUCCESS` at 07:50 UTC on 11 November 2026. The existing one-instance Docker service, sleeping setting and hosting plan were preserved; source is pinned to the verified commit. No Google credentials or paid services were activated.
+
+Live acceptance at approximately 07:51 UTC verified registration/login, authenticated Google status, disabled Google actions, foreign-project rejection, functioning CSV imports, private exports excluding credential fields, zero additional scan units, and all four locales at 1440px/390px. It made no Google authorization requests and no scan requests; both controlled test accounts were deleted. Live provider authorization and an actual production backup/restore remain owner-configuration/operational acceptance steps, not completed claims.

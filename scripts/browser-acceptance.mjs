@@ -172,19 +172,23 @@ try {
   assert.equal(await api.Report.countDocuments({ userId: account._id }), 6);
   assert.deepEqual(errors, []);
   await page.locator('#growthClose').click();
-  copy.ar[0] = 'Updated evidence guide';
+  copy.en[0] = 'Updated evidence guide';
+  await page.evaluate(id => viewReportDetail(id), String(afterReport._id));
   const refreshed = page.waitForResponse(response => response.url().includes('/scan?') && response.url().includes('refresh=true'));
-  await page.evaluate(() => rescanFromReport('https://example.com/ar'));
+  await page.locator('#reportDetailModalContent [data-rescan-url]').click();
   const refreshedResponse = await refreshed;
   const refreshedResult = await refreshedResponse.json();
   assert.equal(refreshedResponse.status(), 200);
   assert.equal(refreshedResult.title, 'Updated evidence guide');
   assert.ok(refreshedResult.observedAt);
+  assert.equal(new URL(refreshedResponse.url()).searchParams.get('projectId'), String(project._id));
+  assert.equal(String((await api.Report.findById(refreshedResult.reportId)).projectId), String(project._id));
+  assert.equal(await page.locator('#reportDetailModalOverlay').evaluate(el => el.classList.contains('open')), false);
   assert.equal((await api.User.findById(account._id)).scansToday, 5, 'One explicit fresh scan charges exactly one unit');
   assert.equal(await api.Report.countDocuments({ userId: account._id }), 7);
   await page.evaluate(() => logoutUser(false));
   assert.equal(await page.locator('#growthModalOverlay').count(), 0);
-  const summary = { passed: true, checks, pdfLocales: Object.keys(copy), scans: 5, freshRescanVerified: true, consoleErrors: errors,
+  const summary = { passed: true, checks, pdfLocales: Object.keys(copy), scans: 5, freshRescanVerified: true, rescanProjectPreserved: true, consoleErrors: errors,
     workflowChecks, imports: 2, comparedReports: true, exportedBatches: 2, workflowQuotaCharged: 0,
     boundary: 'Real Chromium, HTTP APIs and isolated MongoDB. Website/PSI responses are controlled fixtures; no live crawling is implied.' };
   await writeFile(path.join(output, 'results.json'), JSON.stringify(summary, null, 2));

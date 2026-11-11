@@ -162,7 +162,7 @@ function renderPageEvidence(report) {
 
 document.addEventListener('click', event => {
   const rescan = event.target.closest('[data-rescan-url]');
-  if (rescan) rescanFromReport(rescan.dataset.rescanUrl);
+  if (rescan) rescanFromReport(rescan.dataset.rescanUrl, rescan.dataset.projectId || '');
   const project = event.target.closest('[data-project-scan]');
   if (project) scanProject(project.dataset.projectScan, project.dataset.projectUrl);
 });

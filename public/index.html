@@ -2142,7 +2142,7 @@ function renderReportsTable(data) {
               <td>${scoreBadge(r.citationScore)}</td>
               <td style="white-space:nowrap;">
                 <button type="button" onclick="viewReportDetail('${r.id}')" style="font-size:11px; padding:6px 10px;" title="View">👁️</button>
-                <button type="button" data-rescan-url="${escapeHtml(r.url)}" style="font-size:11px; padding:6px 10px;" title="Re-Scan">🔄</button>
+                <button type="button" data-rescan-url="${escapeHtml(r.url)}" data-project-id="${escapeHtml(r.projectId || '')}" style="font-size:11px; padding:6px 10px;" title="Re-Scan">🔄</button>
                 <button type="button" onclick="deleteReport('${r.id}')" style="font-size:11px; padding:6px 10px; background:var(--accent-danger);" title="Delete">🗑️</button>
               </td>
             </tr>`).join('')}
@@ -2198,13 +2198,14 @@ async function deleteReport(id) {
   }
 }
 
-function rescanFromReport(url) {
+function rescanFromReport(url, projectId = '') {
   closeReportsModal();
   closeDashboardModal();
+  closeReportDetailModal();
   const urlEl = document.getElementById("url");
   if (urlEl) urlEl.value = url;
   navGoToScan();
-  scan(true);
+  scan(true, projectId);
 }
 
 // --- Report Detail ------------------------------------------------------
@@ -2276,7 +2277,7 @@ function renderReportDetail(r) {
     </details>` : ''}
     <div style="margin-top:18px; text-align:right;">
       ${r.snapshotStatus === 'complete' ? `<button type="button" data-open-saved-report="${escapeHtml(r.id)}">${escapeHtml(uiLabel('openSavedReport','Open saved report'))}</button>` : `<p>${escapeHtml(uiLabel('summaryOnly','Only a summary was stored for this report.'))}</p>`}
-      <button type="button" data-rescan-url="${escapeHtml(r.finalUrl || r.url)}">🔄 Re-Scan This Site</button>
+      <button type="button" data-rescan-url="${escapeHtml(r.finalUrl || r.url)}" data-project-id="${escapeHtml(r.projectId || '')}">🔄 Re-Scan This Site</button>
     </div>
   `;
 }
@@ -2889,7 +2890,7 @@ async function recoverLastScan() {
 // =========================================================================
 // SCAN
 // =========================================================================
-async function scan(forceRefresh = false) {
+async function scan(forceRefresh = false, projectId = '') {
   if (scanInProgress) return;
 
   const urlEl = document.getElementById("url");
@@ -2910,7 +2911,10 @@ async function scan(forceRefresh = false) {
   loadingTimers.push(setTimeout(() => { if (scanInProgress) { showLoading("Generating AI Visibility Signals...", "Calculating vector weights and entity frequency benchmarks"); setLoadingProgress(80); } }, 6500));
 
   try {
-    const data = await apiFetch(`/scan?url=${encodeURIComponent(url)}${forceRefresh === true ? '&refresh=true' : ''}`);
+    const query = new URLSearchParams({ url });
+    if (forceRefresh === true) query.set('refresh', 'true');
+    if (projectId) query.set('projectId', projectId);
+    const data = await apiFetch(`/scan?${query}`);
     clearLoadingTimers();
     setLoadingProgress(100);
 

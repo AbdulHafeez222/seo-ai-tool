@@ -2,7 +2,7 @@
 
 Existing Express/Mongoose/vanilla-JavaScript application, hardened on a development branch for beta review. **Not cleared for production launch**: see [release readiness](docs/RELEASE_READINESS.md), [baseline audit](docs/AUDIT.md), and [migration plan](docs/MIGRATIONS.md).
 
-Latest candidate: [free workflow improvements](docs/FREE_WORKFLOWS_2026-11-11.md), adding Search Console CSV opportunities, saved-report comparisons and private data export without paid services or additional scan quota. Deployment evidence for the previous application commit `3d216eb` is in [11 November public beta deployment](docs/PUBLIC_BETA_2026-11-11.md); remaining beta limitations still apply.
+Latest live release: [free workflow improvements](docs/FREE_WORKFLOWS_2026-11-11.md), application commit `ad284d8`, adding Search Console CSV opportunities, saved-report comparisons and private data export without paid services or additional scan quota. CI and live account/browser acceptance passed. Earlier deployment evidence is in [11 November public beta deployment](docs/PUBLIC_BETA_2026-11-11.md); remaining beta limitations still apply.
 
 ## Local development
 

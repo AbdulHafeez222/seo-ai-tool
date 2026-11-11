@@ -2,7 +2,7 @@
 
 Existing Express/Mongoose/vanilla-JavaScript application, hardened on a development branch for beta review. **Not cleared for production launch**: see [release readiness](docs/RELEASE_READINESS.md), [baseline audit](docs/AUDIT.md), and [migration plan](docs/MIGRATIONS.md).
 
-Latest verification: [11 November repair and release checks](docs/REPAIR_2026-11-11.md). The repaired branch is not deployed. A live scan acceptance failed, so public launch remains on hold.
+Latest verification: [11 November public beta deployment](docs/PUBLIC_BETA_2026-11-11.md). Application commit `3d216eb` is deployed and passed live scan, account, report isolation and browser acceptance. Remaining beta limitations are recorded there; the earlier [repair report](docs/REPAIR_2026-11-11.md) describes the pre-deployment checkpoint.
 
 ## Local development
 

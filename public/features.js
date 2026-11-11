@@ -5,6 +5,32 @@ let technicalMonitorLast = null;
 let contentOptimizerLast = null;
 function reportText(key,params={}) { return window.ReportLanguage?.t(key,params) || key; }
 function setReportLanguage(value) { window.ReportLanguage?.set(value); }
+
+async function openSavedReport(id) {
+  try {
+    const data = await apiFetch(`/reports/${encodeURIComponent(id)}/result`);
+    document.querySelectorAll('.modal-overlay.open').forEach(el => el.classList.remove('open'));
+    resetReportState();
+    lastScanData = data;
+    document.getElementById('url').value = data.requestedUrl || data.resolvedUrl;
+    renderAllResults(data);
+    document.getElementById('mainContent').scrollIntoView?.();
+  } catch (error) { showToast(error.message, 'error'); }
+}
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-open-saved-report]');
+  if (button) void openSavedReport(button.dataset.openSavedReport);
+});
+
+let printDetails = [];
+window.addEventListener('beforeprint', () => {
+  printDetails = [...document.querySelectorAll('#mainContent details:not([open])')];
+  printDetails.forEach(el => { el.open = true; });
+});
+window.addEventListener('afterprint', () => {
+  printDetails.forEach(el => { el.open = false; });
+  printDetails = [];
+});
 function renderContentIntelligence(report) {
   contentEvidenceLast=report || null;
   const card=document.getElementById('contentIntelligenceCard');
@@ -39,6 +65,7 @@ window.addEventListener('report-language-change',()=>{
   if(document.getElementById('authModalOverlay')?.classList.contains('open'))applyAuthModalMode(true);
   if(document.getElementById('profileModalOverlay')?.classList.contains('open'))openProfileModal();
   if(lastScanData?.localSEO)renderLocalSeo(lastScanData);
+  if(lastScanData?.aeo)renderModelSimulations(lastScanData);
 });
 function toggleMoreCompetitors() {
   const grid = document.getElementById('extraCompetitorsGrid');
@@ -109,6 +136,7 @@ function renderTechnicalMonitor(report) {
   if (!report) return;
   document.getElementById('technicalMonitorResults').innerHTML = `<p>${escapeHtml(report.scopeNote)}</p>
     <p>${escapeHtml(reportText('technicalSummary',{score:report.technicalSeoScore == null ? reportText('unavailable') : `${report.technicalSeoScore}/100`,critical:report.criticalIssueCount,warnings:report.warningCount}))}</p><p>${escapeHtml(reportText('reportDetailsNote'))}</p>
+    ${Number.isFinite(report.totalChecks) ? `<p>${escapeHtml(reportText('technicalCoverage',{passed:report.passedChecks,unknown:report.unknownChecks,total:report.totalChecks}))}</p>` : ''}
     ${report.issues.map(issue => `<details><summary>${escapeHtml(reportText(issue.severity.toLowerCase()))}: ${escapeHtml(issue.issueName)}</summary><p>${escapeHtml(issue.technicalExplanation)}</p><p>${escapeHtml(issue.recommendedFix)}</p></details>`).join('') || `<p>${escapeHtml(reportText('none'))}</p>`}`;
 }
 
@@ -123,7 +151,7 @@ function renderPageEvidence(report) {
     <p>${escapeHtml(reportText('declaredLanguage'))}: <bdi>${escapeHtml(locale.language || reportText('missingValue'))}</bdi>; ${escapeHtml(reportText('directionLabel'))}: <bdi>${escapeHtml(locale.direction || reportText('missingValue'))}</bdi>. ${escapeHtml(reportText('scriptNote'))}</p><p>${escapeHtml(reportText('reportDetailsNote'))}</p>
     <h4>${escapeHtml(reportText('policyTitle'))}</h4><p>${escapeHtml(report.crawlerPolicies.scope)}</p>
     <div style="overflow-x:auto"><table><thead><tr><th>${escapeHtml(reportText('agentLabel'))}</th><th>${escapeHtml(reportText('purposeLabel'))}</th><th>${escapeHtml(reportText('policyLabel'))}</th></tr></thead><tbody>
-      ${report.crawlerPolicies.bots.map(bot => `<tr><td>${escapeHtml(bot.agent)}</td><td>${escapeHtml(bot.purpose)}${bot.note ? `<br>${escapeHtml(bot.note)}` : ''}</td><td>${escapeHtml(bot.policy)}</td></tr>`).join('')}
+      ${report.crawlerPolicies.bots.map(bot => `<tr><td>${escapeHtml(bot.agent)}</td><td>${escapeHtml(bot.purpose)}${bot.note ? `<br>${escapeHtml(bot.note)}` : ''}</td><td data-policy="${escapeHtml(bot.policy)}">${escapeHtml(reportText({allowed:'policyAllowed',disallowed:'policyDisallowed',unknown:'policyUnknown'}[bot.policy] || 'policyUnknown'))}</td></tr>`).join('')}
     </tbody></table></div>
     <h4>${escapeHtml(reportText('actions'))}</h4>
     ${report.findings.map(item => `<details><summary>${escapeHtml(reportText(item.priority.toLowerCase()))}: ${escapeHtml(item.check)}</summary><p>${escapeHtml(item.evidence)}</p><p>${escapeHtml(item.action)}</p></details>`).join('') || `<p>${escapeHtml(reportText('none'))}</p>`}

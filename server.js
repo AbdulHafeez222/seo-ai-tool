@@ -15,6 +15,8 @@ import { analyzePageEvidence } from "./lib/evidence.js";
 import { observeTrustEvidence } from "./lib/trust-evidence.js";
 import { analyzeContentEvidence, keywordEvidence, lexicalSignals, languageProfile, words, includesTerm } from "./lib/content-intelligence.js";
 import { installAccountRoutes, deletingAccountIds } from "./lib/accounts.js";
+import { createDatabaseLifecycle, databaseFailureCategory } from "./lib/database.js";
+import { createReportSnapshot, restoreReportSnapshot } from "./lib/report-storage.js";
 
 dotenv.config();
 
@@ -176,14 +178,27 @@ export const logger = {
 // ========== SECTION 0.7: MONGODB CONNECTION & PERSISTENCE ================
 // =========================================================================
 //
-// Persistence is strictly best-effort. Every function in this section is
-// designed so that a missing/unreachable database NEVER crashes the server
-// or fails a request — it only means reports aren't persisted, which is
-// logged and otherwise ignored. All existing in-memory behavior (scanCache,
-// scanHistory, trendDB, rate limiting) continues to function unchanged
-// regardless of MongoDB's connection state.
+// Account routes require MongoDB; liveness stays available during an outage.
+// Completed scans report persistence failures explicitly. Initial connection
+// failures retry; the driver owns recovery after an established connection.
 
-let mongoConnectionPromise = null;
+const databaseLifecycle = createDatabaseLifecycle({
+  connect: async () => {
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      autoIndex: process.env.NODE_ENV !== "production",
+      autoCreate: process.env.NODE_ENV !== "production",
+      maxPoolSize: 10,
+      minPoolSize: 1,
+      serverSelectionTimeoutMS: 8000,
+      socketTimeoutMS: 45000
+    });
+    logger.info("DB", "mongodb_connected", {});
+    return conn.connection;
+  },
+  onFailure: (error, retryInMs) => logger.error("DB", "mongodb_connection_failed", {
+    category: databaseFailureCategory(error), retryInMs
+  })
+});
 
 /**
  * Reusable, idempotent MongoDB connection function. Safe to call multiple
@@ -196,50 +211,21 @@ export async function connectToDatabase() {
   if (mongoose.connection.readyState === 1) {
     return mongoose.connection;
   }
-  if (mongoConnectionPromise) {
-    return mongoConnectionPromise;
-  }
-
   const uri = safeText(process.env.MONGODB_URI);
   if (!uri) {
-    logger.warn("DB", "mongodb_uri_missing", { message: "MONGODB_URI is not set; running without persistent storage. All in-memory features remain fully functional." });
+    logger.warn("DB", "mongodb_uri_missing", { message: "MONGODB_URI is not set; accounts and persistent reports are unavailable." });
     return null;
   }
 
-  mongoConnectionPromise = mongoose
-    .connect(uri, {
-      // Connection pooling best practices: bounded pool, fail fast rather
-      // than hanging the process if Atlas is unreachable.
-      autoIndex: process.env.NODE_ENV !== "production",
-      autoCreate: process.env.NODE_ENV !== "production",
-      maxPoolSize: 10,
-      minPoolSize: 1,
-      serverSelectionTimeoutMS: 8000,
-      socketTimeoutMS: 45000
-    })
-    .then((conn) => {
-      logger.info("DB", "mongodb_connected", { host: conn.connection.host, name: conn.connection.name });
-      return conn.connection;
-    })
-    .catch((err) => {
-      logger.error("DB", "mongodb_connection_failed", { error: err.message });
-      // Reset so a later retry (e.g. triggered by the 'disconnected' handler
-      // below, or a future request) can attempt a fresh connection instead
-      // of being stuck on a rejected promise forever.
-      mongoConnectionPromise = null;
-      return null;
-    });
-
-  return mongoConnectionPromise;
+  return databaseLifecycle.start();
 }
 
 mongoose.connection.on("disconnected", () => {
   logger.warn("DB", "mongodb_disconnected", {});
-  mongoConnectionPromise = null;
 });
 
 mongoose.connection.on("error", (err) => {
-  logger.error("DB", "mongodb_runtime_error", { error: err.message });
+  logger.error("DB", "mongodb_runtime_error", { category: databaseFailureCategory(err) });
 });
 
 // --- Report model ---------------------------------------------------------
@@ -291,7 +277,9 @@ const reportSchema = new mongoose.Schema(
       organizations: [String]
     },
     recommendations: [mongoose.Schema.Types.Mixed],
-    pdfPath: { type: String, default: null }
+    pdfPath: { type: String, default: null },
+    snapshotJSON: { type: String, select: false },
+    snapshotStatus: { type: String, enum: ["complete", "too_large"] }
   },
   { timestamps: true }
 );
@@ -386,6 +374,7 @@ export async function saveReportToDatabase(payload, crawl, ownerContext = {}) {
     }
 
     const doc = await Report.create({
+      ...createReportSnapshot(payload),
       userId: ownerContext.userId || null,
       projectId: ownerContext.projectId || null,
       url: payload.resolvedUrl,
@@ -516,7 +505,8 @@ const userSchema = new mongoose.Schema(
     apiKey: { type: String, required: true, unique: true },
     plan: { type: String, enum: Object.keys(PLAN_LIMITS), default: "free" },
     scansToday: { type: Number, default: 0 },
-    lastScanReset: { type: Date, default: Date.now }
+    lastScanReset: { type: Date, default: Date.now },
+    sessionVersion: { type: Number, default: 0 }
   },
   { timestamps: true }
 );
@@ -536,7 +526,7 @@ export async function verifyPasswordHash(password, hash) {
 }
 
 export function authStamp(user) {
-  return crypto.createHmac("sha256", JWT_SECRET).update(`${user.passwordHash}:${user.apiKey}`).digest("hex");
+  return crypto.createHmac("sha256", JWT_SECRET).update(`${user.passwordHash}:${user.apiKey}:${user.sessionVersion || 0}`).digest("hex");
 }
 export function requestToken(req) {
   if (req.headers.authorization) return safeText(req.headers.authorization).replace(/^Bearer\s+/i, "");
@@ -576,8 +566,11 @@ app.disable("x-powered-by");
 app.use(cors({ origin: process.env.APP_ORIGIN || false }));
 app.use(express.json({ limit: "1mb" }));
 app.use((req, res, next) => {
+  const expected = process.env.APP_ORIGIN || `${req.protocol}://${req.get('host')}`;
+  if (!['GET','HEAD','OPTIONS'].includes(req.method) && req.get('origin') && req.get('origin') !== expected) {
+    return res.status(403).json({ success: false, message: "Request origin rejected." });
+  }
   if (!['GET','HEAD','OPTIONS'].includes(req.method) && req.headers.cookie && !req.headers.authorization) {
-    const expected = process.env.APP_ORIGIN || `${req.protocol}://${req.get('host')}`;
     if (req.get('origin') !== expected) return res.status(403).json({ success: false, message: "Request origin rejected." });
   }
   res.setHeader("Cache-Control", "no-store");
@@ -650,6 +643,7 @@ function pruneAnonymousUsers() {
 setInterval(pruneAnonymousUsers, 30 * 60 * 1000).unref();
 
 export async function reserveAccountUsage(user, units) {
+  if (!Number.isSafeInteger(units) || units < 0 || units > 50) throw new Error("Invalid quota reservation");
   const limit = PLAN_LIMITS[user.plan] || PLAN_LIMITS.free;
   const cutoff = new Date(Date.now() - 86400000);
   await User.updateOne({ _id: user._id, lastScanReset: { $lte: cutoff } },
@@ -681,6 +675,12 @@ export async function authenticateAndRateLimit(req, res, next) {
     const urls = req.path === "/compare-multi" ? safeText(req.query.urls).split(",").filter(Boolean) :
       [req.query.url, ...(["/compare", "/content-gap", "/gap-analysis", "/keyword-theft"].includes(req.path) ? [req.query.competitor] : [])];
     if (urls.length < 1 || urls.length > 5 || urls.some(u => !enforceSecureUrl(u))) return res.status(400).json({ success: false, message: "Provide valid public website URLs." });
+    if (req.query.projectId) {
+      if (!user._id || !mongoose.Types.ObjectId.isValid(req.query.projectId)) return res.status(400).json({ success: false, message: "Invalid project." });
+      const project = await Project.findOne({ _id: req.query.projectId, userId: user._id });
+      if (!project) return res.status(404).json({ success: false, message: "Project not found." });
+      req.scanProjectId = project._id;
+    }
     // Alias only redirects and must not consume quota twice.
     const units = req.path === "/gap-analysis" ? 0 : urls.length;
     if (user._id) {
@@ -1882,14 +1882,14 @@ export function calculateTechnicalSeoScore({ pageData, headers, robotsData, site
   }));
 
   metrics.push(buildMetric({
-    name: "Sitemap Availability", available: sitemapData?.available !== false, raw: sitemapData?.found ? 10 : 0, max: 10, weight: 10,
+    name: "Sitemap Availability", available: sitemapData?.available === true, raw: sitemapData?.found ? 10 : 0, max: 10, weight: 10,
     reason: sitemapData?.found ? `Sitemap found via ${sitemapData.source}.` : "No sitemap.xml found.",
     evidence: sitemapData?.found ? safeArray(sitemapData.urls).join(", ") : "Checked robots.txt and /sitemap.xml.",
     recommendation: "Publish and reference an XML sitemap."
   }));
 
   metrics.push(buildMetric({
-    name: "Robots.txt Availability", available: robotsData?.available !== false, raw: robotsData?.found ? 8 : 0, max: 8, weight: 8,
+    name: "Robots.txt Availability", available: robotsData?.available === true, raw: robotsData?.found ? 8 : 0, max: 8, weight: 8,
     reason: robotsData?.found ? "robots.txt is published." : "No robots.txt found.",
     evidence: robotsData?.found ? `${safeArray(robotsData.disallowedPaths).length} disallow rule(s) declared.` : "GET /robots.txt did not resolve.",
     recommendation: "Publish a robots.txt at the domain root."
@@ -1928,14 +1928,14 @@ export function calculateTechnicalSeoScore({ pageData, headers, robotsData, site
   }));
 
   metrics.push(buildMetric({
-    name: "Mixed Content", raw: !mixedContent?.applicable || mixedContent.mixedContentCount === 0 ? 8 : 0, max: 8, weight: 8,
+    name: "Mixed Content", available: mixedContent?.applicable === true, raw: mixedContent?.mixedContentCount === 0 ? 8 : 0, max: 8, weight: 8,
     reason: !mixedContent?.applicable ? "Page is not served over HTTPS; mixed-content check not applicable." : mixedContent.mixedContentCount === 0 ? "No insecure HTTP resources referenced from this HTTPS page." : `${mixedContent.mixedContentCount} insecure HTTP resource(s) referenced from an HTTPS page.`,
     evidence: mixedContent?.examples?.length > 0 ? `Examples: ${mixedContent.examples.join(", ")}` : "No mixed-content resources detected.",
     recommendation: "Update all asset references (img/script/link/iframe) to use HTTPS URLs."
   }));
 
   metrics.push(buildMetric({
-    name: "Broken Assets", raw: brokenAssetData?.checked === 0 ? 6 : clamp(6 - safeNumber(brokenAssetData?.broken), 0, 6), max: 6, weight: 6,
+    name: "Broken Assets", available: brokenAssetData?.checked > 0 && !brokenAssetData?.unknown, raw: clamp(6 - safeNumber(brokenAssetData?.broken), 0, 6), max: 6, weight: 6,
     reason: brokenAssetData?.checked === 0 ? "No assets available to sample." : brokenAssetData.broken === 0 ? "All sampled CSS/JS/image assets resolved successfully." : `${brokenAssetData.broken} of ${brokenAssetData.checked} sampled assets returned an error.`,
     evidence: brokenAssetData?.brokenAssets?.length > 0 ? brokenAssetData.brokenAssets.map(a => `${a.url} (${a.status || "no response"})`).join(", ") : `Sampled ${brokenAssetData?.checked || 0} asset(s).`,
     recommendation: "Fix or remove broken CSS, JS, or image references."
@@ -1987,8 +1987,6 @@ export function generateTechnicalSeoMonitorReport(ctx) {
   } = ctx;
 
   const issues = [];
-  let passedChecks = 0;
-  const totalChecks = 12;
 
   // 1. Broken Internal Links
   if (safeNumber(brokenLinkData?.broken) > 0) {
@@ -2001,7 +1999,7 @@ export function generateTechnicalSeoMonitorReport(ctx) {
       recommendedFix: "Fix or remove each broken internal link; redirect to the correct destination if the target page moved.",
       priority: "Critical"
     }));
-  } else { passedChecks++; }
+  }
 
   // 2. Broken External Links
   if (safeNumber(brokenExternalLinkData?.broken) > 0) {
@@ -2014,7 +2012,7 @@ export function generateTechnicalSeoMonitorReport(ctx) {
       recommendedFix: "Update or remove broken external links; verify the destination still exists before linking.",
       priority: "Medium"
     }));
-  } else { passedChecks++; }
+  }
 
   // 3. Redirect Chains
   if (safeNumber(redirectCount) > 0) {
@@ -2028,7 +2026,7 @@ export function generateTechnicalSeoMonitorReport(ctx) {
       recommendedFix: "Update internal/external links to point directly at the final destination URL, collapsing the chain to zero or one hop.",
       priority: redirectCount > 3 ? "High" : "Low"
     }));
-  } else { passedChecks++; }
+  }
 
   // 4. Redirect Loops
   const loopCheck = detectRedirectLoop(redirectChain);
@@ -2042,7 +2040,7 @@ export function generateTechnicalSeoMonitorReport(ctx) {
       recommendedFix: "Trace and break the redirect loop at the server/CMS configuration level immediately.",
       priority: "Critical"
     }));
-  } else { passedChecks++; }
+  }
 
   // 5. HTTP Status Analysis
   if (safeNumber(httpStatus) >= 400 || safeNumber(httpStatus) === 0) {
@@ -2055,7 +2053,7 @@ export function generateTechnicalSeoMonitorReport(ctx) {
       recommendedFix: "Investigate server logs to determine why this page isn't returning a 200 status.",
       priority: "Critical"
     }));
-  } else { passedChecks++; }
+  }
 
   // 6. HTTPS Validation
   const isHttps = safeText(resolvedUrl).startsWith("https://");
@@ -2069,7 +2067,7 @@ export function generateTechnicalSeoMonitorReport(ctx) {
       recommendedFix: "Install a valid TLS certificate and migrate the site to HTTPS, with permanent redirects from HTTP.",
       priority: "Critical"
     }));
-  } else { passedChecks++; }
+  }
 
   // 7. Mixed Content Detection
   if (mixedContent?.applicable && safeNumber(mixedContent.mixedContentCount) > 0) {
@@ -2082,7 +2080,7 @@ export function generateTechnicalSeoMonitorReport(ctx) {
       recommendedFix: "Update all asset references (img/script/link/iframe) to use HTTPS URLs.",
       priority: "Medium"
     }));
-  } else { passedChecks++; }
+  }
 
   // 8 & 9. Canonical Validation / Missing Canonical
   if (!pageData?.canonical) {
@@ -2095,7 +2093,7 @@ export function generateTechnicalSeoMonitorReport(ctx) {
       recommendedFix: "Add a self-referencing canonical tag pointing to this page's preferred URL.",
       priority: "Medium"
     }));
-  } else { passedChecks++; }
+  }
 
   // 10. Duplicate Canonical Detection
   if (safeNumber(pageData?.canonicalTagCount) > 1) {
@@ -2108,10 +2106,10 @@ export function generateTechnicalSeoMonitorReport(ctx) {
       recommendedFix: "Remove all but one canonical tag, keeping only the single correct self-referencing (or cross-domain, if intentional) canonical URL.",
       priority: "Critical"
     }));
-  } else { passedChecks++; }
+  }
 
   // 11. Robots.txt Validation
-  if (!robotsData?.found && robotsData?.available !== false) {
+  if (!robotsData?.found && robotsData?.available === true) {
     issues.push(buildTechnicalIssue({
       issueName: "Missing robots.txt",
       severity: "Info",
@@ -2121,10 +2119,10 @@ export function generateTechnicalSeoMonitorReport(ctx) {
       recommendedFix: "Publish a robots.txt file at the domain root declaring crawl rules and the sitemap location.",
       priority: "Low"
     }));
-  } else { passedChecks++; }
+  }
 
   // 12. Sitemap.xml Validation
-  if (!sitemapData?.found && sitemapData?.available !== false) {
+  if (!sitemapData?.found && sitemapData?.available === true) {
     issues.push(buildTechnicalIssue({
       issueName: "Missing XML Sitemap",
       severity: "Warning",
@@ -2134,11 +2132,26 @@ export function generateTechnicalSeoMonitorReport(ctx) {
       recommendedFix: "Generate an XML sitemap and reference it in robots.txt.",
       priority: "Medium"
     }));
-  } else { passedChecks++; }
+  }
 
   const criticalCount = issues.filter(i => i.severity === "Critical").length;
   const warningCount = issues.filter(i => i.severity === "Warning").length;
   const infoCount = issues.filter(i => i.severity === "Info").length;
+  const sampledLinks = sample => sample?.broken > 0 ? false : sample?.checked > 0 && !sample?.unknown ? true : null;
+  const checks = [
+    { code: "internalLinks", passed: sampledLinks(brokenLinkData) },
+    { code: "externalLinks", passed: sampledLinks(brokenExternalLinkData) },
+    { code: "redirectChain", passed: Number.isFinite(redirectCount) ? redirectCount === 0 : null },
+    { code: "redirectLoop", passed: Array.isArray(redirectChain) ? !loopCheck.looped : null },
+    { code: "httpStatus", passed: httpStatus > 0 ? httpStatus >= 200 && httpStatus < 300 : null },
+    { code: "https", passed: isHttps },
+    { code: "mixedContent", passed: mixedContent?.applicable ? mixedContent.mixedContentCount === 0 : null },
+    { code: "canonical", passed: Boolean(pageData?.canonical) },
+    { code: "duplicateCanonical", passed: Number.isFinite(pageData?.canonicalTagCount) ? pageData.canonicalTagCount <= 1 : null },
+    { code: "robots", passed: robotsData?.available === true ? Boolean(robotsData.found) : null },
+    { code: "sitemap", passed: sitemapData?.available === true ? Boolean(sitemapData.found) : null }
+  ];
+  const passedChecks = checks.filter(check => check.passed === true).length;
 
   // Estimated SEO Impact: a plain-language rollup derived directly from
   // the real counts above — not a separately fabricated number.
@@ -2150,8 +2163,11 @@ export function generateTechnicalSeoMonitorReport(ctx) {
 
   return {
     technicalSeoScore: technicalSeoAudit?.score ?? null,
-    totalChecks,
+    totalChecks: checks.length,
     passedChecks,
+    unknownChecks: checks.filter(check => check.passed === null).length,
+    checks,
+    scopeNote: "Observed HTML and bounded URL samples. Unavailable or inapplicable checks are excluded from pass counts; no live rankings or AI citations are measured.",
     criticalIssueCount: criticalCount,
     warningCount,
     infoCount,
@@ -2567,6 +2583,12 @@ export async function smartCrawl(url) {
   logger.info("CRAWL", "stage_completed", { url, stage: stage1.stageName, success: stage1.success, status: stage1.status });
   if (stage1.success) return finalizeCrawlResult(stage1, stages);
   if (stage1.pageValidation?.state === "BLOCKED_PAGE" || [401,403,429].includes(stage1.status)) return finalizeCrawlResult(null, stages);
+  if (process.env.CRAWLER_EGRESS_ISOLATED !== "true" || stage1.status >= 400) {
+    return { ...finalizeCrawlResult(null, stages), browserRendering: {
+      enabled: false,
+      reason: stage1.status >= 400 ? "HTTP error response; browser fallback was not attempted." : "Browser rendering is disabled until worker egress isolation is verified."
+    } };
+  }
 
   logger.info("CRAWL", "escalating_to_playwright", { url, priorStatus: stage1.status, priorBlockSystem: stage1.blockCheck?.system });
   const stage2 = await attemptPlaywrightRender(url, "PLAYWRIGHT_RENDERED", fetchPlaywright);
@@ -3994,8 +4016,7 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
   const result = aggregateMetrics(metrics);
   const readabilityScore = !englishCalibration ? null : avgSentenceLength >= 12 && avgSentenceLength <= 22 ? 100 : avgSentenceLength < 12 ? 80 : avgSentenceLength > 35 ? 30 : 60;
 
-  // Per-engine simulation is now fully derived from the metrics above —
-  // no independent static formula, so it can never drift from real evidence.
+  // Named profiles are illustrative weightings, never measured engine output.
   const faqsWeight = metrics.find(m => m.metric === "FAQ Schema")?.contribution || 0;
   const howToWeight = metrics.find(m => m.metric === "HowTo Schema")?.contribution || 0;
   const tableWeight = metrics.find(m => m.metric === "Table Formatting")?.contribution || 0;
@@ -4005,6 +4026,15 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
   const geminiCitationProbability = clamp(Math.round((result.score * 0.35) + (tableWeight * 2) + ((readabilityScore ?? result.score) * 0.30)), 10, 99);
   const perplexityCitationProbability = clamp(Math.round((result.score * 0.45) + (directAnswerWeight * 1.5) + ((readabilityScore ?? result.score) * 0.20)), 10, 99);
   const claudeCitationProbability = clamp(Math.round((result.score * 0.30) + ((readabilityScore ?? result.score) * 0.50) + (howToWeight * 1.5)), 10, 99);
+  const observedProfile = {
+    url: pageData.resolvedUrl,
+    answers: observedAnswers.filter(answer => answer.question && answer.answerObserved).length,
+    schemaTypes: safeArray(pageData?.schema?.detectedTypes).join(', ') || 'none',
+    tableRows: tableRowsCount,
+    englishCalibration
+  };
+  const profile = score => ({ score, basis: 'heuristic', code: 'profileEvidence', params: observedProfile,
+    reasoning: `${observedProfile.url}: ${observedProfile.answers} adjacent question/answer block(s), ${tableRowsCount} table row(s), declared schema types: ${observedProfile.schemaTypes}. English sentence calibration: ${englishCalibration ? 'available' : 'unavailable'}. Illustrative weighting only; no engine response or citation was measured.` });
 
   return {
     aeoScore: result.score,
@@ -4021,10 +4051,10 @@ export function calculateDynamicAeoScore(pageData, docVisibleText) {
     },
     methodology: "Uncalibrated structural heuristics. Optional FAQ/HowTo, lists and tables are not failed when absent; English sentence calibration is excluded for other languages.",
     simulations: {
-      chatgpt: { score: chatGptCitationProbability, reasoning: chatGptCitationProbability >= 80 ? "Strong Q&A structure and FAQ schema alignment." : "Add FAQ schema and direct-answer blocks to improve selection likelihood." },
-      gemini: { score: geminiCitationProbability, reasoning: geminiCitationProbability >= 80 ? "Well-structured tables and readable sentence rhythm." : "Add tables and structured data to improve Gemini's rendering fit." },
-      perplexity: { score: perplexityCitationProbability, reasoning: perplexityCitationProbability >= 80 ? "Clear direct-answer blocks near question phrasing." : "Add explicit direct-answer sentences immediately after question headings." },
-      claude: { score: claudeCitationProbability, reasoning: claudeCitationProbability >= 80 ? "Deep procedural HowTo structure and calibrated sentence length." : "Add HowTo schema and calibrate sentence length to 12-22 words." }
+      chatgpt: profile(chatGptCitationProbability),
+      gemini: profile(geminiCitationProbability),
+      perplexity: profile(perplexityCitationProbability),
+      claude: profile(claudeCitationProbability)
     }
   };
 }
@@ -5080,6 +5110,7 @@ export function buildBlockedPayload(url, crawl) {
   const pv = crawl?.pageValidation || {};
   return {
     success: false,
+    browserRendering: crawl?.browserRendering || null,
     blocked: true,
     validationState: pv.state || "BLOCKED_PAGE",
     status: crawl?.status || 0,
@@ -5159,7 +5190,7 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       const payload = structuredClone(entry.data);
       const saved = await saveReportToDatabase(payload, payload.crawl, ownerContext);
       payload.reportId = saved?._id || null;
-      payload.persistence = { saved: Boolean(saved), message: saved ? "Summary saved." : "Report could not be saved; result is available for this response only." };
+      payload.persistence = { saved: Boolean(saved), fullReport: saved?.snapshotStatus === "complete", message: saved ? (saved.snapshotStatus === "complete" ? "Full report saved." : "Summary saved; the full result exceeded the storage limit.") : "Report could not be saved; result is available for this response only." };
       return payload;
     }
     scanCache.delete(cacheKey);
@@ -5185,13 +5216,10 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
 
   const loadTimeMs = Date.now() - startTime;
 
-  // Enterprise Scoring Engine gate: scoring may ONLY proceed when the Page
-  // Validation Engine classified this crawl as VALID_PAGE. Any other state
-  // (PARTIAL_PAGE, BLOCKED_PAGE, ERROR_PAGE, EMPTY_PAGE) short-circuits here
-  // with a null-score response — no SEO/AEO/GEO/EEAT/Authority/Trust/
-  // Citation calculation is ever attempted on unverified content.
+  // Short real pages can lack navigation/metadata and still be analyzable.
+  // Keep the validator's limited-content flag; challenges and error pages stop.
   const validationState = crawl?.pageValidation?.state;
-  if ((crawl.blockCheck && crawl.blockCheck.blocked) || validationState !== "VALID_PAGE") {
+  if ((crawl.blockCheck && crawl.blockCheck.blocked) || crawl?.pageValidation?.analyzable !== true) {
     logger.warn("ORCHESTRATOR", "target_blocked", { url, system: crawl.blockCheck?.system, validationState });
     const blockedPayload = buildBlockedPayload(url, crawl);
     return { ...blockedPayload, score: null, status: "BLOCKED", reason: blockedPayload.reason };
@@ -5339,7 +5367,7 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       pageEvidence: analyzePageEvidence($, pageData, robotsData),
       contentEvidence: pageData.contentEvidence,
       trustEvidence: pageData.trustEvidence,
-      analysisVersion: "2026-10-30-evidence-v1",
+      analysisVersion: "2026-11-11-evidence-v2",
       mixedContent,
       brokenAssets: brokenAssetData,
       securityHeaders,
@@ -5366,6 +5394,8 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       },
       pageValidation: {
         state: crawl.pageValidation?.state,
+        limitedContent: validationState === "PARTIAL_PAGE",
+        evidence: crawl.pageValidation?.evidence,
         integrityScore: crawl.pageValidation?.integrityScore,
         confidenceScore: crawl.pageValidation?.confidenceScore
       },
@@ -5459,7 +5489,7 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
     // from being returned to the caller, even if MongoDB is unreachable.
     const savedReportDoc = await saveReportToDatabase(payload, crawl, ownerContext);
     payload.reportId = savedReportDoc?._id || null;
-    payload.persistence = { saved: Boolean(savedReportDoc), message: savedReportDoc ? "Summary saved." : "Report could not be saved; result is available for this response only." };
+    payload.persistence = { saved: Boolean(savedReportDoc), fullReport: savedReportDoc?.snapshotStatus === "complete", message: savedReportDoc ? (savedReportDoc.snapshotStatus === "complete" ? "Full report saved." : "Summary saved; the full result exceeded the storage limit.") : "Report could not be saved; result is available for this response only." };
 
     return payload;
   } catch (err) {
@@ -5784,6 +5814,7 @@ app.post("/auth/register", asyncHandler(async (req, res) => {
     res.status(201).json({ success: true, token, apiKey: user.apiKey, plan: user.plan, email: user.email });
   } catch (err) {
     logger.error("AUTH", "register_failed", { error: err.message });
+    if (err.code === 11000) return res.status(409).json({ success: false, message: "An account with this email already exists." });
     res.status(500).json({ success: false, message: "Registration failed due to an internal error." });
   }
 }));
@@ -5835,10 +5866,11 @@ app.post("/auth/login", asyncHandler(async (req, res) => {
   }
 }));
 
-app.post("/auth/logout", (req, res) => {
+app.post("/auth/logout", requireAuth, asyncHandler(async (req, res) => {
+  await User.updateOne({ _id: req.authUser._id }, { $inc: { sessionVersion: 1 } });
   res.clearCookie("aegis_session", { path: "/" });
   res.json({ success: true });
-});
+}));
 installAccountRoutes(app, { User, Report, Project, SiteCrawlJob, requireAuth, asyncHandler,
   hashPassword, verifyPasswordHash, generateApiKey, activeSiteCrawlJobIds, scanCache, logger, hasActiveAnalyses: () => runningAnalyses > 0 || pendingSiteCrawlReservations > 0 });
 
@@ -5915,13 +5947,7 @@ app.get("/scan", authenticateAndRateLimit, asyncHandler(async (req, res) => {
   activeScans.set(cacheKey, Date.now());
 
   try {
-    let projectId = null;
-    if (req.query.projectId) {
-      if (!req.user?._id || !mongoose.Types.ObjectId.isValid(req.query.projectId)) return res.status(400).json({ success: false, message: "Invalid project." });
-      const project = await Project.findOne({ _id: req.query.projectId, userId: req.user._id });
-      if (!project) return res.status(404).json({ success: false, message: "Project not found." });
-      projectId = project._id;
-    }
+    const projectId = req.scanProjectId || null;
     const data = await analyzeSingleUrl(normalized, { userId: req.user?._id || null, projectId });
 
 
@@ -6324,6 +6350,16 @@ app.get("/reports/:id", requireAuth, asyncHandler(async (req, res) => {
   }
 
   res.json({ success: true, report: { ...report, id: report._id.toString() } });
+}));
+
+// Explicit reopening never crawls, reserves quota, or rewrites the report.
+app.get("/reports/:id/result", requireAuth, asyncHandler(async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ success: false, message: "Invalid report ID." });
+  const report = await Report.findOne({ _id: req.params.id, userId: req.authUser._id }).select("+snapshotJSON").lean();
+  if (!report) return res.status(404).json({ success: false, message: "Report not found." });
+  const result = restoreReportSnapshot(report);
+  if (!result) return res.status(409).json({ success: false, message: "Only a summary was stored for this report. A new scan requires quota." });
+  res.json(result);
 }));
 
 app.delete("/reports/:id", requireAuth, asyncHandler(async (req, res) => {
@@ -6771,6 +6807,7 @@ process.on("uncaughtException", (err) => {
 });
 
 async function gracefulShutdown(signal) {
+  databaseLifecycle.stop();
   logger.info("SYSTEM", "shutdown_initiated", { signal });
   server.close(async () => {
     await closeBrowserInstance();

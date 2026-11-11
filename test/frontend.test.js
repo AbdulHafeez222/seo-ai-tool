@@ -44,7 +44,7 @@ test('frontend renders real payload shapes, comparison and optimizer controls wi
     assert.equal(window.document.getElementById('technicalMonitorCard').style.display,'block');
     window.renderPageEvidence({scope:'Single page only',locale:{language:'ur',direction:null},crawlerPolicies:{scope:'Policy only',bots:[{agent:'GPTBot',purpose:'Training',policy:'disallowed',note:''}]},findings:[{priority:'High',check:'Document language',evidence:'<img src=x onerror=alert(1)>',action:'Review'}],answerBlocks:[{heading:'سوال؟',excerpt:'جواب',format:'p'}],alternates:[]});
     assert.equal(window.document.getElementById('pageEvidenceCard').style.display,'block');
-    assert.match(window.document.getElementById('pageEvidenceResults').textContent,/disallowed/);
+    assert.ok(window.document.getElementById('pageEvidenceResults').textContent.includes(window.ReportLanguage.t('policyDisallowed')));
     assert.equal(window.document.querySelector('#pageEvidenceResults img'),null);
     window.renderPageEvidence(null);
     assert.equal(window.document.getElementById('pageEvidenceCard').style.display,'none');

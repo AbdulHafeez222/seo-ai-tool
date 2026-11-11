@@ -27,6 +27,48 @@ test('English readability is unavailable rather than failed for Urdu/Pashto and 
   assert.ok(appModule.tokenizeKeywords('پاکستان پاکستان کاروبار کاروبار رہنمائی رہنمائی').includes('پاکستان'));
 });
 
+test('technical checks do not count unavailable link, robots, sitemap or asset samples as passes', () => {
+  const pageData = { resolvedUrl: 'https://example.com/', canonical: 'https://example.com/', canonicalTagCount: 1 };
+  const result = appModule.generateTechnicalSeoMonitorReport({ pageData, resolvedUrl: pageData.resolvedUrl,
+    robotsData: { available: false }, sitemapData: { available: false }, redirectCount: 0, redirectChain: [],
+    mixedContent: { applicable: true, mixedContentCount: 0 }, brokenLinkData: { checked: 0, unknown: 1 },
+    brokenExternalLinkData: { checked: 0 }, httpStatus: 200 });
+  assert.equal(result.totalChecks, 11);
+  assert.equal(result.unknownChecks, 4);
+  assert.equal(result.passedChecks, 7);
+  assert.equal(result.issues.length, 0);
+  const score = appModule.calculateTechnicalSeoScore({ pageData, headers: {}, robotsData: { available: false },
+    sitemapData: { available: false }, redirectCount: 0, mixedContent: { applicable: false }, brokenAssetData: { checked: 0, unknown: 1 } });
+  for (const name of ['Sitemap Availability', 'Robots.txt Availability', 'Mixed Content', 'Broken Assets']) {
+    const metric = score.metrics.find(m => m.metric === name);
+    assert.equal(metric.passed, null, name);
+    assert.equal(metric.weight, 0, name);
+  }
+});
+
+test('short analyzable pages reach scoring while challenge pages still stop, and profiles cite observed evidence', async () => {
+  const get = safeHttp.get, head = safeHttp.head, psi = axios.get;
+  const html = '<html lang="ur" dir="rtl"><head><title>رہنمائی</title><meta name="viewport" content="width=device-width"><link rel="canonical" href="https://8.8.8.8/short"></head><body><main><h1>رہنمائی</h1><h2>جانچ کیسے کریں؟</h2><p>اس رہنمائی میں ویب سائٹ کی جانچ کے لیے واضح مثالیں اور عملی اقدامات شامل ہیں۔ اصل مواد کی بنیاد پر رپورٹ تیار کی جاتی ہے۔</p><img src="/pic.png"></main><footer>Contact</footer></body></html>';
+  assert.equal(appModule.runPageValidationEngine(html, 200).state, 'PARTIAL_PAGE');
+  safeHttp.get = async url => ({ status: 200, headers: {}, safeFinalUrl: url, safeRedirectChain: [],
+    data: url.endsWith('/robots.txt') ? 'User-agent: *\nAllow: /' : url.endsWith('/sitemap.xml') ? '<urlset></urlset>' : html });
+  safeHttp.head = async () => ({ status: 200 });
+  axios.get = async () => ({ status: 503 });
+  try {
+    const result = await appModule.analyzeSingleUrl('https://8.8.8.8/short');
+    assert.equal(result.success, true, JSON.stringify(result));
+    assert.equal(result.pageValidation.limitedContent, true);
+    for (const profile of Object.values(result.aeo.simulations)) {
+      assert.equal(profile.params.url, result.resolvedUrl);
+      assert.equal(profile.params.englishCalibration, false);
+      assert.equal(profile.params.answers, 1);
+      assert.doesNotMatch(profile.reasoning, /Add FAQ|Add HowTo|12-22/);
+    }
+    const blocked = appModule.runPageValidationEngine('<html><title>Verify you are human</title><body>captcha challenge</body></html>', 403);
+    assert.equal(blocked.analyzable, false);
+  } finally { safeHttp.get = get; safeHttp.head = head; axios.get = psi; appModule.scanCache.clear(); }
+});
+
 test('outbound boundary rejects private, mapped, metadata and reserved networks', async () => {
   for (const address of ['127.0.0.1','10.2.3.4','100.100.100.200','169.254.169.254','192.168.1.2','172.20.0.1','198.18.0.1','0.0.0.0','224.1.1.1','::1','fc12::1','fe80::1','::ffff:127.0.0.1','2001:db8::1']) assert.equal(isPublicAddress(address), false, address);
   for (const address of ['8.8.8.8','1.1.1.1','2606:4700:4700::1111']) assert.equal(isPublicAddress(address), true);
@@ -34,6 +76,22 @@ test('outbound boundary rejects private, mapped, metadata and reserved networks'
   await assert.rejects(resolvePublicUrl('https://example.com', async () => [{ address:'8.8.8.8',family:4 }, { address:'127.0.0.1',family:4 }]), /Unsafe/);
   const resolved = await resolvePublicUrl('https://example.com/path', async () => [{ address:'8.8.8.8',family:4 }]);
   assert.equal(resolved.url.pathname, '/path');
+});
+
+test('disabled browser fallback retains original HTTP failure evidence and never starts rendering', async () => {
+  const get = safeHttp.get, mode = process.env.CRAWLER_EGRESS_ISOLATED;
+  delete process.env.CRAWLER_EGRESS_ISOLATED;
+  safeHttp.get = async url => ({ status: url.endsWith('/robots.txt') ? 200 : 404, headers: {}, safeFinalUrl: url,
+    safeRedirectChain: [], data: url.endsWith('/robots.txt') ? 'User-agent: *\nAllow: /' : '<html><title>Not Found</title><body>404 Not Found</body></html>' });
+  try {
+    const crawl = await appModule.smartCrawl('https://8.8.8.8/not-found');
+    assert.equal(crawl.status, 404);
+    assert.equal(crawl.stagesAttempted.length, 1);
+    assert.equal(crawl.crawlMethod, 'STANDARD_GET');
+    assert.equal(crawl.browserRendering.enabled, false);
+    assert.doesNotMatch(crawl.pageValidation.evidence, /browser unavailable/);
+    assert.deepEqual(appModule.buildBlockedPayload('https://8.8.8.8/not-found', crawl).browserRendering, crawl.browserRendering);
+  } finally { safeHttp.get = get; if (mode === undefined) delete process.env.CRAWLER_EGRESS_ISOLATED; else process.env.CRAWLER_EGRESS_ISOLATED = mode; }
 });
 
 test('robots user-agent groups stay separate, with longest-path and allow-tie precedence', () => {

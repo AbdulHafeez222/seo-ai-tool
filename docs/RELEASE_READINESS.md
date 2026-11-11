@@ -1,5 +1,7 @@
 # Beta release readiness — 2026-10-29
 
+Current status, 11 November 2026: **HOLD public launch**. See [current repair and verification](REPAIR_2026-11-11.md). The historical deployment notes below describe older commits. The repaired branch has not been deployed, and the current live example-domain scan acceptance failed.
+
 **Verdict: BETA DEPLOYED; full commercial launch acceptance remains incomplete.** The existing application and additive features are live on Railway with owner authorization. Not all ten phases are complete. Main was not merged, live payments were not activated, and no production migration or data deletion occurred.
 
 ## Live verification

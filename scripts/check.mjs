@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import vm from 'node:vm';
 
-for (const dir of ['.', 'lib', 'public']) {
+for (const dir of ['.', 'lib', 'public', 'scripts', 'test']) {
   for (const file of readdirSync(dir).filter(f => /\.(js|mjs)$/.test(f))) {
     const path = `${dir}/${file}`;
     const result = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });

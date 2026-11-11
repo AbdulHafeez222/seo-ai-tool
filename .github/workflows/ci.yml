@@ -15,3 +15,24 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm audit --omit=dev --audit-level=high
+      - name: Start isolated MongoDB replica set
+        run: docker run --detach --name acceptance-mongo --publish 127.0.0.1:27019:27019 mongo:8.0.16 --port 27019 --replSet beta-test --bind_ip_all
+      - run: node scripts/init-test-database.mjs
+        env:
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27019/seo_beta_acceptance?replicaSet=beta-test
+      - name: Database acceptance
+        run: node --test test/database-acceptance.test.js
+        env:
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27019/seo_beta_acceptance?replicaSet=beta-test
+      - name: Chromium desktop, mobile and PDF acceptance
+        run: node scripts/browser-acceptance.mjs
+        env:
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27019/seo_beta_acceptance?replicaSet=beta-test
+          CHROMIUM_PATH: /usr/bin/google-chrome
+          BROWSER_OUTPUT_DIR: work/browser-acceptance
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-acceptance
+          path: work/browser-acceptance
+          retention-days: 7

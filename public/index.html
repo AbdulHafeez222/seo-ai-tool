@@ -7,7 +7,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0b0f19">
   <meta name="robots" content="noindex, nofollow">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1" defer></script>
 
 <style>
@@ -975,13 +974,24 @@ li { margin: 6px 0; color: var(--text-secondary); }
 }
 
 @media (max-width: 640px) {
-  .nav-link-group { display: none; }
+  .action-bar { position: static; }
+  .nav-link-group { display: flex; flex-wrap: wrap; justify-content: center; width: 100%; }
   .modal-panel { padding: 22px; }
 }
 
 @media print {
-  .action-bar, .btn-grid, .loading-overlay, .toast-region { display: none !important; }
-  .card { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
+  @page { size: A4; margin: 12mm; }
+  body { background: white !important; color: #111 !important; }
+  body > :not(main), #scanForm, #mainContent > section:first-child,
+  #result, .btn-grid, .loading-overlay, .toast-region, button { display: none !important; }
+  #mainContent { width: 100%; max-width: none; margin: 0; padding: 0; }
+  .card { break-inside: auto; box-shadow: none; background: white !important; border: 1px solid #ccc; color: #111; }
+  .card *, .metric-value, .metric-label { color: #111 !important; }
+  h3, h4, summary { break-after: avoid; }
+  table, blockquote, .metric-box { break-inside: avoid; }
+  pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .table-scroll-wrap { overflow: visible; }
+  .grid-2, .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .report-language-control {display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;max-width:100%;}
@@ -1283,26 +1293,26 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
         </button>
         <button type="button" id="gapBtn" onclick="gapAnalysis()">
           <span class="btn-spinner" aria-hidden="true"></span>
-          <span aria-hidden="true">🔍</span><span class="btn-label-text">Gap Analysis</span>
+          <span aria-hidden="true">🔍</span><span class="btn-label-text" data-i18n="gapAction">Content gaps</span>
         </button>
         <button type="button" id="roadmapBtn" onclick="generateRoadmap()">
           <span class="btn-spinner" aria-hidden="true"></span>
-          <span aria-hidden="true">🗺️</span><span class="btn-label-text">AI Roadmap</span>
+          <span aria-hidden="true">🗺️</span><span class="btn-label-text" data-i18n="roadmapAction">Improvement roadmap</span>
         </button>
         <button type="button" id="theftBtn" onclick="keywordTheft()">
           <span class="btn-spinner" aria-hidden="true"></span>
-          <span aria-hidden="true">💎</span><span class="btn-label-text">Keyword Theft</span>
+          <span aria-hidden="true">💎</span><span class="btn-label-text" data-i18n="termsAction">Competitor terms</span>
         </button>
         <button type="button" id="briefBtn" onclick="contentBrief()">
           <span class="btn-spinner" aria-hidden="true"></span>
-          <span aria-hidden="true">📝</span><span class="btn-label-text">Content Brief</span>
+          <span aria-hidden="true">📝</span><span class="btn-label-text" data-i18n="briefAction">Content brief</span>
         </button>
         <button type="button" id="autopilotBtn" onclick="runAutopilot()" style="background:var(--accent-success);">
           <span class="btn-spinner" aria-hidden="true"></span>
-          <span aria-hidden="true">🚀</span><span class="btn-label-text">AI AUTOPILOT</span>
+          <span aria-hidden="true">🚀</span><span class="btn-label-text" data-i18n="autopilotAction">Prioritized tasks</span>
         </button>
         <button type="button" onclick="downloadPDF()" style="background:#4b5563;">
-          <span aria-hidden="true">📄</span> Download PDF
+          <span aria-hidden="true">📄</span> <span data-i18n="printPdf">Print / Save PDF</span>
         </button>
         <button type="button" onclick="loadHistory()" style="background:#6b7280;">
           <span aria-hidden="true">📊</span> History
@@ -1813,8 +1823,16 @@ async function submitAuthForm() {
   }
 }
 
-function logoutUser(silent) {
-  fetch(`${window.API_BASE}/auth/logout`, { method: "POST" }).catch(() => {});
+async function logoutUser(silent) {
+  if (!silent) {
+    try {
+      const response = await fetch(`${window.API_BASE}/auth/logout`, { method: "POST" });
+      if (!response.ok && response.status !== 401) throw new Error('Logout failed');
+    } catch {
+      showToast(uiLabel('logoutFailed','Could not end your session. Check your connection and retry.'), 'error');
+      return;
+    }
+  }
   setStoredToken(null);
   currentUser = null;
   if (authLogoutTimer) { clearTimeout(authLogoutTimer); authLogoutTimer = null; }
@@ -2221,6 +2239,7 @@ function renderReportDetail(r) {
       <ul>${r.recommendations.map(rec => `<li>${escapeHtml(typeof rec === 'string' ? rec : JSON.stringify(rec))}</li>`).join('')}</ul>
     </details>` : ''}
     <div style="margin-top:18px; text-align:right;">
+      ${r.snapshotStatus === 'complete' ? `<button type="button" data-open-saved-report="${escapeHtml(r.id)}">${escapeHtml(uiLabel('openSavedReport','Open saved report'))}</button>` : `<p>${escapeHtml(uiLabel('summaryOnly','Only a summary was stored for this report.'))}</p>`}
       <button type="button" data-rescan-url="${escapeHtml(r.finalUrl || r.url)}">🔄 Re-Scan This Site</button>
     </div>
   `;
@@ -2955,6 +2974,7 @@ function renderAllResults(data) {
         <div class="card" style="border-left:5px solid var(--accent-success);">
           <h4><span aria-hidden="true">✅</span> Domain Scan Matrix Parsed</h4>
           ${data.persistence?.saved === false ? `<p role="alert">${escapeHtml(data.persistence.message)}</p>` : ""}
+          ${data.pageValidation?.limitedContent ? `<p role="status">${escapeHtml(uiLabel('limitedContent','Limited content was downloaded. Scores describe the observed HTML only.'))}</p>` : ''}
           <p>Structural indexes analyzed successfully for <strong>${escapeHtml(safeText(data.resolvedUrl))}</strong>. Use the checklist actions above to run comparisons, roadmaps, or keyword analysis.</p>
         </div>`;
     }
@@ -3226,7 +3246,7 @@ function renderModelSimulations(data) {
     const renderItem = (title, key) => {
       const item = sims[key];
       if (!item) return '';
-      return `<div class="ai-box"><strong>${escapeHtml(title)} — ${item.score}/100 readiness heuristic:</strong><p style="margin-top:5px; line-height:1.6;">${escapeHtml(item.reasoning)}</p></div>`;
+      return `<div class="ai-box"><strong>${escapeHtml(title)} — ${item.score}/100 ${escapeHtml(uiLabel('readiness','AI readiness'))}:</strong><p style="margin-top:5px; line-height:1.6;">${escapeHtml(item.code ? uiLabel(item.code,item.reasoning,{...item.params,englishCalibration:uiLabel(item.params.englishCalibration?'available':'unavailable',item.params.englishCalibration?'Available':'Not available')}) : item.reasoning)}</p></div>`;
     };
     simText.innerHTML = `
       ${renderItem("ChatGPT Simulation", "chatgpt")}
@@ -4138,20 +4158,10 @@ document.addEventListener("click", (e) => {
   copyToClipboard(raw, btn);
 });
 
-function downloadPDF() {
-  if (!lastScanData) { showToast("Complete a scan before exporting a report.", "error"); return; }
-  if (typeof html2pdf === "undefined") {
-    showToast("PDF export library did not load. Try refreshing the page.", "error");
-    return;
-  }
-  const el = document.getElementById("mainContent");
-  html2pdf().from(el).set({
-    margin: 10,
-    filename: `aegis-ai-visibility-report-${Date.now()}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, backgroundColor: document.body.classList.contains('light') ? '#ffffff' : '#0b0f19' },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  }).save();
+async function downloadPDF() {
+  if (!lastScanData) { showToast(uiLabel('scanBeforeExport','Open a report before exporting.'), "error"); return; }
+  await document.fonts?.ready;
+  window.print();
 }
 
 // =========================================================================

@@ -17,6 +17,7 @@ import { analyzeContentEvidence, keywordEvidence, lexicalSignals, languageProfil
 import { installAccountRoutes, deletingAccountIds } from "./lib/accounts.js";
 import { createDatabaseLifecycle, databaseFailureCategory } from "./lib/database.js";
 import { createReportSnapshot, restoreReportSnapshot } from "./lib/report-storage.js";
+import { installFreeWorkflows } from "./lib/free-workflows.js";
 
 dotenv.config();
 
@@ -295,7 +296,9 @@ const projectSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     name: { type: String, required: true, trim: true },
     urls: { type: [String], default: [] },
-    description: { type: String, default: "" }
+    description: { type: String, default: "" },
+    performanceBaseline: { type: String, select: false },
+    performanceCurrent: { type: String, select: false }
   },
   { timestamps: true }
 );
@@ -5183,7 +5186,7 @@ export async function analyzeSingleUrl(url, ownerContext = {}) {
 }
 async function analyzeSingleUrlInternal(url, ownerContext = {}) {
   const cacheKey = `${ownerContext.userId || "anonymous"}:${ownerContext.projectId || "none"}:${normalizeUrl(url)}`;
-  if (scanCache.has(cacheKey)) {
+  if (!ownerContext.forceRefresh && scanCache.has(cacheKey)) {
     const entry = scanCache.get(cacheKey);
     if (Date.now() - entry.timestamp < CACHE_TTL_MS) {
       logger.info("CACHE", "serving_cached_scan", { url, cacheKey });
@@ -5345,6 +5348,7 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
     const performanceTasks = safeArray(coreWebVitalsAudit.metrics).filter(x => x.passed === false).map((x,i) => ({id:`performance_${i}`,title:x.metric,description:`${coreWebVitalsAudit.dataSource}: ${x.reason} — ${x.recommendation}`,priority:"High",url:crawl.finalUrl,automaticExecution:false}));
     const measuredTasks = [...evidenceTasks,...technicalTasks,...performanceTasks];
     const payload = {
+      observedAt: new Date().toISOString(),
       success: true,
       status: "SUCCESS",
       blocked: false,
@@ -5763,7 +5767,7 @@ app.get("/api/status", (req, res) => {
   res.json({
     status: "running",
     tool: "AI Visibility SaaS Platform",
-    version: "10.2-beta-local-only",
+    version: "10.3-beta-free-workflows",
     ai: {mode:"local-only",externalModelCalls:false,paidFallbacks:false},
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.round(process.uptime())
@@ -5874,6 +5878,8 @@ app.post("/auth/logout", requireAuth, asyncHandler(async (req, res) => {
 installAccountRoutes(app, { User, Report, Project, SiteCrawlJob, requireAuth, asyncHandler,
   hashPassword, verifyPasswordHash, generateApiKey, activeSiteCrawlJobIds, scanCache, logger, hasActiveAnalyses: () => runningAnalyses > 0 || pendingSiteCrawlReservations > 0 });
 
+installFreeWorkflows(app, { Project, Report, requireAuth, asyncHandler });
+
 app.get("/auth/me", asyncHandler(async (req, res) => {
   const token = requestToken(req);
   const decoded = token ? verifyAuthToken(token) : null;
@@ -5948,7 +5954,7 @@ app.get("/scan", authenticateAndRateLimit, asyncHandler(async (req, res) => {
 
   try {
     const projectId = req.scanProjectId || null;
-    const data = await analyzeSingleUrl(normalized, { userId: req.user?._id || null, projectId });
+    const data = await analyzeSingleUrl(normalized, { userId: req.user?._id || null, projectId, forceRefresh: req.query.refresh === "true" });
 
 
     if (data && data.blocked) {
@@ -6332,6 +6338,7 @@ app.get("/reports", requireAuth, asyncHandler(async (req, res) => {
       authorityScore: r.authorityScore,
       citationScore: r.citationScore,
       projectId: r.projectId ? r.projectId.toString() : null,
+      snapshotStatus: r.snapshotStatus || "summary",
       scanDate: r.scanDate
     }))
   });

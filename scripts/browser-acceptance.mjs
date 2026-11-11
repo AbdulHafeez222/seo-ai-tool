@@ -117,7 +117,75 @@ try {
   assert.deepEqual(errors, []);
   assert.equal((await api.User.findById(account._id)).scansToday, 4);
   assert.equal(await api.Report.countDocuments({ userId: account._id }), 4);
-  const summary = { passed: true, checks, pdfLocales: Object.keys(copy), scans: 4, consoleErrors: errors,
+  const project = await api.Project.create({ userId: account._id, name: 'Search performance fixture', urls: ['https://example.com/'] });
+  const fixture = { success: true, resolvedUrl: 'https://example.com/guide', analysisVersion: 'browser-workflow-v1', seoScore: 0,
+    title: 'Before title', contentEvidence: { findings: [{ code: 'missingH1', params: { topic: 'Guide' }, evidence: { observed: 'No H1' } }] } };
+  const beforeReport = await api.saveReportToDatabase(fixture, {}, { userId: account._id, projectId: project._id });
+  const afterReport = await api.saveReportToDatabase({ ...fixture, title: 'After title', seoScore: 30, contentEvidence: { findings: [] } }, {}, { userId: account._id, projectId: project._id });
+  await page.evaluate(() => openGrowthModal());
+  assert.equal(await page.locator('#growthProject').inputValue(), String(project._id));
+  const csv = clicks => 'Top queries,Clicks,Impressions,Position\n"<img src=x onerror=window.INJECTED=1>",' + clicks + ',1000,9\n' + Array.from({ length: 5 }, (_, i) => `peer${i},100,1000,9`).join('\n');
+  for (const [slot, start, end, clicks] of [['baseline', '2026-01-01', '2026-01-28', 50], ['current', '2026-02-01', '2026-02-28', 1]]) {
+    await page.selectOption('#growthSlot', slot);
+    await page.locator('#growthStart').fill(start); await page.locator('#growthEnd').fill(end);
+    await page.locator('#growthCsv').setInputFiles({ name: 'Queries.csv', mimeType: 'text/csv', buffer: Buffer.from(csv(clicks)) });
+    const imported = page.waitForResponse(response => response.url().endsWith('/search-performance') && response.request().method() === 'POST');
+    await page.locator('#growthImportButton').click(); assert.equal((await imported).status(), 200);
+    await page.locator('#growthImportButton').waitFor({ state: 'visible' });
+    await page.waitForFunction(() => !document.getElementById('growthImportButton').disabled);
+  }
+  assert.equal(await page.locator('#growthPerformanceResults img').count(), 0);
+  assert.equal(await page.evaluate(() => window.INJECTED), undefined);
+  const workflowChecks = [];
+  for (const locale of Object.keys(copy)) {
+    const before = requests.length;
+    await page.selectOption('#growthLanguage', locale);
+    assert.equal(requests.length, before);
+    assert.equal(await page.locator('#growthStart').inputValue(), '2026-02-01');
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.locator('#growthModalOverlay .modal-panel').evaluate(el => { el.scrollTop = 0; });
+      const heading = await page.locator('#growthTitle').boundingBox();
+      const panel = await page.locator('#growthModalOverlay .modal-panel').boundingBox();
+      assert.ok(heading.y >= panel.y && heading.y + heading.height <= panel.y + panel.height, 'Modal heading must be fully visible at scroll start');
+      const overflow = await page.evaluate(() => ({ page: document.documentElement.scrollWidth > innerWidth + 1,
+        panel: document.querySelector('#growthModalOverlay .modal-panel').scrollWidth > document.querySelector('#growthModalOverlay .modal-panel').clientWidth + 1 }));
+      assert.equal(overflow.page, false); assert.equal(overflow.panel, false);
+      await page.screenshot({ path: path.join(output, `performance-${locale}-${width}.png`) });
+      workflowChecks.push({ locale, width, passed: true });
+    }
+  }
+  await page.locator('#growthTab-comparison').click();
+  await page.locator('#growthBefore').selectOption(String(beforeReport._id)); await page.locator('#growthAfter').selectOption(String(afterReport._id));
+  const compared = page.waitForResponse(response => response.url().includes('/reports/compare?'));
+  await page.locator('#growthCompare').click(); assert.equal((await compared).status(), 200);
+  await page.waitForFunction(() => document.getElementById('growthComparisonResults').textContent.includes('Before title'));
+  await page.screenshot({ path: path.join(output, 'comparison-mobile.png') });
+  await page.locator('#growthTab-export').click();
+  await page.selectOption('#growthExportType', 'reports');
+  const firstDownload = page.waitForEvent('download'); await page.locator('#growthExportButton').click();
+  await (await firstDownload).saveAs(path.join(output, 'report-export-first.json'));
+  await page.waitForFunction(() => !document.getElementById('growthNextExport').disabled);
+  const nextDownload = page.waitForEvent('download'); await page.locator('#growthNextExport').click();
+  await (await nextDownload).saveAs(path.join(output, 'report-export-next.json'));
+  assert.equal((await api.User.findById(account._id)).scansToday, 4);
+  assert.equal(await api.Report.countDocuments({ userId: account._id }), 6);
+  assert.deepEqual(errors, []);
+  await page.locator('#growthClose').click();
+  copy.ar[0] = 'Updated evidence guide';
+  const refreshed = page.waitForResponse(response => response.url().includes('/scan?') && response.url().includes('refresh=true'));
+  await page.evaluate(() => rescanFromReport('https://example.com/ar'));
+  const refreshedResponse = await refreshed;
+  const refreshedResult = await refreshedResponse.json();
+  assert.equal(refreshedResponse.status(), 200);
+  assert.equal(refreshedResult.title, 'Updated evidence guide');
+  assert.ok(refreshedResult.observedAt);
+  assert.equal((await api.User.findById(account._id)).scansToday, 5, 'One explicit fresh scan charges exactly one unit');
+  assert.equal(await api.Report.countDocuments({ userId: account._id }), 7);
+  await page.evaluate(() => logoutUser(false));
+  assert.equal(await page.locator('#growthModalOverlay').count(), 0);
+  const summary = { passed: true, checks, pdfLocales: Object.keys(copy), scans: 5, freshRescanVerified: true, consoleErrors: errors,
+    workflowChecks, imports: 2, comparedReports: true, exportedBatches: 2, workflowQuotaCharged: 0,
     boundary: 'Real Chromium, HTTP APIs and isolated MongoDB. Website/PSI responses are controlled fixtures; no live crawling is implied.' };
   await writeFile(path.join(output, 'results.json'), JSON.stringify(summary, null, 2));
   console.log(JSON.stringify(summary));

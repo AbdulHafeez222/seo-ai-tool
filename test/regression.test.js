@@ -217,6 +217,13 @@ test('full scan pipeline reuses evidence and persists cache hits for the request
     assert.deepEqual(saved.map(x=>x.userId),['owner-A','owner-B','owner-A']);
     assert.notEqual(a.reportId,b.reportId); assert.notEqual(a.reportId,a2.reportId);
     assert.equal(a.seoScore,a2.seoScore); assert.equal(a.citation.heuristic,true);
+    assert.equal(a.observedAt,a2.observedAt,'Cached evidence keeps its original observation time');
+    safeHttp.get = async url => ({ status:200, headers:{}, safeFinalUrl:url, safeRedirectChain:[], data:url.endsWith('/robots.txt') ? 'User-agent: *\nAllow: /' : url.endsWith('/sitemap.xml') ? '<urlset></urlset>' : html.replace('Example Guide','Updated Guide') });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const fresh = await appModule.analyzeSingleUrl('https://8.8.8.8/page',{userId:'owner-A',forceRefresh:true});
+    assert.equal(fresh.title,'Updated Guide');
+    assert.notEqual(fresh.observedAt,a.observedAt);
+    assert.deepEqual(saved.map(x=>x.userId),['owner-A','owner-B','owner-A','owner-A']);
   } finally {
     safeHttp.get=get; safeHttp.head=head; axios.get=psi; appModule.Report.create=create;
     mongoose.connection.readyState=state; appModule.scanCache.clear();

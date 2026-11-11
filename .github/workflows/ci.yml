@@ -21,7 +21,7 @@ jobs:
         env:
           TEST_MONGODB_URI: mongodb://127.0.0.1:27019/seo_beta_acceptance?replicaSet=beta-test
       - name: Database acceptance
-        run: node --test test/database-acceptance.test.js
+        run: node --test test/database-acceptance.test.js test/free-workflows-acceptance.test.js
         env:
           TEST_MONGODB_URI: mongodb://127.0.0.1:27019/seo_beta_acceptance?replicaSet=beta-test
       - name: Chromium desktop, mobile and PDF acceptance

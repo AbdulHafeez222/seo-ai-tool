@@ -1003,6 +1003,40 @@ html[dir="rtl"] body {font-family:Tahoma,Arial,sans-serif;}
 html[dir="rtl"] .card,html[dir="rtl"] .input-group {text-align:start;}
 html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],html[dir="rtl"] input[type="url"] {direction:ltr;text-align:left;}
 @media(max-width:600px){.report-language-control {flex-basis:100%;justify-content:center;} #contentIntelligenceResults .grid-3 {grid-template-columns:1fr;}}
+.workflow-panel { min-width: 0; }
+.workflow-panel .modal-header { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: start; gap: 10px; }
+.workflow-panel .modal-header h2 { font-size: 21px; margin: 0; }
+.workflow-panel .modal-close-btn { grid-column: 2; grid-row: 1; }
+.workflow-language { grid-column: 1; grid-row: 2; max-width: 200px; margin-bottom: 12px; }
+.workflow-panel label { display: grid; gap: 6px; min-width: 0; font-size: 13px; text-align: start; }
+.workflow-panel input,.workflow-panel select { min-width: 0; width: 100%; padding: 9px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-input); color: var(--text-primary); font: inherit; }
+.workflow-panel input[type="date"],.workflow-panel input[type="file"] { direction: ltr; }
+.workflow-tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--border-color); margin-bottom: 16px; }
+.workflow-tabs button { background: transparent; color: var(--text-secondary); border-radius: 0; padding: 10px 12px; border-bottom: 2px solid transparent; }
+.workflow-tabs button[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--accent-success); }
+.workflow-project { max-width: 440px; margin-bottom: 14px; }
+.workflow-form { margin: 18px 0; }
+.workflow-form-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
+.workflow-file { margin: 12px 0; }
+.workflow-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+.workflow-secondary { background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); }
+.workflow-section { border-top: 1px solid var(--border-color); padding-block: 14px; margin-top: 14px; }
+.workflow-section h3 { font-size: 17px; line-height: 1.5; overflow-wrap: anywhere; }
+.workflow-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; margin: 14px 0; }
+.workflow-metrics dt { color: var(--text-muted); font-size: 12px; }
+.workflow-metrics dd { margin: 6px 0 0; font-size: 23px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.workflow-note { color: var(--text-muted); font-size: 12px; line-height: 1.7; }
+.workflow-error { color: var(--accent-danger); }
+.workflow-error:empty,#growthStatus:empty { display: none; }
+.workflow-panel table { width: 100%; min-width: 600px; table-layout: fixed; }
+.workflow-panel th,.workflow-panel td { text-align: start; vertical-align: top; overflow-wrap: anywhere; }
+.workflow-evidence { margin: 0; font-size: 12px; }
+.workflow-evidence dt { color: var(--text-muted); }
+.workflow-evidence dd { margin: 3px 0 9px; font-variant-numeric: tabular-nums; }
+.workflow-panel button { white-space: normal; overflow-wrap: anywhere; letter-spacing: 0; }
+.workflow-panel blockquote { margin-inline: 0; border-inline-start: 2px solid var(--accent-success); padding-inline-start: 12px; }
+.workflow-panel [hidden] { display: none !important; }
+@media(max-width:640px) { .workflow-form-grid { grid-template-columns: 1fr; } .workflow-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .workflow-tabs button { font-size: 12px; padding: 10px 8px; } }
 </style>
 </head>
 <body>
@@ -1042,6 +1076,7 @@ html[dir="rtl"] input[autocomplete="url"],html[dir="rtl"] input[type="email"],ht
     <button type="button" class="nav-link-btn" onclick="navGoToHistory()"><span data-i18n="history">History</span></button>
     <button type="button" class="nav-link-btn" onclick="openReportsModal()"><span data-i18n="reports">Reports</span></button>
     <button type="button" class="nav-link-btn" onclick="openProjectsModal()"><span data-i18n="projects">Projects</span></button>
+    <button type="button" class="nav-link-btn" onclick="openGrowthModal()"><span data-i18n="searchPerformance">Search Performance</span></button>
     <button type="button" class="nav-link-btn" onclick="openSiteCrawlModal()"><span data-i18n="crawl">Site Crawl</span></button>
   </nav>
 
@@ -1835,6 +1870,7 @@ async function logoutUser(silent) {
   }
   setStoredToken(null);
   currentUser = null;
+  window.dispatchEvent(new Event('account-session-cleared'));
   if (authLogoutTimer) { clearTimeout(authLogoutTimer); authLogoutTimer = null; }
   updateNavbarAuthUI();
   closeProfileModal();
@@ -2168,7 +2204,7 @@ function rescanFromReport(url) {
   const urlEl = document.getElementById("url");
   if (urlEl) urlEl.value = url;
   navGoToScan();
-  scan();
+  scan(true);
 }
 
 // --- Report Detail ------------------------------------------------------
@@ -2853,7 +2889,7 @@ async function recoverLastScan() {
 // =========================================================================
 // SCAN
 // =========================================================================
-async function scan() {
+async function scan(forceRefresh = false) {
   if (scanInProgress) return;
 
   const urlEl = document.getElementById("url");
@@ -2874,7 +2910,7 @@ async function scan() {
   loadingTimers.push(setTimeout(() => { if (scanInProgress) { showLoading("Generating AI Visibility Signals...", "Calculating vector weights and entity frequency benchmarks"); setLoadingProgress(80); } }, 6500));
 
   try {
-    const data = await apiFetch(`/scan?url=${encodeURIComponent(url)}`);
+    const data = await apiFetch(`/scan?url=${encodeURIComponent(url)}${forceRefresh === true ? '&refresh=true' : ''}`);
     clearLoadingTimers();
     setLoadingProgress(100);
 
@@ -4171,5 +4207,7 @@ syncThemeChoiceButtons();
 initAuthState();
 </script>
 <script src="/features.js"></script>
+<script src="/free-workflows-language.js"></script>
+<script src="/free-workflows.js"></script>
 </body>
 </html>

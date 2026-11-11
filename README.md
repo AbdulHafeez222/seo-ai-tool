@@ -2,7 +2,7 @@
 
 Existing Express/Mongoose/vanilla-JavaScript application, hardened on a development branch for beta review. **Not cleared for production launch**: see [release readiness](docs/RELEASE_READINESS.md), [baseline audit](docs/AUDIT.md), and [migration plan](docs/MIGRATIONS.md).
 
-Latest verification: [11 November public beta deployment](docs/PUBLIC_BETA_2026-11-11.md). Application commit `3d216eb` is deployed and passed live scan, account, report isolation and browser acceptance. Remaining beta limitations are recorded there; the earlier [repair report](docs/REPAIR_2026-11-11.md) describes the pre-deployment checkpoint.
+Latest candidate: [free workflow improvements](docs/FREE_WORKFLOWS_2026-11-11.md), adding Search Console CSV opportunities, saved-report comparisons and private data export without paid services or additional scan quota. Deployment evidence for the previous application commit `3d216eb` is in [11 November public beta deployment](docs/PUBLIC_BETA_2026-11-11.md); remaining beta limitations still apply.
 
 ## Local development
 
@@ -27,6 +27,7 @@ npm start
 * Browser rendering is **disabled** unless `CRAWLER_EGRESS_ISOLATED=true`. It requires deployment-level egress isolation protecting private/metadata networks and DNS rebinding; Playwright route interception is defense in depth. CAPTCHA/security/login walls stop crawling. No stealth or proxy bypass.
 * Scores and engine profiles are uncalibrated on-page readiness heuristics. No actual AI citations, search rankings, demand or keyword difficulty are measured. PageSpeed may be unavailable. Schema drafts are incomplete and need editorial validation; they are not rich-result guarantees.
 * New reports store versioned full results up to 2 MiB, including original evidence and analysis version. Oversized reports retain an identified summary; old summaries remain readable. Open a saved full report without a new scan or quota charge. History/trends require an account. Project ownership is checked before quota reservation.
+* Search Performance accepts bounded, owner-scoped Search Console Pages/Queries CSV exports (English headers). It distinguishes uploaded observations from estimates and does not verify Google ownership. Scan Changes compares complete saved reports; Data Export downloads private JSON batches without credential fields. These workflows do not consume scan quota. Explicit Re-scan bypasses cache and consumes one normal scan unit.
 * Password recovery is disabled until SMTP settings, reset-collection review, and delivery testing are complete. TLS SMTP on port 465 is supported; no paid provider is activated. Billing checkout always returns disabled. Admin status is read-only and restricted to `ADMIN_EMAILS`.
 
 ## Hosting proposal (approval required before deployment)

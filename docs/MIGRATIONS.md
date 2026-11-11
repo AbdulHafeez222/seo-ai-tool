@@ -2,6 +2,8 @@
 
 ## 11 November additive repair
 
+The free-workflow follow-up adds optional project fields `performanceBaseline` and `performanceCurrent`, hidden from ordinary queries and bounded to 384 KiB each. Only explicit owner CSV imports write them; clearing imports unsets them. No new collection/index, backfill or bulk migration is required. See `FREE_WORKFLOWS_2026-11-11.md` for input limits, export boundaries and verification. Full-report JSON exports are not a replacement for a consistent database backup or tested restore.
+
 The candidate adds optional `reports.snapshotJSON` and `reports.snapshotStatus` fields in the existing collection. Only new scans write them; no historical backfill or index is required. Snapshot strings are capped at 2 MiB and excluded from ordinary queries. Existing summary documents remain supported. Back up and rehearse restore before production release; no production schema or data migration was run here.
 
 An additive `users.sessionVersion` defaults to zero when read. A successful logout increments it for that account and invalidates all its JWTs without rotating the API key. The credential-stamp format changed, so existing sessions must log in again after release. Password changes and API-key rotation retain their existing revocation behavior. No bulk rewrite is required. Rollback to an older application can revive older token semantics until those tokens expire; include this in the release's session invalidation plan.

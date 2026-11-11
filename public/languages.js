@@ -351,6 +351,10 @@
     ar: {available:'متاح',limitedContent:'تم تنزيل محتوى محدود. تصف الدرجات HTML المرصود فقط.',profileEvidence:'{url}: {answers} أجوبة مجاورة لعناوين الأسئلة؛ {tableRows} صفوف جداول؛ أنواع البيانات المنظمة المعلنة: {schemaTypes}. معايرة الجمل الإنجليزية: {englishCalibration}. أوزان توضيحية فقط؛ لم يتم قياس إجابة محرك أو استشهاد.'}
   };
   for (const locale of Object.keys(profileCopy)) Object.assign(dictionaries[locale],profileCopy[locale]);
+  dictionaries.en.searchPerformance = 'Search Performance';
+  dictionaries.ur.searchPerformance = 'تلاش کی کارکردگی';
+  dictionaries.ps.searchPerformance = 'د لټون کارکردګي';
+  dictionaries.ar.searchPerformance = 'أداء البحث';
   const supported=value=>typeof value==='string' && Object.hasOwn(dictionaries,value);
   let selected='en';
   try {const saved=localStorage.getItem('aegis-report-language');if(supported(saved))selected=saved;}catch{}

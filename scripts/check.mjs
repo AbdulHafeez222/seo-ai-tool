@@ -12,7 +12,7 @@ for (const dir of ['.', 'lib', 'public', 'scripts', 'test']) {
 const html = readFileSync('public/index.html', 'utf8');
 const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]).filter(Boolean);
 for (const source of scripts) new vm.Script(source);
-const code = scripts.join('\n') + readFileSync('public/features.js', 'utf8');
+const code = scripts.join('\n') + readFileSync('public/features.js', 'utf8') + readFileSync('public/free-workflows.js', 'utf8');
 const handlers = [...html.matchAll(/\bon(?:click|input|change|submit)="([^"]*)"/g)];
 const missing = new Set();
 for (const [,handler] of handlers) for (const [,name] of handler.matchAll(/\b([A-Za-z_$][\w$]*)\(/g)) {

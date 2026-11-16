@@ -1,0 +1,26 @@
+name: Public beta uptime
+on:
+  push:
+    paths: ['.github/workflows/public-beta-uptime.yml']
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: public-beta-uptime
+  cancel-in-progress: false
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check public app and database readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          for endpoint in api/status health/ready; do
+            curl --fail --silent --show-error --retry 2 --retry-delay 10 --retry-all-errors --max-time 60 \
+              "https://seo-ai-tool-production-ab4f.up.railway.app/$endpoint" >/dev/null
+          done
+          echo 'Public application and database readiness checks passed.'

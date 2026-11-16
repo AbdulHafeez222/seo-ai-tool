@@ -1,6 +1,6 @@
-# Privacy and terms drafts — not public policy URLs
+# Historical privacy and terms drafts
 
-Operator identity, support contact, jurisdiction and actual retention remain to be supplied. These drafts must not be published with placeholders or used to claim Google verification is complete.
+The owner supplied operator Abdul Hafeez and support/privacy email hafeezpakhton@gmail.com. Current public notices are `public/privacy.html` and `public/terms.html`; the incomplete drafts below are historical, not publication sources. The notices disclose the beta's unconfigured SMTP/production backups and unspecified hosting-log retention. Google verification is not implied by publishing them.
 
 ## Privacy notice draft
 

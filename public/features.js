@@ -126,7 +126,7 @@ function renderContentOptimizer(optimizer) {
   document.getElementById('contentOptimizerResults').innerHTML = `
       <p>${escapeHtml(reportText('optimizerScope'))}</p><p>${escapeHtml(reportText('reportDetailsNote'))}</p>
       <div class="grid-3">${Object.entries(optimizer.scores).map(([name,value]) => `<div class="metric-box"><div class="metric-value">${escapeHtml(value ?? reportText('unavailable'))}</div><div class="metric-label">${escapeHtml(reportText(name))}</div></div>`).join('')}</div>
-      <h4>${escapeHtml(reportText('actions'))}</h4><ul>${optimizer.priorityRoadmap.map(r => `<li><strong>${escapeHtml(reportText(r.priority.toLowerCase()))}: ${escapeHtml(r.code ? reportText(r.code,r.params) : r.item)}</strong> — <bdi>${escapeHtml(r.evidence)}</bdi></li>`).join('') || `<li>${escapeHtml(reportText('none'))}</li>`}</ul>
+      <h4>${escapeHtml(reportText('actions'))}</h4><ul>${optimizer.priorityRoadmap.map(r => `<li><strong>${escapeHtml(reportText(r.priority.toLowerCase()))}: ${escapeHtml(r.code ? reportText(r.code,r.params) : r.item)}</strong> — <bdi>${escapeHtml(r.evidence)}</bdi>${r.action ? `<p><bdi>${escapeHtml(r.action)}</bdi></p>` : ''}</li>`).join('') || `<li>${escapeHtml(reportText('none'))}</li>`}</ul>
       ${Object.entries(optimizer.suggestions).filter(([,v]) => v.length).map(([name,values]) => `<details><summary>${escapeHtml(name)}</summary><ul>${values.map(v => `<li>${escapeHtml(v)}</li>`).join('')}</ul></details>`).join('')}`;
 }
 

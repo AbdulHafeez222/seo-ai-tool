@@ -14,6 +14,7 @@ import { parseRobots, robotsAllows } from "./lib/robots.js";
 import { analyzePageEvidence } from "./lib/evidence.js";
 import { observeTrustEvidence } from "./lib/trust-evidence.js";
 import { analyzeContentEvidence, keywordEvidence, lexicalSignals, languageProfile, words, includesTerm } from "./lib/content-intelligence.js";
+import { pageActions, contextualizeAudit } from "./lib/page-actions.js";
 import { installAccountRoutes, deletingAccountIds } from "./lib/accounts.js";
 import { createDatabaseLifecycle, databaseFailureCategory } from "./lib/database.js";
 import { createReportSnapshot, restoreReportSnapshot } from "./lib/report-storage.js";
@@ -847,7 +848,7 @@ export function buildStandardizedScoreOutput(aggregateResult, categoryWeight = 1
     weight: categoryWeight,
     evidence: aggregateResult.metrics.map(m => `${m.metric}: ${m.evidence}`),
     penalties: failed.map(m => ({ metric: m.metric, penalty: m.expectedImprovement, reason: m.reason })),
-    recommendations: failed.map(classifyRecommendation),
+    recommendations: failed.filter(m => m.recommendation).map(classifyRecommendation),
     expectedGain: aggregateResult.totalExpectedImprovement
   };
 }
@@ -4614,38 +4615,15 @@ export function estimateAIEngineCitations(crawlData) {
 
   const averageProbability = Math.round((chatgpt + gemini + claude + perplexity + copilot + mistral) / 6);
  const buildEvidenceBlock = (engineKey, score) => {
-    const missing = [];
-    let recoverablePoints = 0;
-
-    if (!crawlData.hasFAQ) { missing.push({ signal: "No FAQ schema", pointValue: 10 }); recoverablePoints += 10; }
-    if (!crawlData.hasDirectAnswer) { missing.push({ signal: "No direct-answer blocks", pointValue: 12 }); recoverablePoints += 12; }
-    if (!crawlData.hasAuthor) { missing.push({ signal: "No author attribution", pointValue: 6 }); recoverablePoints += 6; }
-    if (safeNumber(crawlData.wordCount) < 900) { missing.push({ signal: "Content depth below 900 words", pointValue: 8 }); recoverablePoints += 8; }
-    if (safeNumber(crawlData.tableCount) === 0) { missing.push({ signal: "No tabular data", pointValue: 6 }); recoverablePoints += 6; }
-    if (!crawlData.hasHowTo) { missing.push({ signal: "No HowTo schema", pointValue: 8 }); recoverablePoints += 8; }
-    if (safeNumber(crawlData.internalLinkScore) < 60) { missing.push({ signal: "Weak internal link structure", pointValue: 5 }); recoverablePoints += 5; }
-
-    const potentialScore = clamp(score + recoverablePoints, score, 99);
-
+    const actions = pageActions(crawlData.contentEvidence);
     return {
-      currentScore: score,
-      maxScore: 99,
-      weight: Math.round(100 / 6),
-      potentialScore,
-      estimatedGain: potentialScore - score,
-      evidence: [`Derived from ${safeNumber(crawlData.wordCount)} words, EEAT score ${safeNumber(crawlData.eeatScore)}, topical authority ${safeNumber(crawlData.topicalAuthorityScore)}, and ${safeNumber(crawlData.internalLinkScore)}/100 internal link strength.`],
-      penalties: missing.map(m => ({ signal: m.signal, penalty: m.pointValue })),
-      missingSignals: missing.map(m => m.signal),
-      improvementSuggestions: missing.length > 0
-        ? missing.map(m => `Address: ${m.signal} (potential +${m.pointValue} pts for this engine).`)
-        : ["No major gaps detected for this engine profile."],
-      recommendations: missing.map(m => ({
-        metric: m.signal,
-        priority: m.pointValue >= 10 ? "HIGH" : m.pointValue >= 6 ? "MEDIUM" : "LOW",
-        impact: m.pointValue >= 10 ? "HIGH" : m.pointValue >= 6 ? "MEDIUM" : "LOW",
-        difficulty: /schema/i.test(m.signal) ? "EASY" : "MODERATE",
-        estimatedGain: m.pointValue
-      }))
+      currentScore: score, maxScore: 99, weight: Math.round(100 / 6),
+      potentialScore: null, estimatedGain: null, penalties: [],
+      evidence: ["Uncalibrated on-page heuristic; engine-specific outcomes were not measured."],
+      missingSignals: [],
+      improvementSuggestions: actions.map(x => x.action),
+      recommendations: actions.map(x => ({metric:x.code,priority:x.priority.toUpperCase(),recommendation:x.action,estimatedGain:null})),
+      recommendationScope: "The same observed page actions apply across engines; no engine-specific gain is established."
     };
   };
   return {
@@ -4784,7 +4762,7 @@ export function calculateContentOptimizer(ctx) {
   gaps.missingEntities = {detected: false, evidence: "A fixed entity count is not a topic-specific completeness standard."};
   gaps.missingCta = {detected: null, evidence: "CTA relevance requires business/page intent review; English phrase absence is not a failure."};
   const actionLabels = {missingH1:"Add a descriptive page heading",multipleH1:"Review the heading hierarchy",missingTitle:"Write a page title",missingDescription:"Write a page-specific description",missingLanguage:"Declare the document language",answerHeading:"Answer the observed question heading",linkAnchor:"Improve the observed link label",imageAlt:"Review the observed image alternative text"};
-  const priorityRoadmap = observed.map(x => ({item:actionLabels[x.code] || "Review the observed page evidence",priority:x.priority,evidence:x.evidence.observed,code:x.code,params:x.params,url:x.evidence.url}));
+  const priorityRoadmap = pageActions(evidence).map(x => ({item:actionLabels[x.code],action:x.action,priority:x.priority,evidence:x.evidence.observed,code:x.code,params:x.params,url:x.evidence.url}));
 
   return {
     scores: {
@@ -5303,6 +5281,7 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
    const internalLinkAudit = calculateInternalLinkScoreDetailed(pageData.linkAnalysisDetail, seoAudit.brokenLinkSample, $);
     const localSeoAudit = calculateLocalSeoScore(pageData, schemasDetected);
     const aiEngineCitations = estimateAIEngineCitations({
+      contentEvidence: pageData.contentEvidence,
       hasFAQ: schemasDetected.detectedTypes.some(t => String(t).toLowerCase() === "faqpage"),
       hasHowTo: schemasDetected.detectedTypes.some(t => String(t).toLowerCase() === "howto"),
       hasLocalBusiness: schemasDetected.detectedTypes.some(t => String(t).toLowerCase() === "localbusiness"),
@@ -5321,6 +5300,8 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       hasLastModified: Boolean(pageData.modifiedDate),
       uniqueSchemas: schemasDetected.detectedTypes
     });
+
+    for (const audit of [seoAudit,aeoAudit,eeatAudit,contentQualityAudit,semanticSeoAudit,authorityAudit,trustAudit,geoAudit,imageSeoAudit,internalLinkAudit,localSeoAudit]) contextualizeAudit(audit,pageData);
 
     // PHASE 16B — pure synthesis over already-computed audits, no new
     // crawling or scoring math.
@@ -5346,7 +5327,7 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       mixedContent, brokenAssetData, brokenLinkData: seoAudit.brokenLinkSample, brokenExternalLinkData,
       httpStatus: crawl.status, technicalSeoAudit });
     technicalMonitor.scopeNote = "Single page and bounded HEAD samples only. Unreachable/protected/HEAD-unsupported resources are unknown, not verified broken. Hreflang and remote canonical targets are not yet verified.";
-    const evidenceTasks = contentOptimizer.priorityRoadmap.map((x,i) => ({id:`evidence_${i}`,title:x.item,description:x.evidence,priority:x.priority,code:x.code,params:x.params,url:x.url,automaticExecution:false}));
+    const evidenceTasks = contentOptimizer.priorityRoadmap.map((x,i) => ({id:`evidence_${i}`,title:x.item,description:`${x.action} Evidence: ${x.evidence}`,priority:x.priority,code:x.code,params:x.params,url:x.url,automaticExecution:false}));
     const technicalTasks = safeArray(technicalSeoAudit.metrics).filter(x => x.passed === false).map((x,i) => ({id:`technical_${i}`,title:x.metric,description:`${x.evidence} — ${x.recommendation}`,priority:"High",url:crawl.finalUrl,automaticExecution:false}));
     const performanceTasks = safeArray(coreWebVitalsAudit.metrics).filter(x => x.passed === false).map((x,i) => ({id:`performance_${i}`,title:x.metric,description:`${coreWebVitalsAudit.dataSource}: ${x.reason} — ${x.recommendation}`,priority:"High",url:crawl.finalUrl,automaticExecution:false}));
     const measuredTasks = [...evidenceTasks,...technicalTasks,...performanceTasks];
@@ -5374,7 +5355,7 @@ async function analyzeSingleUrlInternal(url, ownerContext = {}) {
       pageEvidence: analyzePageEvidence($, pageData, robotsData),
       contentEvidence: pageData.contentEvidence,
       trustEvidence: pageData.trustEvidence,
-      analysisVersion: "2026-11-11-evidence-v2",
+      analysisVersion: "2026-11-20-page-actions-v3",
       mixedContent,
       brokenAssets: brokenAssetData,
       securityHeaders,

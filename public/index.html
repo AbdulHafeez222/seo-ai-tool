@@ -3658,18 +3658,13 @@ function renderCitationOpportunities(data) {
 
   const engineLabels = { chatgpt: "ChatGPT", gemini: "Gemini", claude: "Claude", perplexity: "Perplexity", copilot: "Copilot", mistral: "Mistral" };
 
-  // FIX (generic citation opportunities): now reads the real per-engine
-  // missingSignals/potentialScore evidence the backend already computes,
-  // instead of showing the same boilerplate sentence for every engine.
-  document.getElementById("citationOppContent").innerHTML = weakEngines.map(([key, v]) => `
-    <div class="ai-box">
-      <strong>${escapeHtml(engineLabels[key] || key)} Engine Opportunity:</strong>
-      <p>Heuristic readiness is labelled "${escapeHtml(v.status)}" at ${v.score}/100${v.potentialScore != null ? ` (heuristic ceiling: ${v.potentialScore}/100)` : ''}.</p>
-      <span class="badge badge-orange" style="margin-top:5px;">Priority: ${v.score < 40 ? 'High' : 'Medium'}</span>
-      ${safeArray(v.missingSignals).length > 0
-        ? `<ul style="margin-top:8px; font-size:13px;">${v.missingSignals.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>`
-        : `<p style="margin-top:5px; font-size:13px; color:var(--text-muted);">No specific missing signals were identified for this engine.</p>`}
-    </div>`).join('');
+  // Page evidence is shared across profiles; do not repeat or invent engine-specific fixes.
+  const actions = [...new Set(weakEngines.flatMap(([,v]) => safeArray(v.improvementSuggestions)))];
+  document.getElementById("citationOppContent").innerHTML = `
+    <p>These are uncalibrated readiness profiles, not measured citations. The observed page actions below apply across engines; no engine-specific gain is established.</p>
+    <ul>${weakEngines.map(([key,v]) => `<li>${escapeHtml(engineLabels[key] || key)}: ${escapeHtml(v.score)}/100 (${escapeHtml(v.status)})</li>`).join('')}</ul>
+    ${actions.length ? `<h4>Actions supported by this page</h4><ul>${actions.map(action => `<li><bdi>${escapeHtml(action)}</bdi></li>`).join('')}</ul>` : '<p>No specific action was established from the captured page evidence. A low heuristic score alone does not establish missing content.</p>'}`;
+
 }
 
 function renderTrustSignals(data) {

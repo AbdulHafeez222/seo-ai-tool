@@ -99,11 +99,13 @@ test('translated evidence report is safe, persists language, and changing langua
     }
     assert.equal(requests,baseline);
     // A matching completed scan already contains the optimizer; do not charge again.
-    const optimizer={scores:{overallContentScore:55,readabilityScore:null,headingStructureScore:0},priorityRoadmap:[],suggestions:{newFaqs:[]},evidence:page.contentEvidence};
+    const optimizer={scores:{overallContentScore:55,readabilityScore:null,headingStructureScore:0},priorityRoadmap:[{code:"missingTitle",priority:"High",params:{},evidence:"Observed heading",action:"Review <img src=x onerror=alert(1)> باغبانی"}],suggestions:{newFaqs:[]},evidence:page.contentEvidence};
     window.setScanForTest({resolvedUrl:'https://example.com/',contentOptimizer:optimizer});
     window.document.getElementById('url').value='example.com';
     await window.runContentOptimizer();
     assert.equal(requests,baseline);
+    assert.equal(window.document.querySelector("#contentOptimizerResults img"),null);
+    assert.match(window.document.getElementById("contentOptimizerResults").textContent,/Review <img/);
     const pageReport=analyzePageEvidence(cheerio.load('<html lang="ur"><body><h2>سوال؟</h2><p>اصل جواب۔</p></body></html>'),{resolvedUrl:'https://example.com/',language:'ur',visibleText:'اصل جواب۔'}, {available:true,found:false,status:404});
     pageReport.answerBlocks[0].excerpt='<img src=x onerror=alert(1)> اصل جواب۔';
     window.renderPageEvidence(pageReport);

@@ -6,6 +6,8 @@ Latest live release: [Google connection and encrypted restore rehearsal](docs/GO
 
 ## Local development
 
+Premium candidate: [Paddle sandbox plans and optional AI drafts](docs/PREMIUM_SETUP.md). Pro/Agency introductory prices are USD 9/19 monthly, with optional AI allowances under a shared USD 10 monthly budget. Payment/AI feature flags default off. This is a sandbox implementation; no real merchant checkout or paid provider call is activated by deployment. Owner account setup, reviewed storage provisioning and provider acceptance remain required.
+
 Use Node 22. Copy `.env.example` to `.env`, generate a random JWT secret of at least 32 bytes, and configure an isolated MongoDB test database. Do not paste secrets into GitHub or chat.
 
 ```sh

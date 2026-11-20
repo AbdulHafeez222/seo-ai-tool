@@ -14,6 +14,7 @@ import { parseRobots, robotsAllows } from "./lib/robots.js";
 import { analyzePageEvidence } from "./lib/evidence.js";
 import { observeTrustEvidence } from "./lib/trust-evidence.js";
 import { analyzeContentEvidence, keywordEvidence, lexicalSignals, languageProfile, words, includesTerm } from "./lib/content-intelligence.js";
+import { installPremiumRoutes, installPremiumWebhook, effectivePremiumPlan } from "./lib/premium.js";
 import { pageActions, contextualizeAudit } from "./lib/page-actions.js";
 import { installAccountRoutes, deletingAccountIds } from "./lib/accounts.js";
 import { createDatabaseLifecycle, databaseFailureCategory } from "./lib/database.js";
@@ -512,6 +513,7 @@ const userSchema = new mongoose.Schema(
     scansToday: { type: Number, default: 0 },
     lastScanReset: { type: Date, default: Date.now },
     sessionVersion: { type: Number, default: 0 },
+    billingCheckoutNonce:String, billingMode:String, billingPlan:String, billingState:String, billingSubscriptionId:String, billingCustomerId:String, paidThrough:Date, lastBillingAt:Date,
     gscGrant: { type: String, select: false },
     gscPending: { type: String, select: false }
   },
@@ -571,6 +573,7 @@ app.set("trust proxy", process.env.TRUST_PROXY_HOPS === "1" ? 1 : false);
 app.disable("x-powered-by");
 
 app.use(cors({ origin: process.env.APP_ORIGIN || false }));
+installPremiumWebhook(app, express, { User });
 app.use(express.json({ limit: "1mb" }));
 app.use((req, res, next) => {
   const expected = process.env.APP_ORIGIN || `${req.protocol}://${req.get('host')}`;
@@ -651,11 +654,12 @@ setInterval(pruneAnonymousUsers, 30 * 60 * 1000).unref();
 
 export async function reserveAccountUsage(user, units) {
   if (!Number.isSafeInteger(units) || units < 0 || units > 50) throw new Error("Invalid quota reservation");
-  const limit = PLAN_LIMITS[user.plan] || PLAN_LIMITS.free;
+  const plan = user.billingSubscriptionId ? effectivePremiumPlan(user) : user.plan;
+  const limit = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
   const cutoff = new Date(Date.now() - 86400000);
   await User.updateOne({ _id: user._id, lastScanReset: { $lte: cutoff } },
     { $set: { scansToday: 0, lastScanReset: new Date() } });
-  return User.findOneAndUpdate({ _id: user._id, scansToday: { $lte: limit - units }, plan: user.plan },
+  return User.findOneAndUpdate({ _id: user._id, scansToday: { $lte: limit - units }, plan: user.plan, ...(user.billingSubscriptionId && plan !== "free" ? {billingState:"active",paidThrough:{$gt:new Date()},lastBillingAt:user.lastBillingAt} : {}) },
     { $inc: { scansToday: units } }, { new: true });
 }
 
@@ -5799,7 +5803,7 @@ app.post("/auth/register", asyncHandler(async (req, res) => {
     setSession(res, token);
 
     logger.info("AUTH", "user_registered", { email });
-    res.status(201).json({ success: true, token, apiKey: user.apiKey, plan: user.plan, email: user.email });
+    res.status(201).json({ success: true, token, apiKey: user.apiKey, plan: user.billingSubscriptionId ? effectivePremiumPlan(user) : user.plan, email: user.email });
   } catch (err) {
     logger.error("AUTH", "register_failed", { error: err.message });
     if (err.code === 11000) return res.status(409).json({ success: false, message: "An account with this email already exists." });
@@ -5847,7 +5851,7 @@ app.post("/auth/login", asyncHandler(async (req, res) => {
     const token = signAuthToken(user);
     setSession(res, token);
     logger.info("AUTH", "user_logged_in", { email });
-    res.json({ success: true, token, apiKey: user.apiKey, plan: user.plan, email: user.email });
+    res.json({ success: true, token, apiKey: user.apiKey, plan: user.billingSubscriptionId ? effectivePremiumPlan(user) : user.plan, email: user.email });
   } catch (err) {
     logger.error("AUTH", "login_failed", { error: err.message });
     res.status(500).json({ success: false, message: "Login failed due to an internal error." });
@@ -5859,6 +5863,7 @@ app.post("/auth/logout", requireAuth, asyncHandler(async (req, res) => {
   res.clearCookie("aegis_session", { path: "/" });
   res.json({ success: true });
 }));
+installPremiumRoutes(app, { User, Report, requireAuth });
 installAccountRoutes(app, { User, Report, Project, SiteCrawlJob, requireAuth, asyncHandler,
   hashPassword, verifyPasswordHash, generateApiKey, activeSiteCrawlJobIds, scanCache, logger, hasActiveAnalyses: () => runningAnalyses > 0 || pendingSiteCrawlReservations > 0 });
 
@@ -5884,7 +5889,7 @@ app.get("/auth/me", asyncHandler(async (req, res) => {
     res.json({
       success: true,
       email: user.email,
-      plan: user.plan,
+      plan: user.billingSubscriptionId ? effectivePremiumPlan(user) : user.plan,
       apiKey: user.apiKey,
       scansToday: user.scansToday,
       createdAt: user.createdAt
